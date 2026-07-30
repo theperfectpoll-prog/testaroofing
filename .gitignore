@@ -1,0 +1,20 @@
+# Environment variables
+.env
+
+# SQLite database
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environments
+venv/
+.venv/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Optional archives
+*.zip

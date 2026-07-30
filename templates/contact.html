@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Request an Evaluation | Testa Roofing{% endblock %}
+
+{% block meta_description %}Request a roofing evaluation from Testa Roofing. We serve commercial, industrial, and residential properties throughout Northeast Ohio and Western Pennsylvania.{% endblock %}
+
+{% block content %}
+
+<section class="repair-hero">
+    <div class="container repair-hero-inner">
+
+        <nav class="repair-breadcrumbs" aria-label="Breadcrumb">
+            <a href="{{ url_for('home') }}">Home</a>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">Request an Evaluation</span>
+        </nav>
+
+        <span class="eyebrow">Contact Testa Roofing</span>
+
+        <h1>Request an Evaluation</h1>
+
+        <p>
+            The right roofing solution starts with an honest evaluation.
+            Tell us about your property and what you are experiencing, and
+            we will contact you to discuss the next step.
+        </p>
+
+    </div>
+</section>
+
+
+<section class="contact-section section-padding">
+    <div class="container contact-grid">
+
+        <div class="contact-information">
+
+            <span class="eyebrow">Get in Touch</span>
+
+            <h2 class="section-heading">
+                Tell us how we can help.
+            </h2>
+
+            <p>
+                Whether you are dealing with an active leak, planning a roof
+                restoration, or considering replacement, we will take the time
+                to understand the condition of your roof before recommending a
+                solution.
+            </p>
+
+            <div class="contact-details">
+
+                <div class="contact-detail">
+                    <span class="contact-detail-label">Phone</span>
+                    <a href="tel:{{ site_settings['phone_link'] }}">
+                        {{ site_settings['phone_display'] }}
+                    </a>
+                </div>
+
+                <div class="contact-detail">
+                    <span class="contact-detail-label">Email</span>
+                    <a href="mailto:info@testaroofing.com">
+                        info@testaroofing.com
+                    </a>
+                </div>
+
+                <div class="contact-detail">
+                    <span class="contact-detail-label">Office</span>
+                    <p>Youngstown, Ohio</p>
+                </div>
+
+                <div class="contact-detail">
+                    <span class="contact-detail-label">Service Area</span>
+                    <p>Northeast Ohio &amp; Western Pennsylvania</p>
+                    <a href="{{ url_for('service_areas') }}">
+                        View Service Areas
+                    </a>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="contact-form-card">
+
+            <h2>Project Information</h2>
+
+            <p>
+                <strong>Fields marked with an asterisk (*) are required.</strong>
+                The more information you provide, the better we can prepare for
+                your evaluation.
+            </p>
+
+            <form method="POST" action="{{ url_for('contact') }}" class="contact-form">
+
+                <div class="contact-form-row">
+
+                    <div class="contact-form-group">
+                        <label for="name">Name <span aria-hidden="true">*</span></label>
+                        <input
+                            type="text"
+                            id="name"
+                            name="name"
+                            autocomplete="name"
+                            required
+                        >
+                    </div>
+
+                    <div class="contact-form-group">
+                        <label for="company">Company</label>
+                        <input
+                            type="text"
+                            id="company"
+                            name="company"
+                            autocomplete="organization"
+                        >
+                    </div>
+
+                </div>
+
+
+                <div class="contact-form-row">
+
+                    <div class="contact-form-group">
+                        <label for="phone">Phone <span aria-hidden="true">*</span></label>
+                        <input
+                            type="tel"
+                            id="phone"
+                            name="phone"
+                            autocomplete="tel"
+                            required
+                        >
+                    </div>
+
+                    <div class="contact-form-group">
+                        <label for="email">Email <span aria-hidden="true">*</span></label>
+                        <input
+                            type="email"
+                            id="email"
+                            name="email"
+                            autocomplete="email"
+                            required
+                        >
+                    </div>
+
+                </div>
+
+
+                <div class="contact-form-group">
+                    <label for="property_address">
+                        Property Address <span aria-hidden="true">*</span>
+                    </label>
+                    <input
+                        type="text"
+                        id="property_address"
+                        name="property_address"
+                        autocomplete="street-address"
+                        required
+                    >
+                </div>
+
+
+                <div class="contact-form-row">
+
+                    <div class="contact-form-group">
+                        <label for="city">City <span aria-hidden="true">*</span></label>
+                        <input
+                            type="text"
+                            id="city"
+                            name="city"
+                            autocomplete="address-level2"
+                            required
+                        >
+                    </div>
+
+                    <div class="contact-form-group">
+                        <label for="state">State <span aria-hidden="true">*</span></label>
+                        <select id="state" name="state" autocomplete="address-level1" required>
+                            <option value="">Select one</option>
+                            <option value="OH">Ohio</option>
+                            <option value="PA">Pennsylvania</option>
+                        </select>
+                    </div>
+
+                </div>
+
+
+                <div class="contact-form-row">
+
+                    <div class="contact-form-group">
+                        <label for="building_type">Building Type</label>
+                        <select id="building_type" name="building_type">
+                            <option value="">Select one</option>
+                            <option value="Commercial">Commercial</option>
+                            <option value="Industrial">Industrial</option>
+                            <option value="Residential">Residential</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div class="contact-form-group">
+                        <label for="service_needed">Service Needed</label>
+                        <select id="service_needed" name="service_needed">
+                            <option value="">Select one</option>
+                            <option value="Roof Repair">Roof Repair</option>
+                            <option value="Roof Restoration">Roof Restoration</option>
+                            <option value="Roof Replacement">Roof Replacement</option>
+                            <option value="Preventative Maintenance">Preventative Maintenance</option>
+                            <option value="New Construction">New Construction</option>
+                            <option value="Not Sure">Not Sure</option>
+                        </select>
+                    </div>
+
+                </div>
+
+
+                <div class="contact-form-group">
+                    <label for="message">
+                        How can we help? <span aria-hidden="true">*</span>
+                    </label>
+
+                    <textarea
+                        id="message"
+                        name="message"
+                        rows="7"
+                        required
+                        placeholder="Tell us about the roof, any known leaks or damage, and the type of help you are looking for."
+                    ></textarea>
+                </div>
+
+
+                <div class="contact-form-group contact-form-consent">
+                    <label>
+                        <input type="checkbox" name="consent" value="yes" required>
+                        <span>
+                            I agree that Testa Roofing may contact me regarding
+                            this request.
+                        </span>
+                    </label>
+                </div>
+
+
+                <button type="submit" class="button button-gold">
+                    Submit Request
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+</section>
+
+
+<section class="repair-process section-padding">
+    <div class="container">
+
+        <div class="repair-process-heading text-center">
+            <span class="eyebrow">What Happens Next?</span>
+
+            <h2 class="section-heading">
+                A clear process from the first conversation.
+            </h2>
+        </div>
+
+
+        <div class="repair-process-grid">
+
+            <article class="repair-process-step">
+                <span class="repair-process-number">01</span>
+                <h3>We Review Your Request</h3>
+                <p>
+                    We review the information you provide so we understand the
+                    property, the concern, and the type of service you may need.
+                </p>
+            </article>
+
+            <article class="repair-process-step">
+                <span class="repair-process-number">02</span>
+                <h3>We Contact You</h3>
+                <p>
+                    We reach out to discuss the project, ask any necessary
+                    questions, and determine the appropriate next step.
+                </p>
+            </article>
+
+            <article class="repair-process-step">
+                <span class="repair-process-number">03</span>
+                <h3>We Evaluate the Roof</h3>
+                <p>
+                    When an on-site evaluation is appropriate, we schedule a
+                    time to inspect the roof and investigate the reported issue.
+                </p>
+            </article>
+
+            <article class="repair-process-step">
+                <span class="repair-process-number">04</span>
+                <h3>We Explain Your Options</h3>
+                <p>
+                    We explain what we find and recommend the solution that
+                    provides the best long-term value for the property.
+                </p>
+            </article>
+
+        </div>
+
+    </div>
+</section>
+
+
+<section class="repair-final-cta">
+    <div class="container repair-final-cta-inner">
+
+        <div>
+            <span class="eyebrow">Prefer to Call?</span>
+
+            <h2>Speak directly with Testa Roofing.</h2>
+
+            <p>
+                Call us to discuss your roof, your project, or the type of
+                evaluation you may need.
+            </p>
+        </div>
+
+        <div class="repair-final-cta-actions">
+            <a
+                href="tel:{{ site_settings['phone_link'] }}"
+                class="button button-gold"
+            >
+                Call {{ site_settings['phone_display'] }}
+            </a>
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+
+{% block title %}
+Roofing Projects | Testa Roofing
+{% endblock %}
+
+{% block meta_description %}
+View completed commercial, industrial, and residential roofing projects by
+Testa Roofing throughout Northeast Ohio and Western Pennsylvania.
+{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/projects.css') }}">
+{% endblock %}
+
+{% block content %}
+<section class="projects-hero">
+    <div class="container projects-hero-inner">
+        <span class="eyebrow">Completed Work</span>
+        <h1>Roofing Projects</h1>
+        <p>
+            <p>
+                Every roofing project presents a different set of challenges.
+                Building type, roof system, age, occupancy, and long-term goals
+                all influence the right solution. Our project portfolio
+                highlights commercial, industrial, public, and residential
+                roofing work completed throughout Northeast Ohio and Western
+                Pennsylvania.
+            </p>
+
+            <p>
+                From roof repairs and restorations to complete roof
+                replacements, these projects reflect our commitment to providing
+                honest evaluations and recommending the right solution for each
+                building. Every project represents a partnership built on
+                quality workmanship, clear communication, and long-term value.
+            </p>
+        </p>
+    </div>
+</section>
+
+<section class="projects-index section-padding">
+    <div class="container">
+        {% if projects %}
+            <div class="projects-grid">
+                {% for project in projects %}
+                    <article class="project-card">
+                        <a
+                            class="project-card-image"
+                            href="{{ url_for('public_project_detail', slug=project['slug']) }}"
+                            aria-label="View {{ project['title'] }}"
+                        >
+                            {% if project['cover_filename'] %}
+                                <img
+                                    src="{{ url_for('static', filename=project['cover_filename']) }}"
+                                    alt="{{ project['cover_alt_text'] or project['title'] }}"
+                                    loading="lazy"
+                                >
+                            {% else %}
+                                <div class="project-card-placeholder">
+                                    <span>Project photos coming soon</span>
+                                </div>
+                            {% endif %}
+                        </a>
+
+                        <div class="project-card-content">
+                            <div class="project-card-meta">
+                                {% if project['project_type'] %}
+                                    <span>{{ project['project_type'] }}</span>
+                                {% endif %}
+
+                                {% if project['location_city'] %}
+                                    <span>
+                                        {{ project['location_city'] }}{% if project['location_state'] %}, {{ project['location_state'] }}{% endif %}
+                                    </span>
+                                {% endif %}
+                            </div>
+
+                            <h2>
+                                <a href="{{ url_for('public_project_detail', slug=project['slug']) }}">
+                                    {{ project['title'] }}
+                                </a>
+                            </h2>
+
+                            {% if project['short_description'] %}
+                                <p>{{ project['short_description'] }}</p>
+                            {% endif %}
+
+                            <a
+                                class="project-card-link"
+                                href="{{ url_for('public_project_detail', slug=project['slug']) }}"
+                            >
+                                View Project <span aria-hidden="true">&rarr;</span>
+                            </a>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="projects-empty-state">
+                <h2>Project gallery coming soon</h2>
+                <p>
+                    We are preparing completed project photos and details for
+                    this section. Please contact us to discuss your roofing needs.
+                </p>
+                <a href="{{ url_for('contact') }}" class="button button-primary">
+                    Request an Evaluation
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+{% endblock %}

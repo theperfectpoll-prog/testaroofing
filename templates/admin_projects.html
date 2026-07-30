@@ -1,0 +1,147 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Projects | Website Editor
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Website Content
+        </span>
+
+        <h2>Projects</h2>
+
+        <p>
+            Add completed work, save projects as drafts, and choose the
+            project featured on the homepage.
+        </p>
+    </div>
+
+    <a
+        href="{{ url_for('admin_project_new') }}"
+        class="admin-primary-button"
+    >
+        Add Project
+    </a>
+
+</header>
+
+
+<section class="admin-panel">
+
+    {% if projects %}
+
+        <div class="admin-table-wrapper">
+
+            <table class="admin-project-table">
+
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Type</th>
+                        <th>Location</th>
+                        <th>Status</th>
+                        <th>Featured</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for project in projects %}
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    {{ project["title"] }}
+                                </strong>
+
+                                <small>
+                                    /projects/{{ project["slug"] }}
+                                </small>
+                            </td>
+
+                            <td>
+                                {{ project["project_type"] or "—" }}
+                            </td>
+
+                            <td>
+                                {% if project["location_city"] %}
+                                    {{ project["location_city"] }}
+                                    {% if project["location_state"] %}
+                                        , {{ project["location_state"] }}
+                                    {% endif %}
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td>
+                                <span class="admin-status admin-status-{{ project['status'] }}">
+                                    {{ project["status"]|title }}
+                                </span>
+                            </td>
+
+                            <td>
+                                {% if project["is_featured"] %}
+                                    <span class="admin-featured-badge">
+                                        Featured
+                                    </span>
+                                {% else %}
+                                    —
+                                {% endif %}
+                            </td>
+
+                            <td class="admin-table-actions">
+                                <a
+                                    href="{{ url_for(
+                                        'admin_project_edit',
+                                        project_id=project['id']
+                                    ) }}"
+                                >
+                                    Edit
+                                </a>
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <div class="admin-empty-state admin-empty-state-large">
+
+            <h3>No projects have been added yet.</h3>
+
+            <p>
+                Add the Ryan metal-roof project to begin building the
+                Testa Roofing project library.
+            </p>
+
+            <a
+                href="{{ url_for('admin_project_new') }}"
+                class="admin-primary-button"
+            >
+                Add First Project
+            </a>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

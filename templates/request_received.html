@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Request Received | Testa Roofing{% endblock %}
+
+{% block meta_description %}
+Your evaluation request has been received by Testa Roofing. Our team will review your information and contact you soon.
+{% endblock %}
+
+{% block content %}
+
+<section class="request-received-section">
+    <div class="container">
+
+        <div class="request-received-card">
+
+            <div class="request-received-icon" aria-hidden="true">
+                ✓
+            </div>
+
+            <p class="section-kicker">
+                REQUEST RECEIVED
+            </p>
+
+            <h1>Thank You for Contacting Testa Roofing</h1>
+
+            <p class="request-received-lead">
+                Your request for an evaluation has been successfully submitted
+                and sent directly to our team.
+            </p>
+
+            <p class="request-received-text">
+                We will review the information you provided and contact you as
+                soon as possible to discuss your roofing needs and determine the
+                appropriate next steps.
+            </p>
+
+            <div class="request-received-divider"></div>
+
+            <div class="request-received-next-step">
+                <h2>What Happens Next?</h2>
+
+                <p>
+                    A member of the Testa Roofing team will review your request
+                    and reach out using the phone number or email address you
+                    provided.
+                </p>
+            </div>
+
+            <div class="request-received-contact">
+                <h2>Need Immediate Assistance?</h2>
+
+                <p>
+                    Call us during normal business hours at
+                    <a href="tel:+13307264684">
+                        (330) 726-6484
+                    </a>.
+                </p>
+            </div>
+
+            <div class="request-received-actions">
+                <a href="{{ url_for('home') }}" class="btn btn-primary">
+                    Return to Home
+                </a>
+
+                <a href="{{ url_for('public_learning_center') }}" class="btn btn-secondary">
+                    Visit the Learning Center
+                </a>
+            </div>
+
+        </div>
+
+    </div>
+</section>
+
+{% endblock %}

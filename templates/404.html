@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found | Testa Roofing{% endblock %}
+
+{% block meta_description %}
+The page you were looking for could not be found. Return to the Testa Roofing website or request a roofing evaluation.
+{% endblock %}
+
+{% block content %}
+<section class="page-hero">
+    <div class="container">
+        <p class="eyebrow">404 Error</p>
+
+        <h1>We couldn’t find that page.</h1>
+
+        <p>
+            The page may have been moved, renamed, or no longer exists.
+            You can return to the homepage or contact Testa Roofing for help.
+        </p>
+
+        <div class="hero-actions">
+            <a class="button button-primary" href="{{ url_for('home') }}">
+                Return Home
+            </a>
+
+            <a class="button button-secondary" href="{{ url_for('contact') }}">
+                Request an Evaluation
+            </a>
+        </div>
+    </div>
+</section>
+{% endblock %}

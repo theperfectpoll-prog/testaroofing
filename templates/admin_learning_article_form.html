@@ -1,0 +1,230 @@
+{% extends "admin_base.html" %}
+
+{% block title %}{{ page_heading }} | Learning Center{% endblock %}
+
+{% block admin_content %}
+{% set v = form_data if form_data else article %}
+
+<header class="admin-page-header">
+    <div>
+        <span class="admin-eyebrow">Learning Center</span>
+        <h2>{{ page_heading }}</h2>
+        <p>Write the article, choose its topics, and prepare its search information.</p>
+    </div>
+    <a href="{{ url_for('admin_learning_center') }}" class="admin-secondary-button">Back to Articles</a>
+</header>
+
+<form method="post" enctype="multipart/form-data" class="admin-project-form admin-learning-article-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <section class="admin-panel">
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Article Foundation</h3>
+                <p>Define the article type, topics, and publication status.</p>
+            </div>
+            {% if article %}
+                <div class="admin-panel-meta">
+                    <span>Current URL</span>
+                    <strong>/learning-center/{{ article['slug'] }}</strong>
+                </div>
+            {% endif %}
+        </div>
+
+        <div class="admin-form-grid">
+            <div class="admin-field admin-field-full">
+                <label for="title">Article Title *</label>
+                <input id="title" name="title" maxlength="160" value="{{ v['title'] if v else '' }}" required>
+                <small>Use a clear title that matches the question or topic the article answers.</small>
+            </div>
+
+            <div class="admin-field">
+                <label for="article_type">Article Type</label>
+                {% set selected_type = v['article_type'] if v else 'Roofing Education' %}
+                <select id="article_type" name="article_type">
+                    {% for article_type in article_types %}
+                        <option value="{{ article_type }}" {% if selected_type == article_type %}selected{% endif %}>
+                            {{ article_type }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label>Topics</label>
+                <div class="admin-topic-checkbox-grid">
+                    {% for topic in topics %}
+                        <label class="admin-topic-checkbox-card {% if not topic['is_active'] %}is-inactive{% endif %}">
+                            <input type="checkbox" name="topic_ids" value="{{ topic['id'] }}" {% if topic['id'] in selected_topic_ids %}checked{% endif %}>
+                            <span>
+                                <strong>{{ topic['name'] }}</strong>
+                                {% if topic['seo_phrase'] %}<small>{{ topic['seo_phrase'] }}</small>{% endif %}
+                                {% if not topic['is_active'] %}<small>Inactive</small>{% endif %}
+                            </span>
+                        </label>
+                    {% endfor %}
+                </div>
+                <small>Select every topic that applies. An article can belong to more than one topic.</small>
+            </div>
+
+            <div class="admin-field">
+                <label for="search_intent">Search Intent</label>
+                {% set selected_intent = v['search_intent'] if v else 'Informational' %}
+                <select id="search_intent" name="search_intent">
+                    {% for intent in search_intents %}
+                        <option value="{{ intent }}" {% if selected_intent == intent %}selected{% endif %}>
+                            {{ intent }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="admin-field">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="draft" {% if not v or v['status'] == 'draft' %}selected{% endif %}>Draft</option>
+                    <option value="published" {% if v and v['status'] == 'published' %}selected{% endif %}>Published</option>
+                </select>
+                <small>Draft articles are not available to the public.</small>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label class="admin-checkbox">
+                    <input type="checkbox" name="is_featured" value="1" {% if v and v['is_featured'] %}checked{% endif %}>
+                    <span>Feature this article in prominent Learning Center positions</span>
+                </label>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-panel">
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Article Content</h3>
+                <p>The summary introduces the article. The main content contains the complete resource.</p>
+            </div>
+        </div>
+
+        <div class="admin-form-grid">
+            <div class="admin-field admin-field-full">
+                <label for="summary">Summary</label>
+                <textarea id="summary" name="summary" rows="4" maxlength="350">{{ v['summary'] if v else '' }}</textarea>
+                <small>Recommended: one or two useful sentences, up to 350 characters.</small>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="body">Main Article Content</label>
+                <textarea id="body" name="body" rows="24">{{ v['body'] if v else '' }}</textarea>
+                <small>Write the complete article here. Public formatting will be handled when the public Learning Center pages are added.</small>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-panel">
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Featured Image</h3>
+                <p>Upload an image from your computer or retain an existing hosted image URL.</p>
+            </div>
+        </div>
+
+        {% if v and v['featured_image_url'] %}
+            <div class="admin-learning-image-preview">
+                {% if v['featured_image_url'].startswith('uploads/') %}
+                    <img src="{{ url_for('static', filename=v['featured_image_url']) }}" alt="{{ v['featured_image_alt_text'] or 'Current featured image' }}">
+                {% else %}
+                    <img src="{{ v['featured_image_url'] }}" alt="{{ v['featured_image_alt_text'] or 'Current featured image' }}">
+                {% endif %}
+                <div>
+                    <strong>Current Featured Image</strong>
+                    <small>{{ v['featured_image_url'] }}</small>
+                    <label class="admin-checkbox-row">
+                        <input type="checkbox" name="remove_featured_image" value="1">
+                        Remove this image when the article is saved
+                    </label>
+                </div>
+            </div>
+        {% endif %}
+
+        <div class="admin-form-grid">
+            <div class="admin-field admin-field-full">
+                <label for="featured_image">Upload Featured Image</label>
+                <input id="featured_image" type="file" name="featured_image" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp">
+                <small>Accepted formats: JPG, JPEG, PNG, and WebP. Maximum request size is 25 MB.</small>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="featured_image_url">Hosted Image URL</label>
+                <input id="featured_image_url" type="url" name="featured_image_url" value="{{ v['featured_image_url'] if v else '' }}">
+                <small>Leave this alone when retaining an uploaded image. A newly uploaded file takes priority over this URL.</small>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="featured_image_alt_text">Image Alt Text</label>
+                <input id="featured_image_alt_text" name="featured_image_alt_text" maxlength="250" value="{{ v['featured_image_alt_text'] if v else '' }}">
+                <small>Describe what is visible in the image for accessibility and search engines.</small>
+            </div>
+        </div>
+    </section>
+
+    <section class="admin-panel admin-seo-panel">
+        <div class="admin-panel-heading">
+            <div>
+                <h3>SEO Information</h3>
+                <p>These fields control how the article may appear in search and social sharing.</p>
+            </div>
+        </div>
+
+        <div class="admin-form-grid">
+            <div class="admin-field admin-field-full">
+                <label for="seo_title">SEO Title</label>
+                <input id="seo_title" name="seo_title" maxlength="70" value="{{ v['seo_title'] if v else '' }}">
+                <small>Recommended maximum: 60–70 characters.</small>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="seo_description">SEO Description</label>
+                <textarea id="seo_description" name="seo_description" maxlength="170" rows="4">{{ v['seo_description'] if v else '' }}</textarea>
+                <small>Recommended maximum: about 155–170 characters.</small>
+            </div>
+
+            <div class="admin-field">
+                <label for="focus_keyword">Focus Keyword</label>
+                <input id="focus_keyword" name="focus_keyword" value="{{ v['focus_keyword'] if v else '' }}">
+            </div>
+
+            <div class="admin-field">
+                <label for="canonical_url">Canonical URL</label>
+                <input id="canonical_url" type="url" name="canonical_url" value="{{ v['canonical_url'] if v else '' }}">
+                <small>Usually left blank unless this content also exists elsewhere.</small>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="social_image_url">Social Image Override URL</label>
+                <input id="social_image_url" type="url" name="social_image_url" value="{{ v['social_image_url'] if v else '' }}">
+                <small>Leave blank to use the featured image.</small>
+            </div>
+        </div>
+    </section>
+
+    <div class="admin-form-actions admin-learning-form-actions">
+        <button type="submit" class="admin-primary-button">
+            {% if article %}Save Article{% else %}Create Article{% endif %}
+        </button>
+        <a href="{{ url_for('admin_learning_center') }}" class="admin-secondary-button">Cancel</a>
+    </div>
+</form>
+
+{% if article %}
+    <section class="admin-danger-zone">
+        <div>
+            <h3>Delete Article</h3>
+            <p>This permanently removes the article and any featured image uploaded specifically for it.</p>
+        </div>
+        <form method="post" action="{{ url_for('admin_learning_article_delete', article_id=article['id']) }}" onsubmit="return confirm('Delete this article?');">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="admin-danger-button">Delete Article</button>
+        </form>
+    </section>
+{% endif %}
+{% endblock %}

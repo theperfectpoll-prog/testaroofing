@@ -1,0 +1,565 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>
+        {% block title %}
+            Testa Roofing | Repair, Restore, Replace
+        {% endblock %}
+    </title>
+
+    <meta
+        name="description"
+        content="{% block meta_description %}Testa Roofing provides commercial, industrial, and residential roof repair, roof restoration and coatings, and roof replacement services throughout Northeast Ohio and Western Pennsylvania.{% endblock %}"
+    >
+
+    <link
+        rel="icon"
+        type="image/x-icon"
+        href="{{ url_for('static', filename='favicon/favicon.ico') }}"
+    >
+
+    <link
+        rel="icon"
+        type="image/png"
+        sizes="32x32"
+        href="{{ url_for('static', filename='favicon/favicon-32x32.png') }}"
+    >
+
+    <link
+        rel="icon"
+        type="image/png"
+        sizes="16x16"
+        href="{{ url_for('static', filename='favicon/favicon-16x16.png') }}"
+    >
+
+    <link
+        rel="apple-touch-icon"
+        sizes="180x180"
+        href="{{ url_for('static', filename='favicon/apple-touch-icon.png') }}"
+    >
+
+    <link
+        rel="manifest"
+        href="{{ url_for('static', filename='favicon/site.webmanifest') }}"
+    >
+
+    <meta
+        name="theme-color"
+        content="#173d5b"
+    >
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+
+    {% block extra_head %}
+    {% endblock %}
+</head>
+
+<body>
+
+    <!-- Top Information Bar -->
+    <div class="top-bar">
+        <div class="container top-bar-inner">
+
+            <div class="top-bar-location">
+                Serving Northeast Ohio and Western Pennsylvania
+            </div>
+
+            <div class="top-bar-contact">
+                <a href="tel:{{ site_settings['phone_link'] }}">
+                    {{ site_settings['phone_display'] }}
+                </a>
+
+                <span class="top-bar-divider" aria-hidden="true">|</span>
+
+                <a href="mailto:{{ site_settings['public_email'] }}">
+                    {{ site_settings['public_email'] }}
+                </a>
+
+                {% if
+                    site_settings['facebook_url']
+                    or site_settings['instagram_url']
+                    or site_settings['linkedin_url']
+                    or site_settings['youtube_url']
+                %}
+                    <span class="top-bar-divider" aria-hidden="true">|</span>
+
+                    <div
+                        class="social-links social-links-header"
+                        aria-label="Testa Roofing social media"
+                    >
+                        {% if site_settings['facebook_url'] %}
+                            <a
+                                href="{{ site_settings['facebook_url'] }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Visit Testa Roofing on Facebook"
+                                title="Facebook"
+                                class="social-facebook"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                >
+                                    <path d="M13.7 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5H17V4.9c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.5-4 4.1V11H8v3h2.6v8h3.1z"/>
+                                </svg>
+                            </a>
+                        {% endif %}
+
+                        {% if site_settings['instagram_url'] %}
+                            <a
+                                href="{{ site_settings['instagram_url'] }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Visit Testa Roofing on Instagram"
+                                title="Instagram"
+                                class="social-instagram"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                >
+                                    <path d="M7.2 2h9.6A5.2 5.2 0 0 1 22 7.2v9.6a5.2 5.2 0 0 1-5.2 5.2H7.2A5.2 5.2 0 0 1 2 16.8V7.2A5.2 5.2 0 0 1 7.2 2zm-.2 2A3 3 0 0 0 4 7v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm10.4 1.5a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                                </svg>
+                            </a>
+                        {% endif %}
+
+                        {% if site_settings['linkedin_url'] %}
+                            <a
+                                href="{{ site_settings['linkedin_url'] }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Visit Testa Roofing on LinkedIn"
+                                title="LinkedIn"
+                                class="social-linkedin"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                >
+                                    <path d="M5.3 7.7H2.1V22h3.2V7.7zM3.7 2A1.9 1.9 0 1 0 3.7 5.8 1.9 1.9 0 0 0 3.7 2zM22 13.8c0-4.3-2.3-6.3-5.3-6.3-2.4 0-3.5 1.3-4.1 2.3V7.7H9.4V22h3.2v-7.1c0-1.9.4-3.8 2.8-3.8 2.3 0 2.4 2.2 2.4 4V22H22v-8.2z"/>
+                                </svg>
+                            </a>
+                        {% endif %}
+
+                        {% if site_settings['youtube_url'] %}
+                            <a
+                                href="{{ site_settings['youtube_url'] }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Visit Testa Roofing on YouTube"
+                                title="YouTube"
+                                class="social-youtube"
+                            >
+                                <svg
+                                    viewBox="0 0 24 24"
+                                    aria-hidden="true"
+                                    focusable="false"
+                                >
+                                    <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4L15.8 12l-6.2 3.6z"/>
+                                </svg>
+                            </a>
+                        {% endif %}
+                    </div>
+                {% endif %}
+
+            </div>
+
+        </div>
+    </div>
+
+
+    <!-- Main Header -->
+    <header class="site-header">
+        <div class="container header-inner">
+
+            <a
+                class="site-logo"
+                href="{{ url_for('home') }}"
+                aria-label="Testa Roofing homepage"
+            >
+                <img
+                    src="{{ url_for('static', filename='img/logo_full.png') }}"
+                    alt="Testa Roofing"
+                >
+            </a>
+
+
+            <!-- Mobile Menu Button -->
+            <button
+                class="mobile-menu-button"
+                type="button"
+                aria-label="Open navigation menu"
+                aria-expanded="false"
+                aria-controls="primary-navigation"
+            >
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+
+
+            <!-- Main Navigation -->
+            <nav
+                class="primary-navigation"
+                id="primary-navigation"
+                aria-label="Primary navigation"
+            >
+                <a
+                    href="{{ url_for('home') }}"
+                    class="{% if request.endpoint == 'home' %}active{% endif %}"
+                >
+                    Home
+                </a>
+
+                <a
+                    href="{{ url_for('roof_repair') }}"
+                    class="{% if request.endpoint == 'roof_repair' %}active{% endif %}"
+                >
+                    Repair
+                </a>
+
+                <a
+                    href="{{ url_for('roof_restoration') }}"
+                    class="{% if request.endpoint == 'roof_restoration' %}active{% endif %}"
+                >
+                    Restore
+                </a>
+
+                <a
+                    href="{{ url_for('roof_replacement') }}"
+                    class="{% if request.endpoint == 'roof_replacement' %}active{% endif %}"
+                >
+                    Replace
+                </a>
+
+                <a
+                    href="{{ url_for('public_projects') }}"
+                    class="{% if request.endpoint in ['public_projects', 'public_project_detail'] %}active{% endif %}"
+                >
+                    Projects
+                </a>
+
+                <a
+                    href="{{ url_for('public_learning_center') }}"
+                    class="{% if request.endpoint in ['public_learning_center', 'public_learning_article'] %}active{% endif %}"
+                >
+                    Learning Center
+                </a>
+
+                <a
+                    href="{{ url_for('about') }}"
+                    class="{% if request.endpoint == 'about' %}active{% endif %}"
+                >
+                    About
+                </a>
+
+                <a
+                    href="{{ url_for('service_areas') }}"
+                    class="{% if request.endpoint == 'service_areas' %}active{% endif %}"
+                >
+                    Service Areas
+                </a>
+
+                <a
+                    href="{{ url_for('contact') }}"
+                    class="header-cta {% if request.endpoint == 'contact' %}active{% endif %}"
+                >
+                    Request an Evaluation
+                </a>
+            </nav>
+
+        </div>
+    </header>
+
+
+    <!-- Main Page Content -->
+    <main>
+        {% block content %}
+        {% endblock %}
+    </main>
+
+
+    <!-- Site Footer -->
+    <footer class="site-footer">
+
+        <div class="container footer-grid">
+
+            <div class="footer-column footer-company">
+
+                <a
+                    class="footer-logo"
+                    href="{{ url_for('home') }}"
+                    aria-label="Testa Roofing homepage"
+                >
+                    <img
+                        src="{{ url_for('static', filename='img/logo_full.png') }}"
+                        alt="Testa Roofing"
+                    >
+                </a>
+
+                <p class="footer-message">
+                    We evaluate your roof first and recommend the solution
+                    that makes the most sense: repair, restoration, or
+                    replacement.
+                </p>
+
+                <p class="footer-philosophy">
+                    Repair <span>•</span> Restore <span>•</span> Replace
+                </p>
+
+                {% if
+                    site_settings['facebook_url']
+                    or site_settings['instagram_url']
+                    or site_settings['linkedin_url']
+                    or site_settings['youtube_url']
+                %}
+                    <div class="footer-social">
+                        <h2 class="footer-social-heading">Connect With Us</h2>
+
+                        <div
+                            class="social-links social-links-footer"
+                            aria-label="Testa Roofing social media"
+                        >
+                            {% if site_settings['facebook_url'] %}
+                                <a
+                                    href="{{ site_settings['facebook_url'] }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Visit Testa Roofing on Facebook"
+                                    title="Facebook"
+                                    class="social-facebook"
+                                >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M13.7 22v-8h2.7l.4-3h-3.1V9.1c0-.9.3-1.5 1.6-1.5H17V4.9c-.3 0-1.3-.1-2.4-.1-2.4 0-4 1.5-4 4.1V11H8v3h2.6v8h3.1z"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+
+                            {% if site_settings['instagram_url'] %}
+                                <a
+                                    href="{{ site_settings['instagram_url'] }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Visit Testa Roofing on Instagram"
+                                    title="Instagram"
+                                    class="social-instagram"
+                                >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M7.2 2h9.6A5.2 5.2 0 0 1 22 7.2v9.6a5.2 5.2 0 0 1-5.2 5.2H7.2A5.2 5.2 0 0 1 2 16.8V7.2A5.2 5.2 0 0 1 7.2 2zm-.2 2A3 3 0 0 0 4 7v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm10.4 1.5a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4zM12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+
+                            {% if site_settings['linkedin_url'] %}
+                                <a
+                                    href="{{ site_settings['linkedin_url'] }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Visit Testa Roofing on LinkedIn"
+                                    title="LinkedIn"
+                                    class="social-linkedin"
+                                >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M5.3 7.7H2.1V22h3.2V7.7zM3.7 2A1.9 1.9 0 1 0 3.7 5.8 1.9 1.9 0 0 0 3.7 2zM22 13.8c0-4.3-2.3-6.3-5.3-6.3-2.4 0-3.5 1.3-4.1 2.3V7.7H9.4V22h3.2v-7.1c0-1.9.4-3.8 2.8-3.8 2.3 0 2.4 2.2 2.4 4V22H22v-8.2z"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+
+                            {% if site_settings['youtube_url'] %}
+                                <a
+                                    href="{{ site_settings['youtube_url'] }}"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    aria-label="Visit Testa Roofing on YouTube"
+                                    title="YouTube"
+                                    class="social-youtube"
+                                >
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                        <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4L15.8 12l-6.2 3.6z"/>
+                                    </svg>
+                                </a>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endif %}
+
+
+            </div>
+
+
+            <div class="footer-column">
+
+                <h2 class="footer-heading">Roofing Solutions</h2>
+
+                <nav class="footer-navigation" aria-label="Roofing solutions">
+                    <a href="{{ url_for('roof_repair') }}">
+                        Roof Repair
+                    </a>
+
+                    <a href="{{ url_for('roof_restoration') }}">
+                        Roof Restoration &amp; Coatings
+                    </a>
+
+                    <a href="{{ url_for('roof_replacement') }}">
+                        Roof Replacement
+                    </a>
+                </nav>
+
+            </div>
+
+
+            <div class="footer-column">
+
+                <h2 class="footer-heading">Company</h2>
+
+                <nav class="footer-navigation" aria-label="Company links">
+                    <a href="{{ url_for('about') }}">
+                        About Testa Roofing
+                    </a>
+
+                    <a href="{{ url_for('service_areas') }}">
+                        Service Areas
+                    </a>
+
+                    <a href="{{ url_for('public_learning_center') }}">
+                        Learning Center
+                    </a>
+
+                    <a href="{{ url_for('contact') }}">
+                        Request an Evaluation
+                    </a>
+                </nav>
+
+            </div>
+
+
+            <div class="footer-column footer-contact">
+
+                <h2 class="footer-heading">Contact</h2>
+
+                {% if
+                    site_settings['address_line_1']
+                    or site_settings['address_line_2']
+                %}
+                    <address>
+                        <p>
+                            {% if site_settings['address_line_1'] %}
+                                {{ site_settings['address_line_1'] }}
+                            {% endif %}
+
+                            {% if
+                                site_settings['address_line_1']
+                                and site_settings['address_line_2']
+                            %}
+                                <br>
+                            {% endif %}
+
+                            {% if site_settings['address_line_2'] %}
+                                {{ site_settings['address_line_2'] }}
+                            {% endif %}
+                        </p>
+                    </address>
+                {% endif %}
+
+                <p>
+                    <a href="tel:{{ site_settings['phone_link'] }}">
+                        {{ site_settings['phone_display'] }}
+                    </a>
+                </p>
+
+                <p>
+                    <a href="mailto:{{ site_settings['public_email'] }}">
+                        {{ site_settings['public_email'] }}
+                    </a>
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="footer-bottom">
+            <div class="container footer-bottom-inner">
+
+                <p>
+                    &copy; 2026 Absolute Roof Solutions, doing business as
+                    Testa Roofing.
+                </p>
+
+                <p>
+                    Commercial, industrial, and residential roofing services.
+                </p>
+
+            </div>
+        </div>
+
+    </footer>
+
+
+    <!-- Mobile Navigation -->
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            const menuButton = document.querySelector(".mobile-menu-button");
+            const navigation = document.querySelector(".primary-navigation");
+            const navigationLinks = navigation.querySelectorAll("a");
+
+            function closeMenu() {
+                navigation.classList.remove("is-open");
+                menuButton.classList.remove("is-open");
+                menuButton.setAttribute("aria-expanded", "false");
+                menuButton.setAttribute(
+                    "aria-label",
+                    "Open navigation menu"
+                );
+            }
+
+            menuButton.addEventListener("click", function () {
+                const menuIsOpen = navigation.classList.toggle("is-open");
+
+                menuButton.classList.toggle("is-open", menuIsOpen);
+                menuButton.setAttribute(
+                    "aria-expanded",
+                    menuIsOpen ? "true" : "false"
+                );
+
+                menuButton.setAttribute(
+                    "aria-label",
+                    menuIsOpen
+                        ? "Close navigation menu"
+                        : "Open navigation menu"
+                );
+            });
+
+            navigationLinks.forEach(function (link) {
+                link.addEventListener("click", closeMenu);
+            });
+
+            window.addEventListener("resize", function () {
+                if (window.innerWidth > 900) {
+                    closeMenu();
+                }
+            });
+
+            document.addEventListener("keydown", function (event) {
+                if (event.key === "Escape") {
+                    closeMenu();
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,7 @@
+User-agent: *
+
+Disallow: /admin/
+Disallow: /login
+Disallow: /logout
+
+Sitemap: https://www.testaroofing.com/sitemap.xml

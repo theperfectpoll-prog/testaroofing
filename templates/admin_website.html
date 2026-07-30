@@ -1,0 +1,136 @@
+{% extends "admin_base.html" %}
+
+{% block title %}
+    Website Dashboard | Testa Roofing
+{% endblock %}
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+    <div>
+        <span class="admin-eyebrow">Administration</span>
+        <h2>Website Dashboard</h2>
+        <p>Manage projects and Learning Center content from one place.</p>
+    </div>
+
+    <div class="admin-page-actions">
+        <a href="{{ url_for('admin_learning_article_new') }}" class="admin-primary-button">Add Article</a>
+        <a href="{{ url_for('admin_project_new') }}" class="admin-secondary-button">Add Project</a>
+    </div>
+</header>
+
+<section class="admin-panel">
+    <div class="admin-panel-heading">
+        <div>
+            <h3>Projects</h3>
+            <p>Track published projects, drafts, and the project selected for homepage emphasis.</p>
+        </div>
+
+        <a href="{{ url_for('admin_projects') }}" class="admin-secondary-button">Manage Projects</a>
+    </div>
+
+    <div class="admin-stat-grid">
+        <div class="admin-stat-card">
+            <span>Total Projects</span>
+            <strong>{{ project_count|default(0) }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Published Projects</span>
+            <strong>{{ published_count|default(0) }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Project Drafts</span>
+            <strong>{{ draft_count|default(0) }}</strong>
+        </div>
+    </div>
+
+    {% if featured_project %}
+        <div class="admin-featured-summary">
+            <div>
+                <span class="admin-eyebrow">Featured Project</span>
+                <strong>{{ featured_project["title"] }}</strong>
+            </div>
+
+            <a href="{{ url_for('admin_project_edit', project_id=featured_project['id']) }}">Edit Project</a>
+        </div>
+    {% else %}
+        <div class="admin-empty-state">No project has been selected as the featured project.</div>
+    {% endif %}
+</section>
+
+<section class="admin-panel">
+    <div class="admin-panel-heading">
+        <div>
+            <h3>Learning Center</h3>
+            <p>
+                Publish roofing articles and answers to common questions. Each article can use
+                multiple controlled topics for filtering, related-content matching, and
+                consistent SEO support.
+            </p>
+        </div>
+
+        <div class="admin-page-actions">
+            <a href="{{ url_for('admin_learning_center') }}" class="admin-secondary-button">Manage Articles</a>
+            <a href="{{ url_for('admin_learning_article_new') }}" class="admin-primary-button">Add Article</a>
+        </div>
+    </div>
+
+    <div class="admin-stat-grid">
+        <div class="admin-stat-card">
+            <span>Total Articles</span>
+            <strong>{{ article_count|default(0) }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Published Articles</span>
+            <strong>{{ published_article_count|default(0) }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Article Drafts</span>
+            <strong>{{ article_draft_count|default(0) }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Active Topics</span>
+            <strong>{{ topic_count|default(0) }}</strong>
+        </div>
+    </div>
+
+    <div class="admin-section-card-grid">
+        <a href="{{ url_for('admin_learning_center') }}" class="admin-section-card">
+            <strong>Articles</strong>
+            <span>Create, edit, publish, and organize Learning Center content.</span>
+        </a>
+
+        <a href="{{ url_for('admin_learning_center') }}#topics" class="admin-section-card">
+            <strong>Topic Library</strong>
+            <span>Manage the controlled topics used for article filters, related articles, and SEO organization.</span>
+        </a>
+    </div>
+</section>
+
+<section class="admin-panel">
+    <div class="admin-panel-heading">
+        <div>
+            <h3>Additional Website Controls</h3>
+            <p>These areas will be added only when regular editing is needed.</p>
+        </div>
+    </div>
+
+    <div class="admin-section-card-grid">
+        <div class="admin-section-card admin-section-card-disabled">
+            <strong>Homepage Content</strong>
+            <span>Editable homepage areas will be added when needed.</span>
+        </div>
+
+        <div class="admin-section-card admin-section-card-disabled">
+            <strong>Service Areas</strong>
+            <span>Residential and commercial service-area controls will be added later.</span>
+        </div>
+    </div>
+</section>
+
+{% endblock %}

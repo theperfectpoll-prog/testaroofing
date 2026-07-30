@@ -1,0 +1,707 @@
+{% extends "base.html" %}
+
+{% block title %}Commercial & Residential Roof Repair | Testa Roofing{% endblock %}
+
+{% block meta_description %}Testa Roofing provides commercial and residential roof repair, leak investigation, emergency service, and preventative maintenance throughout Northeast Ohio and Western Pennsylvania.{% endblock %}
+
+{% block content %}
+
+
+<!-- =====================================================
+     REPAIR HERO
+     ===================================================== -->
+
+<section class="repair-hero">
+
+    <div class="container repair-hero-inner">
+
+        <nav class="repair-breadcrumbs" aria-label="Breadcrumb">
+            <a href="{{ url_for('home') }}">Home</a>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">Roof Repair</span>
+        </nav>
+
+        <span class="eyebrow">
+            Commercial &amp; Residential Roof Repair
+        </span>
+
+        <h1>
+            The right repair starts with the right diagnosis.
+        </h1>
+
+        <p>
+            Roof problems do not always mean it is time for a new roof.
+            We identify why the problem occurred, evaluate the surrounding
+            conditions, and recommend a repair based on the actual condition
+            of the roofing system.
+        </p>
+
+        <div class="repair-hero-actions">
+
+            <a
+                href="{{ url_for('contact') }}"
+                class="button button-gold"
+            >
+                Request an Evaluation
+            </a>
+
+            <a
+                href="tel:{{ site_settings['phone_link'] }}"
+                class="button button-outline-light"
+            >
+                Call {{ site_settings['phone_display'] }}
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     REPAIR BEFORE REPLACE
+     ===================================================== -->
+
+<section class="repair-introduction section-padding">
+
+    <div class="container repair-introduction-grid">
+
+        <div class="repair-section-heading">
+
+            <span class="eyebrow">
+                Repair Before Replace
+            </span>
+
+            <h2 class="section-heading">
+                A serviceable roof deserves the opportunity to keep performing.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-introduction-copy">
+
+            <p>
+                A roof is one of the largest investments a property owner will
+                make. When that roof is still within its serviceable life, an
+                isolated leak or damaged detail does not necessarily justify
+                replacing the entire system.
+            </p>
+
+            <p>
+                Storm damage, punctures, flashing failures, loose seams, aging
+                sealants, and drainage issues can all create problems long
+                before a roof has reached the end of its useful life. Timely,
+                properly planned repairs can correct those conditions while
+                preserving the investment already made in the roof.
+            </p>
+
+            <p>
+                Our goal is not simply to stop today’s leak. It is to help you
+                receive the full practical service life from the roofing system
+                you already own.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     LOOKING BEYOND THE LEAK
+     ===================================================== -->
+
+<section class="repair-diagnosis section-padding">
+
+    <div class="container repair-diagnosis-grid">
+
+        <div class="repair-diagnosis-content">
+
+            <span class="eyebrow">
+                Looking Beyond the Leak
+            </span>
+
+            <h2 class="section-heading">
+                The location of an interior leak is not always where water entered the roof.
+            </h2>
+
+            <p>
+                Water can travel through insulation, follow the flutes of a
+                metal roof deck, move along structural components, or collect
+                within an existing roofing assembly before it becomes visible
+                inside the building.
+            </p>
+
+            <p>
+                What appears to be one leak may also have more than one entry
+                point. An open flashing lap, a loose membrane seam, and a
+                deteriorated roof penetration can all contribute water to the
+                same interior location.
+            </p>
+
+            <p>
+                That is why our evaluation does not stop after we find the first
+                possible problem. We inspect the surrounding area and look for
+                every condition that may be contributing to the leak.
+            </p>
+
+        </div>
+
+
+        <aside class="repair-diagnosis-card">
+
+            <span class="repair-card-number">
+                01
+            </span>
+
+            <h3>
+                Find the source—not only the symptom.
+            </h3>
+
+            <p>
+                A successful repair begins with understanding how water entered
+                the roofing system, how it traveled, and whether multiple
+                deficiencies are involved.
+            </p>
+
+        </aside>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     EVALUATING THE ENTIRE SYSTEM
+     ===================================================== -->
+
+<section class="repair-system section-padding">
+
+    <div class="container repair-system-grid">
+
+        <div class="repair-system-heading">
+
+            <span class="eyebrow">
+                Evaluating the Entire Roof System
+            </span>
+
+            <h2 class="section-heading">
+                Some problems are isolated. Others are signs of a developing condition.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-system-copy">
+
+            <p>
+                A puncture caused by storm debris, a dropped tool, or work by
+                another trade may require one properly completed repair. Other
+                deficiencies require a broader evaluation.
+            </p>
+
+            <p>
+                Loose wall flashing, open field laps, deteriorated sealants, and
+                repeated failures within the same area can indicate that nearby
+                materials are approaching a similar condition. Those components
+                were often installed at the same time and have experienced the
+                same weather, temperature changes, expansion, contraction, and
+                building movement.
+            </p>
+
+            <p>
+                For example, finding two feet of open flashing does not
+                necessarily mean that repairing only those two feet provides
+                the best long-term result. Inspecting and repairing a broader
+                section may address adjacent material before it becomes the
+                source of another leak.
+            </p>
+
+            <p>
+                When the crew is already mobilized and the necessary repair
+                materials are already on site, addressing the surrounding area
+                can also make better use of the customer’s investment and reduce
+                the likelihood of another service visit in the near future.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     REPAIR SERVICES
+     ===================================================== -->
+
+<section class="repair-services section-padding">
+
+    <div class="container">
+
+        <div class="repair-services-heading text-center">
+
+            <span class="eyebrow">
+                Roof Repair Services
+            </span>
+
+            <h2 class="section-heading">
+                Repair solutions for commercial and residential roofing systems
+            </h2>
+
+            <p class="section-intro">
+                Every repair begins with an evaluation of the roof, the visible
+                damage, and the conditions surrounding the problem.
+            </p>
+
+        </div>
+
+
+        <div class="repair-services-grid">
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    01
+                </span>
+
+                <h3>
+                    Leak Investigation
+                </h3>
+
+                <p>
+                    Evaluating the reported leak area, tracing possible water
+                    migration, and identifying the conditions contributing to
+                    water entry.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    02
+                </span>
+
+                <h3>
+                    Membrane &amp; Seam Repairs
+                </h3>
+
+                <p>
+                    Repairing punctures, cuts, loose laps, open seams, damaged
+                    membrane, and other deficiencies in low-slope roof systems.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    03
+                </span>
+
+                <h3>
+                    Flashing &amp; Penetration Repairs
+                </h3>
+
+                <p>
+                    Correcting problems at walls, curbs, pipes, equipment,
+                    roof edges, pitch pockets, and other vulnerable details.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    04
+                </span>
+
+                <h3>
+                    Storm &amp; Wind Damage
+                </h3>
+
+                <p>
+                    Evaluating and repairing roofing damage caused by wind,
+                    hail, falling debris, severe weather, and related events.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    05
+                </span>
+
+                <h3>
+                    Metal Roof Repairs
+                </h3>
+
+                <p>
+                    Addressing loose fasteners, failed sealants, damaged panels,
+                    flashing deficiencies, open details, and sources of water
+                    entry in metal roofing systems.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    06
+                </span>
+
+                <h3>
+                    Drainage Corrections
+                </h3>
+
+                <p>
+                    Evaluating blocked or damaged drains, gutters, scuppers,
+                    downspouts, and other conditions that prevent water from
+                    leaving the roof properly.
+                </p>
+
+            </article>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     EMERGENCY AND TEMPORARY REPAIRS
+     ===================================================== -->
+
+<section class="repair-emergency section-padding">
+
+    <div class="container repair-emergency-grid">
+
+        <div class="repair-emergency-heading">
+
+            <span class="eyebrow">
+                Emergency Roof Service
+            </span>
+
+            <h2 class="section-heading">
+                Protecting the building may require an immediate temporary repair.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-emergency-copy">
+
+            <p>
+                Active leaks do not always occur under conditions that allow a
+                permanent repair to be completed immediately. Severe weather,
+                wet roofing materials, unsafe working conditions, or the need
+                to obtain system-specific materials can affect what work can be
+                performed during the initial service visit.
+            </p>
+
+            <p>
+                In those situations, a temporary repair may be the responsible
+                first step. Its purpose is to limit further water entry and help
+                protect the building until conditions allow the permanent work
+                to be completed correctly.
+            </p>
+
+            <p>
+                We explain what was done, whether additional work is needed, and
+                what the next step should be.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     PREVENTATIVE MAINTENANCE
+     ===================================================== -->
+
+<section class="repair-maintenance section-padding">
+
+    <div class="container repair-maintenance-grid">
+
+        <div class="repair-maintenance-content">
+
+            <span class="eyebrow">
+                Preventative Maintenance
+            </span>
+
+            <h2 class="section-heading">
+                Small roofing issues are easier to manage before they become active leaks.
+            </h2>
+
+            <p>
+                Most roofing systems do not fail all at once. Problems often
+                develop gradually as sealants age, flashings loosen, seams open,
+                drains collect debris, and minor damage remains unnoticed.
+            </p>
+
+            <p>
+                Semi-annual or annual roof inspections can identify those
+                conditions while they are still manageable. Keeping the roof
+                clean, maintaining drainage, repairing deficiencies promptly,
+                and completing preventative work later in the membrane’s life
+                can significantly extend its serviceable life.
+            </p>
+
+            <p>
+                Proper maintenance cannot prevent building settlement, eliminate
+                every drainage limitation, or stop normal aging. It can,
+                however, help a roofing system perform well beyond the length
+                of its original manufacturer’s warranty when its condition and
+                construction allow it.
+            </p>
+
+        </div>
+
+
+        <div class="repair-maintenance-list">
+
+            <h3>
+                A maintenance visit may include:
+            </h3>
+
+            <ul>
+                <li>General roof-condition inspection</li>
+                <li>Removal of loose debris</li>
+                <li>Drain, gutter, and scupper review</li>
+                <li>Inspection of seams and flashings</li>
+                <li>Review of roof penetrations and equipment curbs</li>
+                <li>Identification of punctures or membrane damage</li>
+                <li>Documentation of developing conditions</li>
+                <li>Recommendations for needed repairs</li>
+            </ul>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     EVALUATION PROCESS
+     ===================================================== -->
+
+<section class="repair-process section-padding">
+
+    <div class="container">
+
+        <div class="repair-process-heading text-center">
+
+            <span class="eyebrow">
+                Our Evaluation Process
+            </span>
+
+            <h2 class="section-heading">
+                Clear findings. Practical recommendations. No assumptions.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-process-grid">
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    01
+                </span>
+
+                <h3>
+                    Understand the Problem
+                </h3>
+
+                <p>
+                    We begin with where and when the issue was observed, how
+                    often it occurs, and any recent events or work that may be
+                    related.
+                </p>
+
+            </article>
+
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    02
+                </span>
+
+                <h3>
+                    Evaluate the Roof
+                </h3>
+
+                <p>
+                    We inspect the reported area, surrounding roof conditions,
+                    drainage, flashings, seams, penetrations, and other likely
+                    sources of water entry.
+                </p>
+
+            </article>
+
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    03
+                </span>
+
+                <h3>
+                    Identify the Cause
+                </h3>
+
+                <p>
+                    We determine whether the problem is isolated or whether
+                    multiple deficiencies or broader conditions are contributing
+                    to it.
+                </p>
+
+            </article>
+
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    04
+                </span>
+
+                <h3>
+                    Recommend the Right Solution
+                </h3>
+
+                <p>
+                    If repair is the practical answer, we explain the proposed
+                    scope. If restoration or replacement would provide better
+                    long-term value, we explain why.
+                </p>
+
+            </article>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     SERVICE AREA
+     ===================================================== -->
+
+<section class="repair-service-area section-padding">
+
+    <div class="container repair-service-area-grid">
+
+        <div>
+
+            <span class="eyebrow">
+                Local Roof Repair
+            </span>
+
+            <h2 class="section-heading">
+                Serving Northeast Ohio and Western Pennsylvania
+            </h2>
+
+        </div>
+
+
+        <div>
+
+            <p>
+                Testa Roofing provides commercial, industrial, and residential
+                roof repair from our Youngstown, Ohio office.
+            </p>
+
+            <p>
+                Our primary service area includes Boardman, Youngstown,
+                Austintown, Warren, Niles, and nearby communities throughout
+                Mahoning, Trumbull, and Columbiana counties.
+            </p>
+
+            <p>
+                We also serve commercial and industrial properties in Mercer
+                and Lawrence counties in Western Pennsylvania.
+            </p>
+
+            <a
+                href="{{ url_for('service_areas') }}"
+                class="button button-secondary"
+            >
+                View Service Areas
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     FINAL CTA
+     ===================================================== -->
+
+<section class="repair-final-cta">
+
+    <div class="container repair-final-cta-inner">
+
+        <div>
+
+            <span class="eyebrow">
+                Start With an Honest Evaluation
+            </span>
+
+            <h2>
+                Let’s determine what is causing the problem.
+            </h2>
+
+            <p>
+                Whether you are dealing with an active leak, storm damage, or
+                a developing roof condition, we will help identify the right
+                next step for your property.
+            </p>
+
+        </div>
+
+
+        <div class="repair-final-cta-actions">
+
+            <a
+                href="{{ url_for('contact') }}"
+                class="button button-gold"
+            >
+                Request an Evaluation
+            </a>
+
+            <a
+                href="tel:{{ site_settings['phone_link'] }}"
+                class="button button-outline-light"
+            >
+                Call {{ site_settings['phone_display'] }}
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+{% endblock %}

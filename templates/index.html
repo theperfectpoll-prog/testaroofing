@@ -1,0 +1,966 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+Commercial & Residential Roofing Contractor | Testa Roofing
+
+{% endblock %}
+
+{% block meta_description %}
+Testa Roofing is a commercial and residential roofing contractor based in
+Boardman, Ohio, serving Youngstown, Warren, Austintown, Niles, 
+Northeast Ohio, and Western Pennsylvania. We specialize in roof repair, 
+restoration, and replacement with honest evaluations and long-term solutions.
+{% endblock %}
+
+{% block extra_head %}
+<link
+    rel="stylesheet"
+    href="{{ url_for('static', filename='css/home_projects.css') }}"
+>
+
+<style>
+    .home-learning-center { background: #f6f4ef; }
+    .home-learning-center-heading { display: flex; align-items: end; justify-content: space-between; gap: 2rem; margin-bottom: 2rem; }
+    .home-learning-center-heading > div { max-width: 760px; }
+    .home-learning-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1.5rem; }
+    .home-learning-card { display: flex; flex-direction: column; min-height: 100%; padding: 1.75rem; background: #fff; border: 1px solid rgba(20,31,43,.12); border-radius: 10px; box-shadow: 0 12px 30px rgba(20,31,43,.06); }
+    .home-learning-card-meta { margin-bottom: .75rem; font-size: .82rem; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #74623b; }
+    .home-learning-card h3 { margin: 0 0 .8rem; }
+    .home-learning-card h3 a { color: inherit; text-decoration: none; }
+    .home-learning-card p { margin: 0 0 1.25rem; }
+    .home-learning-card-link { margin-top: auto; font-weight: 700; text-decoration: none; }
+    .home-learning-center-empty { padding: 2rem; background: #fff; border: 1px solid rgba(20,31,43,.12); border-radius: 10px; }
+    @media (max-width: 900px) {
+        .home-learning-center-heading { align-items: flex-start; flex-direction: column; }
+        .home-learning-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+
+{% block content %}
+
+
+<!-- =====================================================
+     HERO
+     ===================================================== -->
+
+<section class="home-hero home-hero-photo-layout">
+
+    <div class="container home-hero-grid">
+
+        <div class="home-hero-content">
+
+            <span class="eyebrow home-hero-eyebrow">
+                Northeast Ohio &amp; Western Pennsylvania
+            </span>
+
+            <h1>
+                The right roofing solution starts with an honest evaluation.
+            </h1>
+
+            <p class="home-hero-lead">
+                We evaluate your roofing system, explain what we find, and
+                recommend the solution that makes the most sense for your
+                property.
+            </p>
+
+            <ul class="home-hero-solutions">
+
+                <li>
+                    <strong>Repair</strong>
+                    when the existing roof can be properly corrected
+                </li>
+
+                <li>
+                    <strong>Restore</strong>
+                    qualified commercial roofing systems
+                </li>
+
+                <li>
+                    <strong>Replace</strong>
+                    when replacement is the right long-term solution
+                </li>
+
+            </ul>
+
+            <div class="home-hero-buttons">
+
+                <a
+                    href="{{ url_for('contact') }}"
+                    class="button button-primary"
+                >
+                    Request an Evaluation
+                </a>
+
+                <a
+                    href="tel:{{ site_settings['phone_link'] }}"
+                    class="button button-light"
+                >
+                    Call {{ site_settings['phone_display'] }}
+                </a>
+
+            </div>
+
+        </div>
+
+
+        <div
+            class="home-hero-image-wrap home-hero-rotator"
+            data-hero-rotator
+        >
+            <div class="home-hero-image home-hero-slides">
+                {% for slide in hero_slides %}
+                    <figure
+                        class="home-hero-slide{% if loop.first %} is-active{% endif %}"
+                        data-hero-slide
+                        aria-hidden="{{ 'false' if loop.first else 'true' }}"
+                    >
+                        <img
+                            src="{{ url_for('static', filename=slide['filename']) }}"
+                            alt="{{ slide['alt_text'] or 'Completed roofing project by Testa Roofing' }}"
+                        >
+                    </figure>
+                {% endfor %}
+            </div>
+
+            {% if hero_slides|length > 1 %}
+                <button class="home-hero-control home-hero-control-prev" type="button" data-hero-prev aria-label="Show previous project photo">&#10094;</button>
+                <button class="home-hero-control home-hero-control-next" type="button" data-hero-next aria-label="Show next project photo">&#10095;</button>
+            {% endif %}
+
+            <div class="home-hero-caption-area" aria-live="polite">
+                {% for slide in hero_slides %}
+                    <p class="home-hero-photo-caption{% if loop.first %} is-active{% endif %}" data-hero-caption>
+                        {% if slide['project_title'] and slide['location'] %}{{ slide['project_title'] }} — {{ slide['location'] }}{% elif slide['project_title'] %}{{ slide['project_title'] }}{% endif %}
+                    </p>
+                {% endfor %}
+            </div>
+
+            {% if hero_slides|length > 1 %}
+                <div class="home-hero-dots" aria-label="Choose project photo">
+                    {% for slide in hero_slides %}
+                        <button type="button" class="home-hero-dot{% if loop.first %} is-active{% endif %}" data-hero-dot aria-label="Show photo {{ loop.index }}" aria-current="{{ 'true' if loop.first else 'false' }}"></button>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     TRUST STRIP
+     ===================================================== -->
+
+
+
+<!-- =====================================================
+     ROOFING SOLUTIONS
+     ===================================================== -->
+
+<section class="home-solutions section-padding">
+
+    <div class="container">
+
+        <div class="home-section-heading text-center">
+
+            <span class="eyebrow">
+                Repair • Restore • Replace
+            </span>
+
+            <h2 class="section-heading">
+                The condition of your roof determines the solution
+            </h2>
+
+            <p class="section-intro">
+                We identify the problem, review the condition of the existing
+                roofing system, and explain the practical options available.
+            </p>
+
+        </div>
+
+
+        <div class="home-solutions-grid">
+
+            <article class="home-solution-card">
+
+                <div class="home-solution-number">
+                    01
+                </div>
+
+                <span class="home-solution-label">
+                    Repair
+                </span>
+
+                <h3>
+                    Roof Repair
+                </h3>
+
+                <p>
+                    A properly planned repair can correct an isolated problem
+                    without the cost and disruption of replacing a serviceable
+                    roof.
+                </p>
+
+                <ul>
+                    <li>Leak investigation</li>
+                    <li>Membrane and flashing repairs</li>
+                    <li>Storm and wind damage</li>
+                    <li>Commercial and residential service</li>
+                </ul>
+
+                <a
+                    href="{{ url_for('roof_repair') }}"
+                    class="home-card-link"
+                >
+                    Learn About Roof Repair
+                    <span aria-hidden="true">&rarr;</span>
+                </a>
+
+            </article>
+
+
+            <article class="home-solution-card home-solution-card-featured">
+
+                <div class="home-solution-number">
+                    02
+                </div>
+
+                <span class="home-solution-label">
+                    Restore
+                </span>
+
+                <h3>
+                    Roof Restoration &amp; Coatings
+                </h3>
+
+                <p>
+                    A qualified commercial roof may be repaired, reinforced,
+                    and protected with a compatible restoration and coating
+                    system.
+                </p>
+
+                <ul>
+                    <li>Commercial roof evaluations</li>
+                    <li>Elastomeric coating systems</li>
+                    <li>Reinforced restoration assemblies</li>
+                    <li>Existing roof life extension</li>
+                </ul>
+
+                <a
+                    href="{{ url_for('roof_restoration') }}"
+                    class="home-card-link"
+                >
+                    Learn About Roof Restoration
+                    <span aria-hidden="true">&rarr;</span>
+                </a>
+
+            </article>
+
+
+            <article class="home-solution-card">
+
+                <div class="home-solution-number">
+                    03
+                </div>
+
+                <span class="home-solution-label">
+                    Replace
+                </span>
+
+                <h3>
+                    Roof Replacement
+                </h3>
+
+                <p>
+                    When repair or restoration is no longer practical, we help
+                    select a replacement system suited to the building and its
+                    long-term needs.
+                </p>
+
+                <ul>
+                    <li>Commercial low-slope systems</li>
+                    <li>Standing seam metal roofing</li>
+                    <li>Residential roofing systems</li>
+                    <li>Tear-off and recover options</li>
+                </ul>
+
+                <a
+                    href="{{ url_for('roof_replacement') }}"
+                    class="home-card-link"
+                >
+                    Learn About Roof Replacement
+                    <span aria-hidden="true">&rarr;</span>
+                </a>
+
+            </article>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     EVALUATION-FIRST APPROACH
+     ===================================================== -->
+
+<section class="home-approach section-padding">
+
+    <div class="container home-approach-grid">
+
+        <div class="home-approach-content">
+
+            <span class="eyebrow">
+                Evaluation First
+            </span>
+
+            <h2 class="section-heading">
+                A roofing problem does not always require a new roof.
+            </h2>
+
+            <p class="section-intro">
+                The condition of the membrane, insulation, deck, flashings,
+                drainage, penetrations, and surrounding details all influence
+                the right recommendation.
+            </p>
+
+            <p>
+                We review the complete roofing system before recommending a
+                scope of work. The answer may be a targeted repair, a
+                commercial restoration system, or a complete replacement.
+            </p>
+
+            <p>
+                Our goal is to give you enough clear information to make a
+                sound decision for your property.
+            </p>
+
+            <a
+                href="{{ url_for('about') }}"
+                class="button button-secondary"
+            >
+                Learn About Our Approach
+            </a>
+
+        </div>
+
+
+        <div class="home-process">
+
+            <div class="home-process-step">
+
+                <span class="home-process-number">
+                    1
+                </span>
+
+                <div>
+                    <h3>Evaluate</h3>
+
+                    <p>
+                        Review the roof condition, existing materials, problem
+                        areas, and the needs of the property.
+                    </p>
+                </div>
+
+            </div>
+
+
+            <div class="home-process-step">
+
+                <span class="home-process-number">
+                    2
+                </span>
+
+                <div>
+                    <h3>Explain</h3>
+
+                    <p>
+                        Explain the available options, their limitations, and
+                        what each proposed scope is intended to accomplish.
+                    </p>
+                </div>
+
+            </div>
+
+
+            <div class="home-process-step">
+
+                <span class="home-process-number">
+                    3
+                </span>
+
+                <div>
+                    <h3>Recommend</h3>
+
+                    <p>
+                        Recommend repair, restoration, or replacement based on
+                        the actual condition of the roof.
+                    </p>
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     PROPERTY TYPES
+     ===================================================== -->
+
+<section class="home-properties section-padding">
+
+    <div class="container">
+
+        <div class="home-section-heading text-center">
+
+            <span class="eyebrow">
+                Properties We Serve
+            </span>
+
+            <h2 class="section-heading">
+                Roofing solutions for properties of every size
+            </h2>
+
+            <p class="section-intro">
+                Testa Roofing serves commercial, industrial, and residential
+                customers throughout the region.
+            </p>
+
+        </div>
+
+
+        <div class="home-properties-grid">
+
+            <article class="home-property-card">
+
+                <span class="home-property-type">
+                    Commercial
+                </span>
+
+                <h3>
+                    Commercial Properties
+                </h3>
+
+                <p>
+                    Offices, retail properties, restaurants, apartment
+                    buildings, institutional facilities, and other commercial
+                    buildings.
+                </p>
+
+            </article>
+
+
+            <article class="home-property-card">
+
+                <span class="home-property-type">
+                    Industrial
+                </span>
+
+                <h3>
+                    Industrial Facilities
+                </h3>
+
+                <p>
+                    Warehouses, plants, shops, production facilities, and other
+                    buildings that require durable roofing systems.
+                </p>
+
+            </article>
+
+
+            <article class="home-property-card">
+
+                <span class="home-property-type">
+                    Residential
+                </span>
+
+                <h3>
+                    Homes and Residential Properties
+                </h3>
+
+                <p>
+                    Roof repair and replacement for homeowners seeking clear
+                    information and a practical recommendation.
+                </p>
+
+            </article>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     WHY TESTA
+     ===================================================== -->
+
+<section class="home-why section-padding">
+
+    <div class="container home-why-grid">
+
+        <div class="home-why-heading">
+
+            <span class="eyebrow">
+                Why Testa Roofing
+            </span>
+
+            <h2 class="section-heading">
+                Roofing recommendations built around the property—not the sale.
+            </h2>
+
+        </div>
+
+
+        <div class="home-why-list">
+
+            <div class="home-why-item">
+
+                <h3>
+                    Repair-first thinking
+                </h3>
+
+                <p>
+                    When a serviceable roof can be properly repaired, we do not
+                    automatically recommend replacing it.
+                </p>
+
+            </div>
+
+
+            <div class="home-why-item">
+
+                <h3>
+                    Commercial roofing experience
+                </h3>
+
+                <p>
+                    We work with low-slope membranes, coatings, metal roofing,
+                    insulation, drainage, flashings, and related details.
+                </p>
+
+            </div>
+
+
+            <div class="home-why-item">
+
+                <h3>
+                    Clear scopes and communication
+                </h3>
+
+                <p>
+                    We explain what we found, what the proposed work addresses,
+                    and why the recommendation makes sense.
+                </p>
+
+            </div>
+
+
+            <div class="home-why-item">
+
+                <h3>
+                    Local service
+                </h3>
+
+                <p>
+                    We serve property owners throughout Northeast Ohio and
+                    Western Pennsylvania from our Youngstown office.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     FEATURED PROJECTS
+     ===================================================== -->
+
+{% if featured_projects %}
+<section class="home-projects section-padding">
+
+    <div class="container">
+
+        <div class="home-projects-heading">
+
+            <div>
+                <span class="eyebrow">
+                    Recent Work
+                </span>
+
+                <h2 class="section-heading">
+                    Roofing projects completed across our region
+                </h2>
+
+                <p class="section-intro">
+                    Explore examples of commercial, industrial, and residential
+                    roofing work completed by Testa Roofing.
+                </p>
+            </div>
+
+            <a
+                href="{{ url_for('public_projects') }}"
+                class="button button-secondary home-projects-all-link"
+            >
+                View All Projects
+            </a>
+
+        </div>
+
+
+        <div class="home-projects-grid">
+
+            {% for project in featured_projects %}
+            <article class="home-project-card{% if loop.first and project['is_featured'] %} home-project-card-featured{% endif %}">
+
+                <a
+                    class="home-project-image"
+                    href="{{ url_for('public_project_detail', slug=project['slug']) }}"
+                    aria-label="View {{ project['title'] }}"
+                >
+                    {% if project['cover_filename'] %}
+                    <img
+                        src="{{ url_for('static', filename=project['cover_filename']) }}"
+                        alt="{{ project['cover_alt_text'] or project['title'] }}"
+                        loading="lazy"
+                    >
+                    {% else %}
+                    <div class="home-project-image-placeholder">
+                        <span>Testa Roofing</span>
+                    </div>
+                    {% endif %}
+
+                    {% if project['is_featured'] %}
+                    <span class="home-project-featured-label">
+                        Featured Project
+                    </span>
+                    {% endif %}
+                </a>
+
+                <div class="home-project-content">
+
+                    <div class="home-project-meta">
+                        {% if project['project_type'] %}
+                        <span>{{ project['project_type'] }}</span>
+                        {% endif %}
+
+                        {% if project['location_city'] or project['location_state'] %}
+                        <span>
+                            {{ project['location_city'] }}{% if project['location_city'] and project['location_state'] %}, {% endif %}{{ project['location_state'] }}
+                        </span>
+                        {% endif %}
+                    </div>
+
+                    <h3>
+                        <a href="{{ url_for('public_project_detail', slug=project['slug']) }}">
+                            {{ project['title'] }}
+                        </a>
+                    </h3>
+
+                    {% if project['short_description'] %}
+                    <p>
+                        {{ project['short_description'] }}
+                    </p>
+                    {% elif project['roofing_system'] %}
+                    <p>
+                        {{ project['roofing_system'] }} roofing project completed by Testa Roofing.
+                    </p>
+                    {% endif %}
+
+                    <a
+                        href="{{ url_for('public_project_detail', slug=project['slug']) }}"
+                        class="home-project-link"
+                    >
+                        View Project
+                        <span aria-hidden="true">&rarr;</span>
+                    </a>
+
+                </div>
+
+            </article>
+            {% endfor %}
+
+        </div>
+
+    </div>
+
+</section>
+{% endif %}
+
+
+<!-- =====================================================
+     LEARNING CENTER
+     ===================================================== -->
+
+<section class="home-learning-center section-padding">
+    <div class="container">
+        <div class="home-learning-center-heading">
+            <div>
+                <span class="eyebrow">Learning Center</span>
+                <h2 class="section-heading">Straightforward answers to common roofing questions</h2>
+                <p class="section-intro">
+                    Read practical roofing guidance, industry articles, and explanations designed
+                    to help property owners make informed decisions.
+                </p>
+            </div>
+
+            <a href="{{ url_for('public_learning_center') }}" class="button button-secondary">Browse the Learning Center</a>
+        </div>
+
+        {% set homepage_articles = latest_articles|default([], true) %}
+
+        {% if homepage_articles %}
+            <div class="home-learning-grid">
+                {% for article in homepage_articles[:3] %}
+                    <article class="home-learning-card">
+                        <div class="home-learning-card-meta">
+                            {% if article["published_at"] %}
+                                {{ article["published_at"] }}
+                            {% else %}
+                                Testa Roofing Learning Center
+                            {% endif %}
+                        </div>
+
+                        <h3>
+                            <a href="{{ url_for('public_learning_article', slug=article['slug']) }}">{{ article["title"] }}</a>
+                        </h3>
+
+                        {% if article["summary"] %}
+                            <p>{{ article["summary"] }}</p>
+                        {% endif %}
+
+                        <a href="{{ url_for('public_learning_article', slug=article['slug']) }}" class="home-learning-card-link">
+                            Read Article <span aria-hidden="true">&rarr;</span>
+                        </a>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="home-learning-center-empty">
+                <h3>Roofing information you can use</h3>
+                <p>
+                    The Learning Center brings together answers to frequently asked questions and
+                    articles about roof repair, restoration, replacement, maintenance, materials,
+                    and related industry topics.
+                </p>
+
+                <a href="{{ url_for('public_learning_center') }}" class="home-card-link">
+                    Visit the Learning Center <span aria-hidden="true">&rarr;</span>
+                </a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- =====================================================
+     SERVICE AREA
+     ===================================================== -->
+
+<section class="home-service-area section-padding">
+
+    <div class="container home-service-area-grid">
+
+        <div class="home-service-area-content">
+
+            <span class="eyebrow">
+                Local Roofing Service
+            </span>
+
+            <h2 class="section-heading">
+                Serving Northeast Ohio and Western Pennsylvania
+            </h2>
+
+            <p class="section-intro">
+                Testa Roofing is based in Youngstown and works throughout the
+                surrounding region.
+            </p>
+
+            <p>
+                Primary service areas include Boardman, Youngstown, Austintown,
+                Warren, Niles, and nearby communities across Mahoning, Trumbull,
+                and Columbiana counties.
+            </p>
+
+            <p>
+                We also serve commercial and industrial properties in Mercer
+                and Lawrence counties in Western Pennsylvania.
+            </p>
+
+            <a
+                href="{{ url_for('service_areas') }}"
+                class="button button-secondary"
+            >
+                View Service Areas
+            </a>
+
+        </div>
+
+
+        <div class="home-service-area-card">
+
+            <span class="home-service-area-card-label">
+                Testa Roofing
+            </span>
+
+            <h3>
+                Youngstown, Ohio
+            </h3>
+
+            <address>
+                4749 South Ave<br>
+                Youngstown, OH 44512
+            </address>
+
+            <a href="tel:{{ site_settings['phone_link'] }}">
+                (330) 726-6484
+            </a>
+
+            <a href="mailto:info@testaroofing.com">
+                info@testaroofing.com
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     FINAL CTA
+     ===================================================== -->
+
+<section class="home-final-cta">
+
+    <div class="container home-final-cta-inner">
+
+        <div>
+
+            <span class="eyebrow">
+                Start With an Honest Evaluation
+            </span>
+
+            <h2>
+                Let’s determine what your roof actually needs.
+            </h2>
+
+            <p>
+                Tell us what is happening, and we will help identify the right
+                next step for your property.
+            </p>
+
+        </div>
+
+
+        <div class="home-final-cta-buttons">
+
+            <a
+                href="{{ url_for('contact') }}"
+                class="button button-gold"
+            >
+                Request an Evaluation
+            </a>
+
+            <a
+                href="tel:{{ site_settings['phone_link'] }}"
+                class="button button-outline-light"
+            >
+                Call {{ site_settings['phone_display'] }}
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<script>
+function initializeHeroRotator() {
+    const rotator = document.querySelector("[data-hero-rotator]");
+    if (!rotator) return;
+
+    const slides = Array.from(rotator.querySelectorAll("[data-hero-slide]"));
+    const captions = Array.from(rotator.querySelectorAll("[data-hero-caption]"));
+    const dots = Array.from(rotator.querySelectorAll("[data-hero-dot]"));
+    const previousButton = rotator.querySelector("[data-hero-prev]");
+    const nextButton = rotator.querySelector("[data-hero-next]");
+    if (slides.length < 2) return;
+
+    let currentIndex = 0;
+    let timer = null;
+
+    function showSlide(index) {
+        currentIndex = (index + slides.length) % slides.length;
+        slides.forEach((slide, slideIndex) => {
+            const active = slideIndex === currentIndex;
+            slide.classList.toggle("is-active", active);
+            slide.setAttribute("aria-hidden", active ? "false" : "true");
+        });
+        captions.forEach((caption, captionIndex) => {
+            caption.classList.toggle("is-active", captionIndex === currentIndex);
+        });
+        dots.forEach((dot, dotIndex) => {
+            const active = dotIndex === currentIndex;
+            dot.classList.toggle("is-active", active);
+            dot.setAttribute("aria-current", active ? "true" : "false");
+        });
+    }
+
+    function startRotation() {
+        stopRotation();
+        timer = window.setInterval(() => showSlide(currentIndex + 1), 5000);
+    }
+
+    function stopRotation() {
+        if (timer) window.clearInterval(timer);
+        timer = null;
+    }
+
+    previousButton?.addEventListener("click", () => {
+        showSlide(currentIndex - 1);
+        startRotation();
+    });
+    nextButton?.addEventListener("click", () => {
+        showSlide(currentIndex + 1);
+        startRotation();
+    });
+    dots.forEach((dot, index) => dot.addEventListener("click", () => {
+        showSlide(index);
+        startRotation();
+    }));
+    rotator.addEventListener("mouseenter", stopRotation);
+    rotator.addEventListener("mouseleave", startRotation);
+    rotator.addEventListener("focusin", stopRotation);
+    rotator.addEventListener("focusout", startRotation);
+    document.addEventListener("visibilitychange", () => {
+        if (document.hidden) stopRotation();
+        else startRotation();
+    });
+
+    startRotation();
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initializeHeroRotator, { once: true });
+} else {
+    initializeHeroRotator();
+}
+</script>
+
+{% endblock %}

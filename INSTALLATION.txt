@@ -1,0 +1,18 @@
+TESTA ROOFING - LEARNING CENTER ADMIN UPDATE
+
+Replace only these four files in your project:
+1. app.py
+2. templates/admin_learning_center.html
+3. templates/admin_learning_article_form.html
+4. static/css/admin.css
+
+DO NOT replace or delete your SQLite database.
+DO NOT replace the static/img folder.
+
+When the updated app starts, it safely creates any missing Learning Center tables,
+adds the expanded default categories, and changes existing article records from
+"Ask the Roofer" to "Frequently Asked Roofing Questions".
+
+The application will create this upload folder automatically when the first
+Learning Center image is uploaded:
+static/uploads/learning_center/

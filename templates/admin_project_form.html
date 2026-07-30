@@ -1,0 +1,776 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    {{ page_heading }} | Website Editor
+{% endblock %}
+
+
+{% block admin_content %}
+
+{% set values = form_data if form_data else project %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Projects
+        </span>
+
+        <h2>{{ page_heading }}</h2>
+
+        <p>
+            Enter the information that will eventually appear on the
+            public project page.
+        </p>
+    </div>
+
+    <a
+        href="{{ url_for('admin_projects') }}"
+        class="admin-secondary-button"
+    >
+        Back to Projects
+    </a>
+
+</header>
+
+
+<form method="post" class="admin-project-form">
+
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Basic Information</h3>
+
+                <p>
+                    Identify the project and where the work was completed.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field admin-field-full">
+                <label for="title">
+                    Project Title
+                    <span aria-hidden="true">*</span>
+                </label>
+
+                <input
+                    type="text"
+                    id="title"
+                    name="title"
+                    value="{{ values['title'] if values else '' }}"
+                    placeholder="Residential Metal Roof Replacement"
+                    required
+                >
+            </div>
+
+            <div class="admin-field">
+                <label for="project_type">
+                    Project Type
+                </label>
+
+                {% set selected_type = values['project_type'] if values else '' %}
+
+                <select
+                    id="project_type"
+                    name="project_type"
+                >
+                    <option value="">Select a type</option>
+
+                    <option
+                        value="Residential"
+                        {% if selected_type == "Residential" %}selected{% endif %}
+                    >
+                        Residential
+                    </option>
+
+                    <option
+                        value="Commercial"
+                        {% if selected_type == "Commercial" %}selected{% endif %}
+                    >
+                        Commercial
+                    </option>
+
+                    <option
+                        value="Industrial"
+                        {% if selected_type == "Industrial" %}selected{% endif %}
+                    >
+                        Industrial
+                    </option>
+
+                    <option
+                        value="Public"
+                        {% if selected_type == "Public" %}selected{% endif %}
+                    >
+                        Public
+                    </option>
+                </select>
+            </div>
+
+            <div class="admin-field">
+                <label for="completion_date">
+                    Completion Date
+                </label>
+
+                <input
+                    type="month"
+                    id="completion_date"
+                    name="completion_date"
+                    value="{{ values['completion_date'] if values else '' }}"
+                >
+            </div>
+
+            <div class="admin-field">
+                <label for="location_city">
+                    City
+                </label>
+
+                <input
+                    type="text"
+                    id="location_city"
+                    name="location_city"
+                    value="{{ values['location_city'] if values else '' }}"
+                    placeholder="Austintown"
+                >
+            </div>
+
+            <div class="admin-field">
+                <label for="location_state">
+                    State
+                </label>
+
+                <input
+                    type="text"
+                    id="location_state"
+                    name="location_state"
+                    value="{{ values['location_state'] if values else '' }}"
+                    placeholder="OH"
+                    maxlength="2"
+                >
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Roofing System</h3>
+
+                <p>
+                    Record the technical details that help explain the work.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+                <label for="roofing_system">
+                    Roofing System
+                </label>
+
+                <input
+                    type="text"
+                    id="roofing_system"
+                    name="roofing_system"
+                    value="{{ values['roofing_system'] if values else '' }}"
+                    placeholder="Metal roofing system"
+                >
+            </div>
+
+            <div class="admin-field">
+                <label for="manufacturer">
+                    Manufacturer
+                </label>
+
+                <input
+                    type="text"
+                    id="manufacturer"
+                    name="manufacturer"
+                    value="{{ values['manufacturer'] if values else '' }}"
+                    placeholder="Everlast Metals"
+                >
+            </div>
+
+            <div class="admin-field">
+                <label for="panel_profile">
+                    Panel Profile
+                </label>
+
+                <input
+                    type="text"
+                    id="panel_profile"
+                    name="panel_profile"
+                    value="{{ values['panel_profile'] if values else '' }}"
+                    placeholder="Standing seam"
+                >
+            </div>
+
+            <div class="admin-field">
+                <label for="color">
+                    Color
+                </label>
+
+                <input
+                    type="text"
+                    id="color"
+                    name="color"
+                    value="{{ values['color'] if values else '' }}"
+                    placeholder="Charcoal gray"
+                >
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="scope">
+                    Project Scope
+                </label>
+
+                <textarea
+                    id="scope"
+                    name="scope"
+                    rows="4"
+                    placeholder="Removal of the existing roof and installation of a new metal roofing system."
+                >{{ values['scope'] if values else '' }}</textarea>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Project Description</h3>
+
+                <p>
+                    The short description will be used on project cards.
+                    The full description will appear on the project page.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field admin-field-full">
+                <label for="short_description">
+                    Short Description
+                </label>
+
+                <textarea
+                    id="short_description"
+                    name="short_description"
+                    rows="3"
+                    maxlength="300"
+                >{{ values['short_description'] if values else '' }}</textarea>
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label for="full_description">
+                    Full Project Description
+                </label>
+
+                <textarea
+                    id="full_description"
+                    name="full_description"
+                    rows="9"
+                >{{ values['full_description'] if values else '' }}</textarea>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+            <div>
+                <h3>Publishing</h3>
+
+                <p>
+                    Draft projects remain private. Published projects will
+                    be eligible to appear on the public website.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+                <label for="status">
+                    Status
+                </label>
+
+                {% set selected_status = values['status'] if values else 'draft' %}
+
+                <select id="status" name="status">
+
+                    <option
+                        value="draft"
+                        {% if selected_status == "draft" %}selected{% endif %}
+                    >
+                        Draft
+                    </option>
+
+                    <option
+                        value="published"
+                        {% if selected_status == "published" %}selected{% endif %}
+                    >
+                        Published
+                    </option>
+
+                </select>
+            </div>
+
+            <div class="admin-field">
+                <label for="display_order">
+                    Display Order
+                </label>
+
+                <input
+                    type="number"
+                    id="display_order"
+                    name="display_order"
+                    value="{{ values['display_order'] if values else 0 }}"
+                    min="0"
+                >
+            </div>
+
+            <div class="admin-field admin-field-full">
+                <label class="admin-checkbox">
+                    <input
+                        type="checkbox"
+                        name="is_featured"
+                        value="1"
+                        {% if values and values['is_featured'] %}checked{% endif %}
+                    >
+
+                    <span>
+                        Feature this project on the homepage
+                    </span>
+                </label>
+
+                <p class="admin-field-help">
+                    Selecting this automatically removes the featured status
+                    from the previously featured project.
+                </p>
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <div class="admin-form-actions">
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            {% if project %}
+                Save Changes
+            {% else %}
+                Create Project
+            {% endif %}
+        </button>
+
+        <a
+            href="{{ url_for('admin_projects') }}"
+            class="admin-secondary-button"
+        >
+            Cancel
+        </a>
+
+    </div>
+
+</form>
+
+
+{% if project %}
+
+    {% set media_count = project_images|length %}
+    {% set cover_images = project_images|selectattr('is_cover')|list %}
+    {% set latest_image = project_images|max(attribute='id') if project_images else none %}
+
+    <section class="admin-panel admin-media-library">
+
+        <div class="admin-panel-heading admin-media-heading">
+            <div>
+                <span class="admin-media-kicker">Project Assets</span>
+                <h3>Media Library</h3>
+
+                <p>
+                    Upload, describe, and arrange the photos used to present
+                    this project. Captions help tell the project story, while
+                    alt text helps search engines and visitors using screen readers.
+                </p>
+            </div>
+
+            <div class="admin-media-type-badge" aria-label="Current media type">
+                Photos
+            </div>
+        </div>
+
+        <div class="admin-media-summary" aria-label="Media library summary">
+            <div class="admin-media-summary-item">
+                <span>Project Photos</span>
+                <strong>{{ media_count }}</strong>
+            </div>
+
+            <div class="admin-media-summary-item">
+                <span>Cover Status</span>
+                <strong>
+                    {% if cover_images %}
+                        Selected
+                    {% else %}
+                        Not Selected
+                    {% endif %}
+                </strong>
+            </div>
+
+            <div class="admin-media-summary-item">
+                <span>Latest Upload</span>
+                <strong>
+                    {% if latest_image %}
+                        {{ latest_image['created_at'][:10] }}
+                    {% else %}
+                        No uploads
+                    {% endif %}
+                </strong>
+            </div>
+
+            <div class="admin-media-summary-item">
+                <span>Supported</span>
+                <strong>JPG, PNG, WebP</strong>
+            </div>
+        </div>
+
+        <form
+            method="post"
+            action="{{ url_for('admin_project_images_upload', project_id=project['id']) }}"
+            enctype="multipart/form-data"
+            class="admin-media-upload-form"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <label class="admin-media-dropzone" for="project_images">
+                <span class="admin-media-upload-icon" aria-hidden="true">+</span>
+
+                <span class="admin-media-upload-copy">
+                    <strong>Add Project Photos</strong>
+                    <span>
+                        Choose one or several images from your computer.
+                    </span>
+                </span>
+
+                <span class="admin-secondary-button admin-media-file-button">
+                    Choose Photos
+                </span>
+
+                <input
+                    type="file"
+                    id="project_images"
+                    name="project_images"
+                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                    multiple
+                    required
+                    onchange="if(this.files.length){ showUploadingState(); this.form.submit(); }"
+                >
+            </label>
+
+            <div class="admin-media-upload-footer">
+
+                <p id="media-upload-status">
+                    JPG, JPEG, PNG, and WebP are accepted. The first image
+                    uploaded to a project becomes its cover automatically.
+                </p>
+
+            </div>
+        </form>
+
+        {% if project_images %}
+            <div class="admin-media-grid">
+                {% for image in project_images %}
+                    <article class="admin-media-card">
+                        <div class="admin-media-preview">
+                            <img
+                                src="{{ url_for('static', filename=image['filename']) }}"
+                                alt="{{ image['alt_text'] or project['title'] }}"
+                                loading="lazy"
+                            >
+
+                            {% if image['is_cover'] %}
+                                <span class="admin-photo-cover-badge">
+                                    Cover Photo
+                                </span>
+                            {% endif %}
+                        </div>
+
+                        <div class="admin-media-card-body">
+                            <div class="admin-media-file-details">
+                                <div>
+                                    <span>Photo {{ loop.index }} of {{ media_count }}</span>
+                                    <strong title="{{ image['filename'] }}">
+                                        {{ image['filename'].split('/')[-1] }}
+                                    </strong>
+                                    <small>
+                                        Uploaded {{ image['created_at'][:10] }}
+                                    </small>
+                                </div>
+
+                                <div class="admin-media-order-controls" aria-label="Photo order controls">
+                                    <form
+                                        method="post"
+                                        action="{{ url_for(
+                                            'admin_project_image_move',
+                                            project_id=project['id'],
+                                            image_id=image['id'],
+                                            direction='up'
+                                        ) }}"
+                                    >
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button
+                                            type="submit"
+                                            class="admin-secondary-button admin-small-button"
+                                            {% if loop.first %}disabled{% endif %}
+                                        >
+                                            Move Up
+                                        </button>
+                                    </form>
+
+                                    <form
+                                        method="post"
+                                        action="{{ url_for(
+                                            'admin_project_image_move',
+                                            project_id=project['id'],
+                                            image_id=image['id'],
+                                            direction='down'
+                                        ) }}"
+                                    >
+                                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                        <button
+                                            type="submit"
+                                            class="admin-secondary-button admin-small-button"
+                                            {% if loop.last %}disabled{% endif %}
+                                        >
+                                            Move Down
+                                        </button>
+                                    </form>
+                                </div>
+                            </div>
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'admin_project_image_update',
+                                    project_id=project['id'],
+                                    image_id=image['id']
+                                ) }}"
+                                class="admin-media-alt-form"
+                            >
+                                <input
+                                    type="hidden"
+                                    name="csrf_token"
+                                    value="{{ csrf_token() }}"
+                                >
+
+                                <div class="admin-field">
+                                    <label for="caption_{{ image['id'] }}">
+                                        Photo Caption
+                                    </label>
+
+                                    <textarea
+                                        id="caption_{{ image['id'] }}"
+                                        name="caption"
+                                        rows="3"
+                                        maxlength="300"
+                                        placeholder="Example: Existing roof before removal began."
+                                    >{{ image['caption'] or '' }}</textarea>
+
+                                    <small>
+                                        This can appear beneath the photo on the public project page.
+                                    </small>
+                                </div>
+
+                                <div class="admin-field admin-media-alt-field">
+                                    <label for="alt_text_{{ image['id'] }}">
+                                        Alt Text
+                                    </label>
+
+                                    <textarea
+                                        id="alt_text_{{ image['id'] }}"
+                                        name="alt_text"
+                                        rows="3"
+                                        maxlength="250"
+                                        placeholder="Describe what is visible for search engines and screen readers."
+                                    >{{ image['alt_text'] or '' }}</textarea>
+
+                                    <small>
+                                        Keep this descriptive rather than promotional.
+                                    </small>
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    class="admin-secondary-button admin-small-button admin-media-save-button"
+                                >
+                                    Save Photo Details
+                                </button>
+                            </form>
+
+                            <div class="admin-media-card-actions">
+                                {% if image['is_cover'] %}
+                                    <span class="admin-current-cover">
+                                        Current Cover
+                                    </span>
+                                {% else %}
+                                    <form
+                                        method="post"
+                                        action="{{ url_for(
+                                            'admin_project_image_cover',
+                                            project_id=project['id'],
+                                            image_id=image['id']
+                                        ) }}"
+                                    >
+                                        <input
+                                            type="hidden"
+                                            name="csrf_token"
+                                            value="{{ csrf_token() }}"
+                                        >
+
+                                        <button
+                                            type="submit"
+                                            class="admin-secondary-button admin-small-button"
+                                        >
+                                            Make Cover
+                                        </button>
+                                    </form>
+                                {% endif %}
+
+                                <form
+                                    method="post"
+                                    action="{{ url_for(
+                                        'admin_project_image_delete',
+                                        project_id=project['id'],
+                                        image_id=image['id']
+                                    ) }}"
+                                    onsubmit="return confirm('Delete this project photo?');"
+                                >
+                                    <input
+                                        type="hidden"
+                                        name="csrf_token"
+                                        value="{{ csrf_token() }}"
+                                    >
+
+                                    <button
+                                        type="submit"
+                                        class="admin-danger-button admin-small-button"
+                                    >
+                                        Delete
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                    </article>
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="admin-empty-state admin-media-empty-state">
+                <strong>No project media yet.</strong>
+                <span>
+                    Upload the first group of photos to begin building this
+                    project's visual record.
+                </span>
+            </div>
+        {% endif %}
+
+    </section>
+
+{% endif %}
+
+
+{% if project %}
+
+    <section class="admin-danger-zone">
+
+        <div>
+            <h3>Delete Project</h3>
+
+            <p>
+                This permanently removes the project record.
+            </p>
+        </div>
+
+        <form
+            method="post"
+            action="{{ url_for(
+                'admin_project_delete',
+                project_id=project['id']
+            ) }}"
+            onsubmit="return confirm(
+                'Are you sure you want to delete this project?'
+            );"
+        >
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <button
+                type="submit"
+                class="admin-danger-button"
+            >
+                Delete Project
+            </button>
+        </form>
+
+    </section>
+
+{% endif %}
+
+<script>
+
+function showUploadingState() {
+
+    const status = document.getElementById("media-upload-status");
+
+    if (status) {
+        status.innerHTML = `
+            <strong>Uploading photos…</strong><br>
+            Please wait while your images are added to the project.
+        `;
+    }
+
+    const picker = document.querySelector(".admin-media-dropzone");
+
+    if (picker) {
+        picker.style.pointerEvents = "none";
+        picker.style.opacity = ".65";
+    }
+
+}
+
+</script>
+
+{% endblock %}

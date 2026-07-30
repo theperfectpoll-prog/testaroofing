@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+
+{% block title %}
+{{ page_title }} | Testa Roofing
+{% endblock %}
+
+{% block meta_description %}
+{{ page_description }}
+{% endblock %}
+
+{% block content %}
+
+<section class="coming-soon">
+
+    <div class="container">
+
+        <div class="coming-soon-card">
+
+            <span class="coming-soon-label">
+                Coming Soon
+            </span>
+
+            <h1>
+                {{ page_title }}
+            </h1>
+
+            <p class="coming-soon-description">
+                {{ page_description }}
+            </p>
+
+            <p>
+                We're currently building this section of our website to provide
+                helpful information for commercial, industrial, and residential
+                property owners throughout Northeast Ohio and Western
+                Pennsylvania.
+            </p>
+
+            <p>
+                In the meantime, if you have questions about your roof or would
+                like to schedule an evaluation, we'd be happy to help.
+            </p>
+
+            <div class="coming-soon-buttons">
+
+                <a
+                    href="{{ url_for('contact') }}"
+                    class="button button-primary"
+                >
+                    Request an Evaluation
+                </a>
+
+                <a
+                    href="{{ url_for('home') }}"
+                    class="button button-secondary"
+                >
+                    Return Home
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block title %}Service Areas | Testa Roofing{% endblock %}
+{% block meta_description %}Learn where Testa Roofing provides commercial roofing, restoration, replacement, and repair services throughout Northeast Ohio and Western Pennsylvania.{% endblock %}
+
+{% block content %}
+
+<section class="repair-hero">
+  <div class="container repair-hero-inner">
+    <nav class="repair-breadcrumbs">
+      <a href="{{ url_for('home') }}">Home</a> / <span>Service Areas</span>
+    </nav>
+
+    <span class="eyebrow">Service Areas</span>
+    <h1>The right service area for the right type of project.</h1>
+
+    <p>
+      Based in Youngstown, Ohio, Testa Roofing serves commercial, industrial,
+      and residential customers throughout Northeast Ohio and Western
+      Pennsylvania. Because different roofing services require different
+      response times, our service area varies depending on the type of work.
+    </p>
+
+    <div class="repair-hero-actions">
+      <a href="{{ url_for('contact') }}" class="button button-gold">Request an Evaluation</a>
+    </div>
+  </div>
+</section>
+
+<section class="repair-introduction section-padding">
+  <div class="container repair-introduction-grid">
+
+    <div class="repair-section-heading">
+      <span class="eyebrow">Commercial Roofing • Restoration • Replacement</span>
+      <h2 class="section-heading">Planned roofing projects allow us to serve a broader region.</h2>
+    </div>
+
+    <div class="repair-introduction-copy">
+      <p>
+        Larger commercial roofing projects, restorations, replacements, and new
+        construction are typically planned well in advance, allowing us to
+        serve a much larger portion of Northeast Ohio and Western Pennsylvania.
+      </p>
+
+      <img src="{{ url_for('static', filename='img/restore_replace_map.png') }}"
+           alt="Commercial roofing, restoration and replacement service area map"
+           class="service-area-map">
+
+      <p>
+        This map represents the primary area where we regularly perform planned
+        commercial roofing projects.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<section class="repair-system section-padding">
+  <div class="container repair-system-grid">
+
+    <div class="repair-system-heading">
+      <span class="eyebrow">Roof Repairs &amp; Maintenance</span>
+      <h2 class="section-heading">Fast response starts with a focused service area.</h2>
+    </div>
+
+    <div class="repair-system-copy">
+      <p>
+        Roof repairs, leak investigations, emergency service, and preventative
+        maintenance require a much faster response than planned roofing
+        projects. To provide timely service while keeping repair costs
+        reasonable, we concentrate these services closer to our Youngstown
+        office.
+      </p>
+
+      <img src="{{ url_for('static', filename='img/repair_map.png') }}"
+           alt="Roof repair service area map"
+           class="service-area-map">
+
+      <p>
+        By maintaining a smaller repair service area, we're able to respond
+        more quickly and avoid passing unnecessary travel costs on to our
+        customers.
+      </p>
+    </div>
+
+  </div>
+</section>
+
+<section class="repair-maintenance section-padding">
+  <div class="container repair-maintenance-grid">
+
+    <div class="repair-maintenance-content">
+      <span class="eyebrow">Why Our Service Areas Differ</span>
+
+      <h2 class="section-heading">
+        Different roofing services require different logistics.
+      </h2>
+
+      <p>
+        Larger roofing projects are scheduled well in advance, making travel
+        practical across a wider geographic area. Roof repairs are often more
+        urgent and involve significantly smaller project values.
+      </p>
+
+      <p>
+        By concentrating repair work closer to home while traveling farther for
+        planned commercial projects, we can provide faster response times,
+        better scheduling, and greater overall value.
+      </p>
+    </div>
+
+    <div class="repair-maintenance-list">
+      <h3>Services include:</h3>
+      <ul>
+        <li>Commercial Roofing</li>
+        <li>Roof Restoration</li>
+        <li>Roof Replacement</li>
+        <li>Roof Repair</li>
+        <li>Preventative Maintenance</li>
+        <li>Emergency Leak Service</li>
+        <li>Metal Roofing</li>
+        <li>Residential Roofing</li>
+      </ul>
+    </div>
+
+  </div>
+</section>
+
+<section class="repair-final-cta">
+  <div class="container repair-final-cta-inner">
+
+    <div>
+      <span class="eyebrow">Need to Know if We Service Your Area?</span>
+      <h2>Request an honest evaluation.</h2>
+
+      <p>
+        If you're unsure whether your project falls within our service area,
+        contact us. We'll be happy to discuss your project.
+      </p>
+    </div>
+
+    <div class="repair-final-cta-actions">
+      <a href="{{ url_for('contact') }}" class="button button-gold">Request an Evaluation</a>
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}

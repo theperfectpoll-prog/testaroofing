@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+
+{% block title %}Learning Center | Testa Roofing{% endblock %}
+
+{% block meta_description %}Explore straightforward, experience-based roofing information from Testa Roofing about repair, restoration, replacement, maintenance, inspections, materials, and common roofing questions.{% endblock %}
+
+{% block content %}
+<section class="learning-hero">
+    <div class="container learning-hero-inner">
+        <span class="eyebrow">Learning Center</span>
+        <h1>Helping Property Owners Make Better Roofing Decisions</h1>
+        <p>
+            The Testa Roofing Learning Center provides straightforward,
+            experience-based information about roofing systems, repairs,
+            restoration and coatings, replacement, maintenance, inspections,
+            and the questions property owners ask most often.
+        </p>
+
+    </div>
+</section>
+
+<section class="learning-introduction">
+    <div class="container learning-introduction-grid">
+        <div>
+            <span class="eyebrow">Our Purpose</span>
+            <h2 class="section-heading">Clear roofing information without the sales pitch</h2>
+        </div>
+        <div class="learning-introduction-copy">
+            <p>
+                We believe informed property owners make better decisions. Some
+                visitors arrive because they are dealing with an active leak.
+                Others want to understand how long a roofing system should last,
+                whether restoration is a practical alternative to replacement,
+                or how different roofing systems compare.
+            </p>
+            <p>
+                Whatever brings you here, our goal is the same: to provide clear,
+                accurate information that helps you understand your roof before
+                deciding on repair, restoration, or replacement.
+            </p>
+        </div>
+    </div>
+</section>
+
+<section class="learning-library">
+    <div class="container">
+        <div class="learning-philosophy">
+            <span class="eyebrow">Our Philosophy</span>
+            <h2>The right roofing solution starts with an honest evaluation.</h2>
+            <p>
+                Sometimes the best answer is a targeted repair. Sometimes a
+                qualified commercial roof can be restored. Sometimes replacement
+                is the only practical long-term solution. Our articles explain
+                why a particular approach may make sense instead of assuming every
+                roof needs the same answer.
+            </p>
+        </div>
+
+        {% if public_topics %}
+        <div class="learning-topic-panel">
+            <div class="learning-topic-heading">
+                <div>
+                    <span class="eyebrow">Find an Article</span>
+                    <h2>What would you like to learn about?</h2>
+                </div>
+                {% if search_query or selected_topic_slugs %}
+                    <a class="learning-clear-link" href="{{ url_for('public_learning_center') }}">
+                        Clear search and filters
+                    </a>
+                {% endif %}
+            </div>
+
+            <form
+                class="learning-search learning-topic-search"
+                method="get"
+                action="{{ url_for('public_learning_center') }}"
+            >
+                <label class="visually-hidden" for="learning-search-input">
+                    Search Learning Center articles
+                </label>
+
+                <input
+                    id="learning-search-input"
+                    type="search"
+                    name="q"
+                    value="{{ search_query }}"
+                    placeholder="Search roofing articles..."
+                >
+
+                {% for topic_slug in selected_topic_slugs %}
+                    <input type="hidden" name="topic" value="{{ topic_slug }}">
+                {% endfor %}
+
+                <button class="button button-gold" type="submit">Search</button>
+            </form>
+
+            <div class="learning-topic-divider">
+                <span>Browse by Topic</span>
+            </div>
+
+            <div class="learning-topic-list" aria-label="Learning Center topics">
+                <a
+                    href="{{ url_for('public_learning_center', q=search_query) }}"
+                    class="learning-topic-button{% if not selected_topic_slugs %} is-active{% endif %}"
+                >
+                    All Topics
+                </a>
+
+                {% for topic in public_topics %}
+                    {% set is_selected = topic['slug'] in selected_topic_slugs %}
+                    {% set next_topics = selected_topic_slugs[:] %}
+                    {% if is_selected %}
+                        {% set _ = next_topics.remove(topic['slug']) %}
+                    {% else %}
+                        {% set _ = next_topics.append(topic['slug']) %}
+                    {% endif %}
+                    <a
+                        href="{{ url_for('public_learning_center', q=search_query, topic=next_topics) }}"
+                        class="learning-topic-button{% if is_selected %} is-active{% endif %}"
+                        aria-pressed="{{ 'true' if is_selected else 'false' }}"
+                    >
+                        {{ topic['name'] }}
+                    </a>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+
+        {% if featured_article %}
+        <article class="learning-featured">
+            <div class="learning-featured-image">
+                {% if featured_article['featured_image_url'] %}
+                    <img
+                        src="{{ url_for('static', filename=featured_article['featured_image_url']) }}"
+                        alt="{{ featured_article['featured_image_alt_text'] or featured_article['title'] }}"
+                    >
+                {% else %}
+                    <div class="learning-image-placeholder">Testa Roofing Learning Center</div>
+                {% endif %}
+            </div>
+            <div class="learning-featured-content">
+                <span class="learning-featured-label">Featured Article</span>
+                <div class="learning-card-meta">
+                    <span>{{ featured_article['article_type'] }}</span>
+                    {% if featured_article['published_at'] %}
+                        <span>{{ featured_article['published_at'][:10] }}</span>
+                    {% endif %}
+                </div>
+                <h2>{{ featured_article['title'] }}</h2>
+                {% if featured_article['summary'] %}<p>{{ featured_article['summary'] }}</p>{% endif %}
+                {% if featured_article['topic_names'] %}
+                    {% set featured_topics = featured_article['topic_names'].split('||') %}
+                    <div class="learning-badges">
+                        {% for topic_name in featured_topics[:3] %}
+                            <span>{{ topic_name }}</span>
+                        {% endfor %}
+
+                        {% if featured_topics|length > 3 %}
+                            <span class="learning-badge-more">
+                                +{{ featured_topics|length - 3 }} more
+                            </span>
+                        {% endif %}
+                    </div>
+                {% endif %}
+                <a class="button button-primary" href="{{ url_for('public_learning_article', slug=featured_article['slug']) }}">Read Featured Article</a>
+            </div>
+        </article>
+        {% endif %}
+
+        <div class="learning-results-heading">
+            <div>
+                <span class="eyebrow">Article Library</span>
+                <h2>
+                    {% if search_query or selected_topic_slugs %}
+                        Articles matching your selection
+                    {% else %}
+                        Latest roofing articles
+                    {% endif %}
+                </h2>
+            </div>
+            <p>{{ total_articles }} article{% if total_articles != 1 %}s{% endif %}</p>
+        </div>
+
+        {% if articles %}
+            <div class="learning-grid">
+                {% for article in articles %}
+                <article class="learning-card">
+                    <a class="learning-card-image" href="{{ url_for('public_learning_article', slug=article['slug']) }}">
+                        {% if article['featured_image_url'] %}
+                            <img
+                                src="{{ url_for('static', filename=article['featured_image_url']) }}"
+                                alt="{{ article['featured_image_alt_text'] or article['title'] }}"
+                                loading="lazy"
+                            >
+                        {% else %}
+                            <div class="learning-image-placeholder">Testa Roofing Learning Center</div>
+                        {% endif %}
+                    </a>
+                    <div class="learning-card-content">
+                        <div class="learning-card-meta">
+                            <span>{{ article['article_type'] }}</span>
+                            {% if article['published_at'] %}<span>{{ article['published_at'][:10] }}</span>{% endif %}
+                        </div>
+                        <h3><a href="{{ url_for('public_learning_article', slug=article['slug']) }}">{{ article['title'] }}</a></h3>
+                        {% if article['summary'] %}<p>{{ article['summary'] }}</p>{% endif %}
+                        {% if article['topic_names'] %}
+                            {% set article_topics = article['topic_names'].split('||') %}
+                            <div class="learning-badges">
+                                {% for topic_name in article_topics[:3] %}
+                                    <span>{{ topic_name }}</span>
+                                {% endfor %}
+
+                                {% if article_topics|length > 3 %}
+                                    <span class="learning-badge-more">
+                                        +{{ article_topics|length - 3 }} more
+                                    </span>
+                                {% endif %}
+                            </div>
+                        {% endif %}
+                        <a class="learning-read-link" href="{{ url_for('public_learning_article', slug=article['slug']) }}">Read Article <span aria-hidden="true">&rarr;</span></a>
+                    </div>
+                </article>
+                {% endfor %}
+            </div>
+
+            {% if total_pages > 1 %}
+            <nav class="learning-pagination" aria-label="Learning Center pages">
+                {% if page > 1 %}
+                    <a href="{{ url_for('public_learning_center', q=search_query, topic=selected_topic_slugs, page=page-1) }}">Previous</a>
+                {% endif %}
+                {% for page_number in range(1, total_pages + 1) %}
+                    <a
+                        href="{{ url_for('public_learning_center', q=search_query, topic=selected_topic_slugs, page=page_number) }}"
+                        class="{% if page_number == page %}is-current{% endif %}"
+                        {% if page_number == page %}aria-current="page"{% endif %}
+                    >{{ page_number }}</a>
+                {% endfor %}
+                {% if page < total_pages %}
+                    <a href="{{ url_for('public_learning_center', q=search_query, topic=selected_topic_slugs, page=page+1) }}">Next</a>
+                {% endif %}
+            </nav>
+            {% endif %}
+        {% else %}
+            <div class="learning-empty-state">
+                <h3>No articles matched your search.</h3>
+                <p>Try another search term or remove one or more topic filters.</p>
+                <a class="button button-primary" href="{{ url_for('public_learning_center') }}">Clear Filters</a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<section class="learning-writing section-padding">
+    <div class="container learning-writing-grid">
+        <div>
+            <span class="eyebrow">How We Write</span>
+            <h2 class="section-heading">Useful information grounded in real roofing experience</h2>
+        </div>
+        <ul>
+            <li>Honest rather than sales-oriented</li>
+            <li>Educational rather than promotional</li>
+            <li>Clear enough for property owners to understand</li>
+            <li>Technically accurate without unnecessary jargon</li>
+            <li>Focused on helping readers make informed decisions</li>
+        </ul>
+    </div>
+</section>
+{% endblock %}

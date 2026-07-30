@@ -1,0 +1,711 @@
+{% extends "base.html" %}
+
+{% block title %}Commercial & Residential Roof Replacement | Testa Roofing{% endblock %}
+
+{% block meta_description %}Testa Roofing provides commercial, industrial, and residential roof replacement throughout Northeast Ohio and Western Pennsylvania, recommending replacement only when repair or restoration are no longer practical.{% endblock %}
+
+{% block content %}
+
+
+<!-- =====================================================
+     REPLACEMENT HERO
+     ===================================================== -->
+
+<section class="repair-hero">
+
+    <div class="container repair-hero-inner">
+
+        <nav class="repair-breadcrumbs" aria-label="Breadcrumb">
+            <a href="{{ url_for('home') }}">Home</a>
+            <span aria-hidden="true">/</span>
+            <span aria-current="page">Roof Replacement</span>
+        </nav>
+
+        <span class="eyebrow">
+            Commercial &amp; Residential Roof Replacement
+        </span>
+
+        <h1>
+            When replacement becomes the right solution.
+        </h1>
+
+        <p>
+            Replacing a roof is one of the largest investments a property owner
+            will make. We recommend replacement only after repairs and
+            restoration are no longer practical options.
+        </p>
+
+        <div class="repair-hero-actions">
+
+            <a
+                href="{{ url_for('contact') }}"
+                class="button button-gold"
+            >
+                Request an Evaluation
+            </a>
+
+            <a
+                href="tel:{{ site_settings['phone_link'] }}"
+                class="button button-outline-light"
+            >
+                Call {{ site_settings['phone_display'] }}
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     REPLACEMENT IS THE LAST STEP
+     ===================================================== -->
+
+<section class="repair-introduction section-padding">
+
+    <div class="container repair-introduction-grid">
+
+        <div class="repair-section-heading">
+
+            <span class="eyebrow">
+                Repair • Restore • Replace
+            </span>
+
+            <h2 class="section-heading">
+                Every roof deserves the opportunity to reach its full serviceable life.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-introduction-copy">
+
+            <p>
+                At Testa Roofing, replacement is the final recommendation—not
+                the first.
+            </p>
+
+            <p>
+                Many roofs can continue performing through properly completed
+                repairs. Others may qualify for restoration, allowing the
+                existing roof to remain in place while extending its serviceable
+                life and improving long-term protection.
+            </p>
+
+            <p>
+                Eventually, however, every roofing system reaches a point where
+                continued repairs no longer make financial or practical sense.
+                Widespread deterioration, repeated failures, significant storm
+                damage, or extensive moisture intrusion can all indicate that
+                the roof has reached the end of its serviceable life.
+            </p>
+
+            <p>
+                Our responsibility is to determine where your roof falls within
+                that lifecycle—not to assume every roofing problem requires
+                replacement.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     WHEN REPAIRS ARE NO LONGER ENOUGH
+     ===================================================== -->
+
+<section class="repair-diagnosis section-padding">
+
+    <div class="container repair-diagnosis-grid">
+
+        <div class="repair-diagnosis-content">
+
+            <span class="eyebrow">
+                When Repairs Are No Longer Enough
+            </span>
+
+            <h2 class="section-heading">
+                Sometimes fixing one problem simply leads to the next.
+            </h2>
+
+            <p>
+                As roofing systems age, individual repairs often become less
+                effective because multiple components begin failing at the same
+                time. Flashings loosen, membranes become brittle, seams
+                separate, sealants deteriorate, and new leaks begin appearing
+                throughout the roof.
+            </p>
+
+            <p>
+                Severe weather can accelerate that process. Wind damage, hail,
+                falling debris, prolonged ponding water, and years of
+                ultraviolet exposure may leave a roof with damage that extends
+                well beyond isolated repairs.
+            </p>
+
+            <p>
+                Repeated service calls and recurring leaks are often signs that
+                the roofing system itself has reached the end of its practical
+                lifespan. When repairs no longer provide reliable long-term
+                value, replacement becomes the responsible recommendation.
+            </p>
+
+        </div>
+
+
+        <aside class="repair-diagnosis-card">
+
+            <span class="repair-card-number">
+                01
+            </span>
+
+            <h3>
+                Replace only when the roof has truly reached that point.
+            </h3>
+
+            <p>
+                A replacement recommendation should be based on the condition
+                of the entire roofing system—not on the price of the project.
+            </p>
+
+        </aside>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     LOOKING BELOW THE SURFACE
+     ===================================================== -->
+
+<section class="repair-system section-padding">
+
+    <div class="container repair-system-grid">
+
+        <div class="repair-system-heading">
+
+            <span class="eyebrow">
+                Looking Below the Surface
+            </span>
+
+            <h2 class="section-heading">
+                The roof membrane is only one part of the roofing system.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-system-copy">
+
+            <p>
+                Water entering a roof system may saturate insulation,
+                deteriorate roof decking, damage structural components, or
+                create hidden conditions that cannot be seen from the surface.
+            </p>
+
+            <p>
+                Excessive wet insulation is one of the most common reasons
+                restoration is no longer practical. Waterlogged insulation
+                loses much of its insulating value, contributes to continued
+                deterioration, and generally must be removed before a new roof
+                can be installed.
+            </p>
+
+            <p>
+                The roof deck must also be evaluated carefully. Areas affected
+                by long-term moisture may require repair or replacement before
+                new roofing materials can be installed safely.
+            </p>
+
+            <p>
+                Understanding the condition of the entire roof assembly—not
+                simply the visible surface—is essential to recommending the
+                right long-term solution.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     WHAT DRIVES REPLACEMENT COST
+     ===================================================== -->
+
+<section class="repair-services section-padding">
+
+    <div class="container">
+
+        <div class="repair-services-heading text-center">
+
+            <span class="eyebrow">
+                Understanding the Investment
+            </span>
+
+            <h2 class="section-heading">
+                A roof replacement includes much more than installing new roofing material
+            </h2>
+
+            <p class="section-intro">
+                The condition of the existing roof often determines how much
+                preparation is required before the new roofing system can be
+                installed.
+            </p>
+
+        </div>
+
+
+        <div class="repair-services-grid">
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    01
+                </span>
+
+                <h3>
+                    Tear-Off
+                </h3>
+
+                <p>
+                    Existing roofing materials may need to be removed before
+                    the new system can be installed properly.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    02
+                </span>
+
+                <h3>
+                    Disposal
+                </h3>
+
+                <p>
+                    Removed roofing materials, insulation, flashing, and other
+                    debris must be transported and disposed of appropriately.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    03
+                </span>
+
+                <h3>
+                    Wet Insulation Removal
+                </h3>
+
+                <p>
+                    Water-damaged insulation generally cannot remain beneath a
+                    new roofing system and must be replaced.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    04
+                </span>
+
+                <h3>
+                    Roof Deck Repairs
+                </h3>
+
+                <p>
+                    Damaged or deteriorated decking may require repair or
+                    replacement before installation of the new roof.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    05
+                </span>
+
+                <h3>
+                    New Insulation
+                </h3>
+
+                <p>
+                    Modern insulation systems improve thermal performance while
+                    providing the proper substrate for the new roof assembly.
+                </p>
+
+            </article>
+
+
+            <article class="repair-service-card">
+
+                <span class="repair-service-number">
+                    06
+                </span>
+
+                <h3>
+                    Complete Roofing System
+                </h3>
+
+                <p>
+                    Membranes, flashings, edge metal, penetrations, accessories,
+                    and manufacturer-approved components work together as one
+                    complete roofing system.
+                </p>
+
+            </article>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     LAYOVER OR COMPLETE TEAR-OFF
+     ===================================================== -->
+
+<section class="repair-emergency section-padding">
+
+    <div class="container repair-emergency-grid">
+
+        <div class="repair-emergency-heading">
+
+            <span class="eyebrow">
+                Layover or Complete Tear-Off?
+            </span>
+
+            <h2 class="section-heading">
+                Every roof does not require complete removal—but not every roof qualifies for a layover.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-emergency-copy">
+
+            <p>
+                In some situations, installing a new roofing system over the
+                current roof may be an acceptable option. A layover can reduce
+                labor, shorten construction time, and eliminate some demolition
+                and disposal costs.
+            </p>
+
+            <p>
+                A layover still counts as an additional roof system and must
+                comply with applicable building-code limitations. Wet
+                insulation cannot simply be covered and left in place; damaged
+                areas must be identified, removed, and replaced.
+            </p>
+
+            <p>
+                Excessive moisture, structural concerns, existing roof
+                conditions, manufacturer requirements, or code limitations may
+                require a complete tear-off instead.
+            </p>
+
+            <p>
+                If a layover is appropriate, we will explain why. If complete
+                removal is necessary, we will explain what conditions are
+                driving that recommendation.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     REPLACEMENT SCOPE
+     ===================================================== -->
+
+<section class="repair-maintenance section-padding">
+
+    <div class="container repair-maintenance-grid">
+
+        <div class="repair-maintenance-content">
+
+            <span class="eyebrow">
+                Planning the Complete Roof Assembly
+            </span>
+
+            <h2 class="section-heading">
+                The cleanest finished roof begins with the right work beneath it.
+            </h2>
+
+            <p>
+                Roof replacement provides the opportunity to correct existing
+                deficiencies rather than carrying them into the next roofing
+                system.
+            </p>
+
+            <p>
+                Drainage, insulation thickness, roof slope, penetrations,
+                flashings, edge conditions, equipment curbs, and roof access
+                details should all be reviewed before installation begins.
+            </p>
+
+            <p>
+                Addressing those items during replacement may increase the
+                initial project scope, but it also helps create a complete
+                roofing system designed to perform as intended for the long
+                term.
+            </p>
+
+        </div>
+
+
+        <div class="repair-maintenance-list">
+
+            <h3>
+                Replacement planning may include:
+            </h3>
+
+            <ul>
+                <li>Existing roof and moisture evaluation</li>
+                <li>Tear-off or layover determination</li>
+                <li>Wet insulation removal and replacement</li>
+                <li>Roof deck inspection and repairs</li>
+                <li>New insulation and cover-board design</li>
+                <li>Drainage and slope improvements</li>
+                <li>Flashing, edge metal, and penetration details</li>
+                <li>Manufacturer warranty requirements</li>
+            </ul>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     REPLACEMENT PROCESS
+     ===================================================== -->
+
+<section class="repair-process section-padding">
+
+    <div class="container">
+
+        <div class="repair-process-heading text-center">
+
+            <span class="eyebrow">
+                Our Replacement Process
+            </span>
+
+            <h2 class="section-heading">
+                A successful roof replacement starts long before installation begins.
+            </h2>
+
+        </div>
+
+
+        <div class="repair-process-grid">
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    01
+                </span>
+
+                <h3>
+                    Evaluate the Existing Roof
+                </h3>
+
+                <p>
+                    We inspect the roofing system, investigate reported
+                    problems, evaluate drainage, and identify the conditions
+                    affecting long-term performance.
+                </p>
+
+            </article>
+
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    02
+                </span>
+
+                <h3>
+                    Develop the Right Solution
+                </h3>
+
+                <p>
+                    We determine the appropriate roofing system, insulation
+                    assembly, flashing details, drainage improvements, and
+                    installation approach for the property.
+                </p>
+
+            </article>
+
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    03
+                </span>
+
+                <h3>
+                    Remove What Cannot Remain
+                </h3>
+
+                <p>
+                    Existing roofing, wet insulation, deteriorated decking, and
+                    other unsuitable components are removed or repaired as
+                    required.
+                </p>
+
+            </article>
+
+
+            <article class="repair-process-step">
+
+                <span class="repair-process-number">
+                    04
+                </span>
+
+                <h3>
+                    Install the New Roof
+                </h3>
+
+                <p>
+                    The new roofing assembly is installed according to
+                    manufacturer specifications and industry best practices for
+                    long-term performance and warranty eligibility.
+                </p>
+
+            </article>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     SERVICE AREA
+     ===================================================== -->
+
+<section class="repair-service-area section-padding">
+
+    <div class="container repair-service-area-grid">
+
+        <div>
+
+            <span class="eyebrow">
+                Local Roof Replacement
+            </span>
+
+            <h2 class="section-heading">
+                Serving Northeast Ohio and Western Pennsylvania
+            </h2>
+
+        </div>
+
+
+        <div>
+
+            <p>
+                Testa Roofing provides commercial, industrial, and residential
+                roof replacement from our Youngstown, Ohio office.
+            </p>
+
+            <p>
+                Our primary service area includes Boardman, Youngstown,
+                Austintown, Warren, Niles, and nearby communities throughout
+                Mahoning, Trumbull, and Columbiana counties.
+            </p>
+
+            <p>
+                We also serve commercial and industrial properties throughout
+                Mercer and Lawrence counties in Western Pennsylvania.
+            </p>
+
+            <a
+                href="{{ url_for('service_areas') }}"
+                class="button button-secondary"
+            >
+                View Service Areas
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<!-- =====================================================
+     FINAL CTA
+     ===================================================== -->
+
+<section class="repair-final-cta">
+
+    <div class="container repair-final-cta-inner">
+
+        <div>
+
+            <span class="eyebrow">
+                Start With an Honest Evaluation
+            </span>
+
+            <h2>
+                If replacement is the right solution, we will explain why.
+            </h2>
+
+            <p>
+                We will determine whether the roof has reached the end of its
+                serviceable life, explain every practical option, and recommend
+                the solution that provides the best long-term value for your
+                property.
+            </p>
+
+        </div>
+
+
+        <div class="repair-final-cta-actions">
+
+            <a
+                href="{{ url_for('contact') }}"
+                class="button button-gold"
+            >
+                Request an Evaluation
+            </a>
+
+            <a
+                href="tel:{{ site_settings['phone_link'] }}"
+                class="button button-outline-light"
+            >
+                Call {{ site_settings['phone_display'] }}
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+{% endblock %}

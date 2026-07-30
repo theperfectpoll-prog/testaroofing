@@ -1,0 +1,130 @@
+{% extends "admin_base.html" %}
+
+{% block title %}Learning Center | Website Editor{% endblock %}
+
+{% block admin_content %}
+<header class="admin-page-header">
+    <div>
+        <span class="admin-eyebrow">Search &amp; Education</span>
+        <h2>Learning Center</h2>
+        <p>Manage roofing education, frequently asked questions, project spotlights, and industry news.</p>
+    </div>
+    <a href="{{ url_for('admin_learning_article_new') }}" class="admin-primary-button">Add Article</a>
+</header>
+
+<div class="admin-stat-grid admin-learning-stat-grid">
+    {% for label, key in [('Total Articles', 'total'), ('Published', 'published'), ('Drafts', 'draft'), ('Featured', 'featured')] %}
+        <div class="admin-stat-card"><span>{{ label }}</span><strong>{{ counts[key] }}</strong></div>
+    {% endfor %}
+</div>
+
+<section class="admin-panel">
+    <div class="admin-panel-heading"><div><h3>Find Articles</h3><p>Filter the article library without changing any content.</p></div></div>
+    <form method="get" class="admin-learning-filters">
+        <div class="admin-field admin-learning-search-field">
+            <label for="q">Search</label>
+            <input id="q" name="q" value="{{ q }}" placeholder="Title, summary, keyword, or topic">
+        </div>
+        <div class="admin-field">
+            <label for="article_type">Article Type</label>
+            <select id="article_type" name="article_type">
+                <option value="">All Types</option>
+                {% for article_type in article_types %}<option value="{{ article_type }}" {% if type_filter == article_type %}selected{% endif %}>{{ article_type }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="admin-field">
+            <label for="topic_id">Topic</label>
+            <select id="topic_id" name="topic_id">
+                <option value="">All Topics</option>
+                {% for topic in topics %}<option value="{{ topic['id'] }}" {% if topic_filter|string == topic['id']|string %}selected{% endif %}>{{ topic['name'] }}</option>{% endfor %}
+            </select>
+        </div>
+        <div class="admin-field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+                <option value="">All Statuses</option>
+                <option value="published" {% if status_filter == 'published' %}selected{% endif %}>Published</option>
+                <option value="draft" {% if status_filter == 'draft' %}selected{% endif %}>Draft</option>
+            </select>
+        </div>
+        <div class="admin-learning-filter-actions">
+            <button class="admin-primary-button" type="submit">Apply Filters</button>
+            <a href="{{ url_for('admin_learning_center') }}" class="admin-secondary-button">Clear</a>
+        </div>
+    </form>
+</section>
+
+<section class="admin-panel">
+    <div class="admin-panel-heading"><div><h3>Articles</h3><p>{{ articles|length }} article{% if articles|length != 1 %}s{% endif %} shown.</p></div></div>
+    {% if articles %}
+        <div class="admin-table-wrapper">
+            <table class="admin-project-table admin-learning-table">
+                <thead><tr><th>Article</th><th>Topics</th><th>Type</th><th>Intent</th><th>Status</th><th>Updated</th><th></th></tr></thead>
+                <tbody>
+                {% for article in articles %}
+                    <tr>
+                        <td><strong>{{ article['title'] }}</strong><small>/learning-center/{{ article['slug'] }}</small>{% if article['is_featured'] %}<span class="admin-featured-badge">Featured</span>{% endif %}</td>
+                        <td class="admin-topic-cell">
+                            {% if article['topic_names'] %}
+                                {% for topic_name in article['topic_names'].split('||') %}<span class="admin-topic-badge">{{ topic_name }}</span>{% endfor %}
+                            {% else %}<span class="admin-muted-text">No topics</span>{% endif %}
+                        </td>
+                        <td>{{ article['article_type'] }}</td>
+                        <td>{{ article['search_intent'] }}</td>
+                        <td><span class="admin-status admin-status-{{ article['status'] }}">{{ article['status']|title }}</span></td>
+                        <td>{{ article['updated_at'] }}</td>
+                        <td class="admin-table-actions"><a href="{{ url_for('admin_learning_article_edit', article_id=article['id']) }}">Edit</a></td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="admin-empty-state admin-empty-state-large"><h3>No matching articles</h3><p>Clear the filters or create a new Learning Center article.</p><a href="{{ url_for('admin_learning_article_new') }}" class="admin-primary-button">Add Article</a></div>
+    {% endif %}
+</section>
+
+<section class="admin-panel" id="topics">
+    <div class="admin-panel-heading"><div><h3>Topic Library</h3><p>Topics can be attached to multiple articles. Inactive topics remain on existing articles but cannot be selected for new ones.</p></div></div>
+    {% if current_admin_user and current_admin_user['role'] in ('owner', 'administrator') %}
+        <form method="post" action="{{ url_for('admin_learning_topic_new') }}" class="admin-topic-add-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <div class="admin-field"><label for="new_topic_name">New Topic</label><input id="new_topic_name" name="name" maxlength="100" required placeholder="Example: TPO Roofing"></div>
+            <div class="admin-field"><label for="new_topic_seo_phrase">SEO Phrase</label><input id="new_topic_seo_phrase" name="seo_phrase" maxlength="160" placeholder="Example: commercial TPO roofing"></div>
+            <label class="admin-checkbox-row admin-topic-filter-checkbox"><input type="checkbox" name="show_as_public_filter" value="1" checked> Public Filter</label>
+            <button type="submit" class="admin-primary-button">Add Topic</button>
+        </form>
+    {% endif %}
+
+    <div class="admin-topic-manager">
+        {% for topic in topics %}
+            <article class="admin-topic-card {% if not topic['is_active'] %}is-inactive{% endif %}">
+                <div class="admin-topic-card-heading">
+                    <div><strong>{{ topic['name'] }}</strong><small>{{ topic['article_count'] }} article{% if topic['article_count'] != 1 %}s{% endif %} · /topic/{{ topic['slug'] }}</small></div>
+                    <div class="admin-topic-statuses">
+                        <span class="admin-status {% if topic['is_active'] %}admin-status-published{% else %}admin-status-draft{% endif %}">{% if topic['is_active'] %}Active{% else %}Inactive{% endif %}</span>
+                        {% if topic['show_as_public_filter'] %}<span class="admin-filter-badge">Public Filter</span>{% endif %}
+                    </div>
+                </div>
+                {% if current_admin_user and current_admin_user['role'] in ('owner', 'administrator') %}
+                    <form method="post" action="{{ url_for('admin_learning_topic_update', topic_id=topic['id']) }}" class="admin-topic-edit-form">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <div class="admin-field"><label for="topic_name_{{ topic['id'] }}">Topic Name</label><input id="topic_name_{{ topic['id'] }}" name="name" value="{{ topic['name'] }}" maxlength="100" required></div>
+                        <div class="admin-field"><label for="topic_seo_{{ topic['id'] }}">SEO Phrase</label><input id="topic_seo_{{ topic['id'] }}" name="seo_phrase" value="{{ topic['seo_phrase'] or '' }}" maxlength="160"></div>
+                        <div class="admin-topic-checkboxes">
+                            <label class="admin-checkbox-row"><input type="checkbox" name="is_active" value="1" {% if topic['is_active'] %}checked{% endif %}> Active</label>
+                            <label class="admin-checkbox-row"><input type="checkbox" name="show_as_public_filter" value="1" {% if topic['show_as_public_filter'] %}checked{% endif %}> Public Filter</label>
+                        </div>
+                        <button type="submit" class="admin-secondary-button admin-small-button">Save</button>
+                    </form>
+                    <div class="admin-topic-actions">
+                        <form method="post" action="{{ url_for('admin_learning_topic_move', topic_id=topic['id'], direction='up') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="admin-secondary-button admin-small-button" {% if loop.first %}disabled{% endif %}>Move Up</button></form>
+                        <form method="post" action="{{ url_for('admin_learning_topic_move', topic_id=topic['id'], direction='down') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="admin-secondary-button admin-small-button" {% if loop.last %}disabled{% endif %}>Move Down</button></form>
+                        <form method="post" action="{{ url_for('admin_learning_topic_delete', topic_id=topic['id']) }}" onsubmit="return confirm('Delete this topic?');"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button type="submit" class="admin-danger-button admin-small-button" {% if topic['article_count'] %}disabled title="This topic is still attached to articles."{% endif %}>Delete</button></form>
+                    </div>
+                {% endif %}
+            </article>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

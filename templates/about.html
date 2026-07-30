@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+
+{% block title %}About Us | Testa Roofing{% endblock %}
+{% block meta_description %}Learn about the experience, philosophy, and people behind Testa Roofing, proudly serving Northeast Ohio and Western Pennsylvania.{% endblock %}
+
+{% block content %}
+
+<section class="repair-hero">
+  <div class="container repair-hero-inner">
+    <nav class="repair-breadcrumbs" aria-label="Breadcrumb">
+      <a href="{{ url_for('home') }}">Home</a>
+      <span>/</span>
+      <span aria-current="page">About Us</span>
+    </nav>
+
+    <span class="eyebrow">About Testa Roofing</span>
+
+    <h1>Honest roofing starts with honest people.</h1>
+
+    <p>
+      The right roofing solution starts with an honest evaluation. Every
+      recommendation we make begins with one simple question:
+      <strong>What is truly best for the customer?</strong>
+    </p>
+  </div>
+</section>
+
+<section class="repair-introduction section-padding">
+  <div class="container repair-introduction-grid">
+    <div class="repair-section-heading">
+      <span class="eyebrow">Our Philosophy</span>
+      <h2 class="section-heading">Recommend the right solution—not the biggest project.</h2>
+    </div>
+
+    <div class="repair-introduction-copy">
+      <p>At Testa Roofing, we believe our responsibility isn't to sell the largest roofing project. It's to recommend the solution that provides the greatest long-term value—whether that's a repair, a restoration, or a complete roof replacement.</p>
+
+      <p>That philosophy guides every project we undertake throughout Northeast Ohio and Western Pennsylvania.</p>
+    </div>
+  </div>
+</section>
+
+<section class="repair-services section-padding">
+  <div class="container">
+
+    <div class="repair-services-heading text-center">
+      <span class="eyebrow">Experience Built Over Five Decades</span>
+      <h2 class="section-heading">Experience matters when every recommendation affects your investment.</h2>
+    </div>
+
+    <div class="about-experience-grid">
+
+      <article class="about-experience-card">
+        <span class="about-experience-number">51</span>
+        <h3>Years of Combined Roofing Experience</h3>
+      </article>
+
+      <article class="about-experience-card">
+        <span class="about-experience-number">16</span>
+        <h3>Years of Roofing Estimating Experience</h3>
+      </article>
+
+      <article class="about-experience-card">
+        <span class="about-experience-number">30</span>
+        <h3>Years of Project &amp; Operations Management</h3>
+      </article>
+
+      <article class="about-experience-card">
+        <span class="about-experience-number">12</span>
+        <h3>Years of Hands-On Field Experience</h3>
+      </article>
+
+    </div>
+
+    <div style="max-width:850px;margin:40px auto 0;">
+      <p>Every proposal is prepared with real-world installation knowledge, practical budgeting, and long-term performance in mind—not simply measurements taken from an aerial photograph.</p>
+    </div>
+
+  </div>
+</section>
+
+<section class="repair-system section-padding">
+  <div class="container repair-system-grid">
+    <div class="repair-system-heading">
+      <span class="eyebrow">Experience From the Roof to the Office</span>
+      <h2 class="section-heading">Seeing every side of the project creates better decisions.</h2>
+    </div>
+
+    <div class="repair-system-copy">
+      <p>Successful roofing projects require much more than quality installation. Accurate estimating, organized project management, communication, scheduling, safety, and budgeting all play an important role in delivering a successful project.</p>
+
+      <p>By combining field experience with estimating and project management, we're able to evaluate roofing systems from multiple perspectives before recommending a solution.</p>
+
+      <p>That means fewer surprises, more accurate proposals, and realistic expectations from the beginning of every project.</p>
+    </div>
+  </div>
+</section>
+
+<section class="repair-maintenance section-padding">
+  <div class="container repair-maintenance-grid">
+
+    <div class="repair-maintenance-content">
+      <span class="eyebrow">Repair • Restore • Replace</span>
+      <h2 class="section-heading">Our approach to roofing.</h2>
+
+      <p>Whenever possible, we believe a roof should continue serving its purpose through properly completed repairs. When restoration can safely extend the life of an existing roofing system, we'll explain those options before discussing replacement.</p>
+
+      <p>Only after those possibilities have been fully evaluated do we recommend installing a completely new roofing system.</p>
+
+      <p>We believe honesty creates better roofing decisions—and long-term relationships with our customers.</p>
+    </div>
+
+    <div class="repair-maintenance-list">
+      <h3>The Testa Roofing Name</h3>
+
+      <p>The Testa name has been recognized throughout the Mahoning and Shenango Valleys since 1998.</p>
+
+      <p>Since 2017, Testa Roofing has proudly operated under the Absolute Roof Solutions umbrella, continuing that local tradition while building its own reputation through honest evaluations, quality workmanship, and lasting customer relationships.</p>
+
+      <p><strong>Build trust through honesty.</strong></p>
+    </div>
+
+  </div>
+</section>
+
+<section class="repair-final-cta">
+  <div class="container repair-final-cta-inner">
+
+    <div>
+      <span class="eyebrow">Let's Find the Right Roofing Solution</span>
+      <h2>Repair. Restore. Replace.</h2>
+
+      <p>If you're experiencing leaks, storm damage, or simply wondering whether your roof still has years of service remaining, we'd be happy to evaluate it, explain what we find, and recommend the solution that truly fits your roof.</p>
+    </div>
+
+    <div class="repair-final-cta-actions">
+      <a href="{{ url_for('contact') }}" class="button button-gold">Request an Evaluation</a>
+    </div>
+
+  </div>
+</section>
+
+{% endblock %}

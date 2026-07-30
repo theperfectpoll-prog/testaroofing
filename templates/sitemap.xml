@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+{% for page_url in static_pages %}
+    <url>
+        <loc>{{ page_url }}</loc>
+    </url>
+{% endfor %}
+{% for page in project_pages %}
+    <url>
+        <loc>{{ page.loc }}</loc>
+{% if page.lastmod %}
+        <lastmod>{{ page.lastmod }}</lastmod>
+{% endif %}
+    </url>
+{% endfor %}
+{% for page in article_pages %}
+    <url>
+        <loc>{{ page.loc }}</loc>
+{% if page.lastmod %}
+        <lastmod>{{ page.lastmod }}</lastmod>
+{% endif %}
+    </url>
+{% endfor %}
+</urlset>

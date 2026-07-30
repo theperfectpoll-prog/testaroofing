@@ -1,0 +1,22 @@
+TESTA ROOFING — DASHBOARD POLISH UPDATE
+
+Replace these five files in your project:
+
+1. app.py
+2. templates/admin_website.html
+3. templates/base.html
+4. static/css/admin.css
+5. static/css/style.css
+
+Then restart the Flask application and hard-refresh the browser (Ctrl+F5).
+
+This update adds:
+- Platform-specific social hover colors and subtle lift/scale animation
+- Website Overview panel
+- Expanded project, hero, and featured statistics
+- Website-health indicators
+- Social connection status
+- Last-updated information
+- Responsive dashboard styling
+
+No manual database migration is required. The update uses fields already present in the current schema.

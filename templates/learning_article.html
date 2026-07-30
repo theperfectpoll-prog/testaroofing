@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}{{ article['seo_title'] or article['title'] }} | Testa Roofing{% endblock %}
+
+{% block meta_description %}{{ article['seo_description'] or article['summary'] or 'Roofing education and practical guidance from Testa Roofing.' }}{% endblock %}
+
+{% block extra_head %}
+{% if article['canonical_url'] %}<link rel="canonical" href="{{ article['canonical_url'] }}">{% endif %}
+{% endblock %}
+
+{% block content %}
+<section class="article-hero">
+    <div class="container article-hero-inner">
+        <nav class="article-breadcrumbs" aria-label="Breadcrumb">
+            <a href="{{ url_for('home') }}">Home</a>
+            <span aria-hidden="true">/</span>
+            <a href="{{ url_for('public_learning_center') }}">Learning Center</a>
+        </nav>
+        <span class="eyebrow">{{ article['article_type'] }}</span>
+        <h1>{{ article['title'] }}</h1>
+        {% if article['summary'] %}<p class="article-summary">{{ article['summary'] }}</p>{% endif %}
+        <div class="article-meta">
+            {% if article['published_at'] %}<span>Published {{ article['published_at'][:10] }}</span>{% endif %}
+            {% if topics %}
+                <div class="learning-badges">
+                    {% for topic in topics %}
+                        <a href="{{ url_for('public_learning_center', topic=topic['slug']) }}">{{ topic['name'] }}</a>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<article class="article-page section-padding">
+    <div class="container article-layout">
+        <div class="article-main">
+            {% if article['featured_image_url'] %}
+                <figure class="article-featured-image">
+                    <img src="{{ url_for('static', filename=article['featured_image_url']) }}" alt="{{ article['featured_image_alt_text'] or article['title'] }}">
+                </figure>
+            {% endif %}
+
+            <div class="article-body">{{ article['body'] }}</div>
+        </div>
+
+        <aside class="article-sidebar">
+            <div class="article-sidebar-card">
+                <span class="eyebrow">Our Approach</span>
+                <h2>The right roofing solution starts with an honest evaluation.</h2>
+                <p>We evaluate the existing roof, explain what we find, and recommend repair, restoration, or replacement based on the actual condition of the system.</p>
+                <a class="button button-primary" href="{{ url_for('contact') }}">Request an Evaluation</a>
+            </div>
+        </aside>
+    </div>
+</article>
+
+{% if related_articles %}
+<section class="related-learning section-padding">
+    <div class="container">
+        <span class="eyebrow">Continue Learning</span>
+        <h2 class="section-heading">Related Articles</h2>
+        <div class="learning-grid">
+            {% for related in related_articles %}
+            <article class="learning-card">
+                <a class="learning-card-image" href="{{ url_for('public_learning_article', slug=related['slug']) }}">
+                    {% if related['featured_image_url'] %}
+                        <img src="{{ url_for('static', filename=related['featured_image_url']) }}" alt="{{ related['featured_image_alt_text'] or related['title'] }}" loading="lazy">
+                    {% else %}
+                        <div class="learning-image-placeholder">Testa Roofing Learning Center</div>
+                    {% endif %}
+                </a>
+                <div class="learning-card-content">
+                    <h3><a href="{{ url_for('public_learning_article', slug=related['slug']) }}">{{ related['title'] }}</a></h3>
+                    {% if related['summary'] %}<p>{{ related['summary'] }}</p>{% endif %}
+                    <a class="learning-read-link" href="{{ url_for('public_learning_article', slug=related['slug']) }}">Read Article <span aria-hidden="true">&rarr;</span></a>
+                </div>
+            </article>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+{% endblock %}
