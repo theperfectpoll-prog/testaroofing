@@ -96,6 +96,30 @@ def ensure_database_schema():
     connection = get_db_connection()
     cursor = connection.cursor()
 
+    # Create admin_users first because several other tables reference it.
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
+            password_hash TEXT NOT NULL,
+            role TEXT NOT NULL DEFAULT 'editor',
+            is_active INTEGER NOT NULL DEFAULT 1,
+            email_verified INTEGER NOT NULL DEFAULT 1,
+            last_login TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            created_by INTEGER,
+            FOREIGN KEY (created_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+            CHECK (role IN ('owner', 'administrator', 'editor'))
+        )
+        """
+    )
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS projects (
@@ -195,48 +219,80 @@ def ensure_database_schema():
 
     hero_slide_columns = {
         row["name"]
-        for row in cursor.execute("PRAGMA table_info(homepage_hero_slides)").fetchall()
+        for row in cursor.execute(
+            "PRAGMA table_info(homepage_hero_slides)"
+        ).fetchall()
     }
-    if "project_title" not in hero_slide_columns:
-        cursor.execute("ALTER TABLE homepage_hero_slides ADD COLUMN project_title TEXT")
-    if "location" not in hero_slide_columns:
-        cursor.execute("ALTER TABLE homepage_hero_slides ADD COLUMN location TEXT")
 
-    # Preserve existing captions while moving to consistent, separate fields.
+    if "project_title" not in hero_slide_columns:
+        cursor.execute(
+            """
+            ALTER TABLE homepage_hero_slides
+            ADD COLUMN project_title TEXT
+            """
+        )
+
+    if "location" not in hero_slide_columns:
+        cursor.execute(
+            """
+            ALTER TABLE homepage_hero_slides
+            ADD COLUMN location TEXT
+            """
+        )
+
+    # Preserve existing captions while moving to separate fields.
     existing_slides = cursor.execute(
         """
         SELECT id, caption, project_title, location
         FROM homepage_hero_slides
         """
     ).fetchall()
+
     for existing_slide in existing_slides:
         if existing_slide["project_title"] or existing_slide["location"]:
             continue
+
         caption = (existing_slide["caption"] or "").strip()
+
         if not caption:
             continue
+
         parts = re.split(r"\s+[—–-]\s+", caption, maxsplit=1)
         project_title = parts[0].strip()
         location = parts[1].strip() if len(parts) == 2 else ""
+
         cursor.execute(
             """
             UPDATE homepage_hero_slides
             SET project_title = ?, location = ?
             WHERE id = ?
             """,
-            (project_title, location, existing_slide["id"]),
+            (
+                project_title,
+                location,
+                existing_slide["id"],
+            ),
         )
 
     hero_slide_count = cursor.execute(
-        "SELECT COUNT(*) AS total FROM homepage_hero_slides"
+        """
+        SELECT COUNT(*) AS total
+        FROM homepage_hero_slides
+        """
     ).fetchone()[0]
 
     if hero_slide_count == 0:
         existing_caption = cursor.execute(
-            "SELECT hero_caption FROM homepage_settings WHERE id = 1"
+            """
+            SELECT hero_caption
+            FROM homepage_settings
+            WHERE id = 1
+            """
         ).fetchone()
+
         initial_caption = existing_caption[0] if existing_caption else ""
         now = datetime.now(UTC).isoformat(timespec="seconds")
+
         cursor.execute(
             """
             INSERT INTO homepage_hero_slides (
@@ -271,7 +327,8 @@ def ensure_database_schema():
             public_email TEXT NOT NULL DEFAULT 'info@testaroofing.com',
             address_line_1 TEXT,
             address_line_2 TEXT,
-            service_area_summary TEXT NOT NULL DEFAULT 'Northeast Ohio & Western Pennsylvania',
+            service_area_summary TEXT NOT NULL
+                DEFAULT 'Northeast Ohio & Western Pennsylvania',
             facebook_url TEXT,
             instagram_url TEXT,
             linkedin_url TEXT,
@@ -288,38 +345,27 @@ def ensure_database_schema():
     cursor.execute(
         """
         INSERT OR IGNORE INTO site_settings (
-            id, public_name, legal_name, phone_display, phone_link,
-            public_email, service_area_summary, updated_at
+            id,
+            public_name,
+            legal_name,
+            phone_display,
+            phone_link,
+            public_email,
+            service_area_summary,
+            updated_at
         )
-        VALUES (1, 'Testa Roofing', 'Absolute Roof Solutions',
-                '(330) 726-6484', '+13307266484',
-                'info@testaroofing.com',
-                'Northeast Ohio & Western Pennsylvania', ?)
+        VALUES (
+            1,
+            'Testa Roofing',
+            'Absolute Roof Solutions',
+            '(330) 726-6484',
+            '+13307266484',
+            'info@testaroofing.com',
+            'Northeast Ohio & Western Pennsylvania',
+            ?
+        )
         """,
         (datetime.now(UTC).isoformat(timespec="seconds"),),
-    )
-
-    cursor.execute(
-        """
-        CREATE TABLE IF NOT EXISTS admin_users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            email TEXT NOT NULL UNIQUE COLLATE NOCASE,
-            password_hash TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'editor',
-            is_active INTEGER NOT NULL DEFAULT 1,
-            email_verified INTEGER NOT NULL DEFAULT 1,
-            last_login TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            created_by INTEGER,
-            FOREIGN KEY (created_by)
-                REFERENCES admin_users (id)
-                ON DELETE SET NULL,
-            CHECK (role IN ('owner', 'administrator', 'editor'))
-        )
-        """
     )
 
     cursor.execute(
