@@ -2,3 +2,4 @@ Flask
 gunicorn
 msal
 requests
+python-dotenv
