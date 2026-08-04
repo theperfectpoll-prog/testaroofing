@@ -3,9 +3,10 @@ import re
 import secrets
 import shutil
 import sqlite3
+import hashlib
 
 import click
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import wraps
 from hmac import compare_digest
 
@@ -29,6 +30,8 @@ from dotenv import load_dotenv
 from email_service import (
     EmailConfigurationError,
     EmailDeliveryError,
+    send_admin_password_changed_email,
+    send_admin_password_reset_email,
     send_contact_email,
 )
 
@@ -116,6 +119,64 @@ def ensure_database_schema():
                 REFERENCES admin_users (id)
                 ON DELETE SET NULL,
             CHECK (role IN ('owner', 'administrator', 'editor'))
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_password_reset_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            normalized_email TEXT NOT NULL,
+            ip_address TEXT,
+            requested_at TEXT NOT NULL
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_admin_password_reset_requests_email
+        ON admin_password_reset_requests (
+            normalized_email,
+            requested_at
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_admin_password_reset_requests_ip
+        ON admin_password_reset_requests (
+            ip_address,
+            requested_at
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_password_reset_tokens (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            invalidated_at TEXT,
+            FOREIGN KEY (admin_user_id)
+                REFERENCES admin_users (id)
+                ON DELETE CASCADE
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_admin_password_reset_tokens_user
+        ON admin_password_reset_tokens (
+            admin_user_id,
+            created_at
         )
         """
     )
@@ -399,7 +460,6 @@ def ensure_database_schema():
     connection.commit()
     connection.close()
 
-
 # =========================================================
 # ADMIN AUTHENTICATION
 # =========================================================
@@ -434,6 +494,204 @@ def get_current_admin_user():
 
     return admin_user
 
+ADMIN_PASSWORD_MIN_LENGTH = 16
+PASSWORD_RESET_TOKEN_MINUTES = 15
+PASSWORD_RESET_WINDOW_MINUTES = 30
+PASSWORD_RESET_MAX_REQUESTS = 4
+
+
+def validate_admin_password(password):
+    if not password:
+        return "A password is required."
+
+    if len(password) < ADMIN_PASSWORD_MIN_LENGTH:
+        return (
+            f"Your password must contain at least "
+            f"{ADMIN_PASSWORD_MIN_LENGTH} characters."
+        )
+
+    if len(password) > 128:
+        return "Your password cannot exceed 128 characters."
+
+    return None
+
+
+def hash_password_reset_token(token):
+    return hashlib.sha256(
+        token.encode("utf-8")
+    ).hexdigest()
+
+
+def get_request_ip_address():
+    forwarded_for = request.headers.get(
+        "X-Forwarded-For",
+        "",
+    ).strip()
+
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+
+    return request.remote_addr or ""
+
+
+def password_reset_request_allowed(
+    connection,
+    normalized_email,
+    ip_address,
+):
+    cutoff = (
+        datetime.now(UTC)
+        - timedelta(minutes=PASSWORD_RESET_WINDOW_MINUTES)
+    ).isoformat(timespec="seconds")
+
+    email_request_count = connection.execute(
+        """
+        SELECT COUNT(*)
+        FROM admin_password_reset_requests
+        WHERE normalized_email = ?
+          AND requested_at >= ?
+        """,
+        (
+            normalized_email,
+            cutoff,
+        ),
+    ).fetchone()[0]
+
+    ip_request_count = connection.execute(
+        """
+        SELECT COUNT(*)
+        FROM admin_password_reset_requests
+        WHERE ip_address = ?
+          AND requested_at >= ?
+        """,
+        (
+            ip_address,
+            cutoff,
+        ),
+    ).fetchone()[0]
+
+    return (
+        email_request_count < PASSWORD_RESET_MAX_REQUESTS
+        and ip_request_count < PASSWORD_RESET_MAX_REQUESTS
+    )
+
+
+def record_password_reset_request(
+    connection,
+    normalized_email,
+    ip_address,
+):
+    connection.execute(
+        """
+        INSERT INTO admin_password_reset_requests (
+            normalized_email,
+            ip_address,
+            requested_at
+        )
+        VALUES (?, ?, ?)
+        """,
+        (
+            normalized_email,
+            ip_address,
+            current_timestamp(),
+        ),
+    )
+
+
+def create_admin_password_reset_token(
+    connection,
+    admin_user_id,
+):
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(
+        minutes=PASSWORD_RESET_TOKEN_MINUTES
+    )
+
+    # Only the newest reset link remains valid.
+    connection.execute(
+        """
+        UPDATE admin_password_reset_tokens
+        SET invalidated_at = ?
+        WHERE admin_user_id = ?
+          AND used_at IS NULL
+          AND invalidated_at IS NULL
+        """,
+        (
+            now.isoformat(timespec="seconds"),
+            admin_user_id,
+        ),
+    )
+
+    raw_token = secrets.token_urlsafe(48)
+    token_hash = hash_password_reset_token(raw_token)
+
+    connection.execute(
+        """
+        INSERT INTO admin_password_reset_tokens (
+            admin_user_id,
+            token_hash,
+            created_at,
+            expires_at
+        )
+        VALUES (?, ?, ?, ?)
+        """,
+        (
+            admin_user_id,
+            token_hash,
+            now.isoformat(timespec="seconds"),
+            expires_at.isoformat(timespec="seconds"),
+        ),
+    )
+
+    return raw_token
+
+
+def get_valid_admin_password_reset(
+    connection,
+    raw_token,
+):
+    if not raw_token:
+        return None
+
+    token_hash = hash_password_reset_token(raw_token)
+
+    reset_record = connection.execute(
+        """
+        SELECT
+            admin_password_reset_tokens.*,
+            admin_users.email,
+            admin_users.first_name,
+            admin_users.last_name,
+            admin_users.is_active
+        FROM admin_password_reset_tokens
+        JOIN admin_users
+            ON admin_users.id =
+               admin_password_reset_tokens.admin_user_id
+        WHERE admin_password_reset_tokens.token_hash = ?
+        """,
+        (token_hash,),
+    ).fetchone()
+
+    if reset_record is None:
+        return None
+
+    if reset_record["used_at"] is not None:
+        return None
+
+    if reset_record["invalidated_at"] is not None:
+        return None
+
+    if not reset_record["is_active"]:
+        return None
+
+    expires_at = datetime.fromisoformat(
+        reset_record["expires_at"]
+    )
+
+    if expires_at <= datetime.now(UTC):
+        return None
+
+    return reset_record
 
 def write_audit_log(
     action,
@@ -1381,6 +1639,290 @@ def admin_login():
 
     return render_template("admin_login.html")
 
+@app.route(
+    "/admin/forgot-password",
+    methods=["GET", "POST"],
+)
+def admin_forgot_password():
+    if get_current_admin_user() is not None:
+        return redirect(
+            url_for("admin_website_dashboard")
+        )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        submitted_email = normalize_email(
+            request.form.get("email", "")
+        )
+
+        ip_address = get_request_ip_address()
+
+        connection = get_db_connection()
+
+        allowed = password_reset_request_allowed(
+            connection,
+            submitted_email,
+            ip_address,
+        )
+
+        record_password_reset_request(
+            connection,
+            submitted_email,
+            ip_address,
+        )
+
+        admin_user = connection.execute(
+            """
+            SELECT *
+            FROM admin_users
+            WHERE email = ?
+              AND is_active = 1
+            """,
+            (submitted_email,),
+        ).fetchone()
+
+        if allowed and admin_user is not None:
+            raw_token = (
+                create_admin_password_reset_token(
+                    connection,
+                    admin_user["id"],
+                )
+            )
+
+            connection.commit()
+
+            reset_url = url_for(
+                "admin_reset_password",
+                token=raw_token,
+                _external=True,
+                _scheme="https"
+                if not app.debug
+                else None,
+            )
+
+            try:
+                send_admin_password_reset_email(
+                    recipient_email=admin_user["email"],
+                    first_name=admin_user["first_name"],
+                    reset_url=reset_url,
+                )
+
+                write_audit_log(
+                    action="password_reset_requested",
+                    category="security",
+                    description=(
+                        "A password reset email "
+                        f"was sent to {admin_user['email']}."
+                    ),
+                    admin_user_id=admin_user["id"],
+                    entity_type="admin_user",
+                    entity_id=admin_user["id"],
+                )
+
+            except (
+                EmailConfigurationError,
+                EmailDeliveryError,
+            ):
+                app.logger.exception(
+                    "Unable to send administrator "
+                    "password reset email."
+                )
+
+        else:
+            connection.commit()
+
+        connection.close()
+
+        flash(
+            (
+                "If an active administrator account "
+                "exists for that email address, a "
+                "password reset link has been sent."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for("admin_forgot_password")
+        )
+
+    return render_template(
+        "admin_forgot_password.html"
+    )
+
+@app.route(
+    "/admin/reset-password/<token>",
+    methods=["GET", "POST"],
+)
+def admin_reset_password(token):
+    connection = get_db_connection()
+
+    reset_record = get_valid_admin_password_reset(
+        connection,
+        token,
+    )
+
+    if reset_record is None:
+        connection.close()
+
+        flash(
+            (
+                "That password reset link is invalid "
+                "or has expired. Please request a "
+                "new password reset."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_forgot_password")
+        )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        new_password = request.form.get(
+            "password",
+            "",
+        )
+
+        confirm_password = request.form.get(
+            "confirm_password",
+            "",
+        )
+
+        password_error = validate_admin_password(
+            new_password
+        )
+
+        if password_error:
+            connection.close()
+
+            flash(
+                password_error,
+                "error",
+            )
+
+            return render_template(
+                "admin_reset_password.html",
+                token=token,
+            )
+
+        if new_password != confirm_password:
+            connection.close()
+
+            flash(
+                "The passwords did not match.",
+                "error",
+            )
+
+            return render_template(
+                "admin_reset_password.html",
+                token=token,
+            )
+
+        now = current_timestamp()
+
+        connection.execute(
+            """
+            UPDATE admin_users
+            SET
+                password_hash = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                generate_password_hash(
+                    new_password
+                ),
+                now,
+                reset_record["admin_user_id"],
+            ),
+        )
+
+        connection.execute(
+            """
+            UPDATE admin_password_reset_tokens
+            SET used_at = ?
+            WHERE id = ?
+            """,
+            (
+                now,
+                reset_record["id"],
+            ),
+        )
+
+        connection.execute(
+            """
+            UPDATE admin_password_reset_tokens
+            SET invalidated_at = ?
+            WHERE admin_user_id = ?
+              AND id != ?
+              AND used_at IS NULL
+              AND invalidated_at IS NULL
+            """,
+            (
+                now,
+                reset_record["admin_user_id"],
+                reset_record["id"],
+            ),
+        )
+
+        connection.commit()
+        connection.close()
+
+        session.clear()
+
+        write_audit_log(
+            action="password_reset_completed",
+            category="security",
+            description=(
+                f'{reset_record["email"]} '
+                "reset their administrator password."
+            ),
+            admin_user_id=reset_record[
+                "admin_user_id"
+            ],
+            entity_type="admin_user",
+            entity_id=reset_record[
+                "admin_user_id"
+            ],
+        )
+
+        try:
+            send_admin_password_changed_email(
+                recipient_email=reset_record["email"],
+                first_name=reset_record["first_name"],
+            )
+
+        except (
+            EmailConfigurationError,
+            EmailDeliveryError,
+        ):
+            app.logger.exception(
+                "Unable to send administrator "
+                "password-change confirmation email."
+            )
+
+        flash(
+            (
+                "Your password has been changed. "
+                "You can now sign in."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_reset_password.html",
+        token=token,
+    )
 
 @app.route("/admin/logout", methods=["POST"])
 @admin_required

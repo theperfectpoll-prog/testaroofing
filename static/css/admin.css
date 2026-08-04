@@ -1805,3 +1805,17 @@
     .admin-topic-card-heading { flex-direction: column; }
     .admin-topic-statuses { justify-content: flex-start; }
 }
+
+.admin-login-help {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.admin-login-help a {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.admin-login-help a:hover {
+    text-decoration: underline;
+}
