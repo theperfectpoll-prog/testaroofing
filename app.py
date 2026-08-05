@@ -753,7 +753,6 @@ def admin_required(view_function):
 
     return wrapped_view
 
-
 def roles_required(*allowed_roles):
     invalid_roles = set(allowed_roles) - VALID_ADMIN_ROLES
 
@@ -1944,7 +1943,6 @@ def admin_logout():
 
     return redirect(url_for("admin_login"))
 
-
 # =========================================================
 # WEBSITE ADMINISTRATION
 # =========================================================
@@ -2062,7 +2060,6 @@ def admin_website_dashboard():
         projects_enabled=projects_enabled,
         website_last_updated=website_last_updated,
     )
-
 
 @app.route("/admin/website/company-settings", methods=["POST"])
 @admin_required
