@@ -110,16 +110,126 @@ def ensure_database_schema():
             password_hash TEXT NOT NULL,
             role TEXT NOT NULL DEFAULT 'editor',
             is_active INTEGER NOT NULL DEFAULT 1,
+            account_status TEXT NOT NULL DEFAULT 'active',
+            session_version INTEGER NOT NULL DEFAULT 1,
             email_verified INTEGER NOT NULL DEFAULT 1,
             last_login TEXT,
+            frozen_at TEXT,
+            frozen_reason TEXT,
+            frozen_by INTEGER,
+            disabled_at TEXT,
+            disabled_reason TEXT,
+            disabled_by INTEGER,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             created_by INTEGER,
             FOREIGN KEY (created_by)
                 REFERENCES admin_users (id)
                 ON DELETE SET NULL,
-            CHECK (role IN ('owner', 'administrator', 'editor'))
+            FOREIGN KEY (frozen_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+            FOREIGN KEY (disabled_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+            CHECK (
+                role IN (
+                    'owner',
+                    'administrator',
+                    'editor'
+                )
+            ),
+            CHECK (
+                account_status IN (
+                    'active',
+                    'frozen',
+                    'disabled'
+                )
+            )
         )
+        """
+    )
+
+    admin_user_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(admin_users)"
+        ).fetchall()
+    }
+
+    if "account_status" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN account_status TEXT
+            NOT NULL DEFAULT 'active'
+            """
+        )
+
+    if "session_version" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN session_version INTEGER
+            NOT NULL DEFAULT 1
+            """
+        )
+
+    if "frozen_at" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN frozen_at TEXT
+            """
+        )
+
+    if "frozen_reason" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN frozen_reason TEXT
+            """
+        )
+
+    if "frozen_by" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN frozen_by INTEGER
+            """
+        )
+
+    if "disabled_at" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN disabled_at TEXT
+            """
+        )
+
+    if "disabled_reason" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN disabled_reason TEXT
+            """
+        )
+
+    if "disabled_by" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN disabled_by INTEGER
+            """
+        )
+
+    # Preserve compatibility with the existing is_active field.
+    cursor.execute(
+        """
+        UPDATE admin_users
+        SET account_status = 'disabled'
+        WHERE is_active = 0
+          AND account_status = 'active'
         """
     )
 
@@ -476,20 +586,40 @@ def normalize_email(value):
 
 
 def get_current_admin_user():
-    admin_user_id = session.get("admin_user_id")
+    admin_user_id = session.get(
+        "admin_user_id"
+    )
 
     if not admin_user_id:
         return None
 
     connection = get_db_connection()
+
     admin_user = connection.execute(
         """
-        SELECT id, first_name, last_name, email, role, is_active
+        SELECT
+            id,
+            first_name,
+            last_name,
+            email,
+            role,
+            is_active,
+            account_status,
+            session_version,
+            email_verified,
+            last_login,
+            frozen_at,
+            frozen_reason,
+            frozen_by,
+            disabled_at,
+            disabled_reason,
+            disabled_by
         FROM admin_users
         WHERE id = ?
         """,
         (admin_user_id,),
     ).fetchone()
+
     connection.close()
 
     return admin_user
@@ -653,7 +783,9 @@ def get_valid_admin_password_reset(
     if not raw_token:
         return None
 
-    token_hash = hash_password_reset_token(raw_token)
+    token_hash = hash_password_reset_token(
+        raw_token
+    )
 
     reset_record = connection.execute(
         """
@@ -662,7 +794,10 @@ def get_valid_admin_password_reset(
             admin_users.email,
             admin_users.first_name,
             admin_users.last_name,
-            admin_users.is_active
+            admin_users.password_hash,
+            admin_users.is_active,
+            admin_users.account_status,
+            admin_users.session_version
         FROM admin_password_reset_tokens
         JOIN admin_users
             ON admin_users.id =
@@ -682,6 +817,9 @@ def get_valid_admin_password_reset(
         return None
 
     if not reset_record["is_active"]:
+        return None
+
+    if reset_record["account_status"] != "active":
         return None
 
     expires_at = datetime.fromisoformat(
@@ -744,12 +882,143 @@ def admin_required(view_function):
     def wrapped_view(*args, **kwargs):
         admin_user = get_current_admin_user()
 
-        if admin_user is None or not admin_user["is_active"]:
+        if admin_user is None:
             session.clear()
-            flash("Please sign in to access the website editor.", "error")
-            return redirect(url_for("admin_login", next=request.path))
 
-        return view_function(*args, **kwargs)
+            flash(
+                (
+                    "Please sign in to access the "
+                    "administration system."
+                ),
+                "error",
+            )
+
+            return redirect(
+                url_for(
+                    "admin_login",
+                    next=request.path,
+                )
+            )
+
+        stored_session_version = session.get(
+            "admin_session_version"
+        )
+
+        account_is_available = bool(
+            admin_user["is_active"]
+            and admin_user["account_status"] == "active"
+        )
+
+        session_is_current = bool(
+            stored_session_version is not None
+            and stored_session_version
+            == admin_user["session_version"]
+        )
+
+        if (
+            not account_is_available
+            or not session_is_current
+        ):
+            session.clear()
+
+            flash(
+                (
+                    "Your administrator session is "
+                    "no longer valid. Please sign in "
+                    "again or contact the system owner."
+                ),
+                "error",
+            )
+
+            return redirect(
+                url_for(
+                    "admin_login",
+                    next=request.path,
+                )
+            )
+
+        return view_function(
+            *args,
+            **kwargs,
+        )
+
+    return wrapped_view
+
+def owner_required(view_function):
+    @wraps(view_function)
+    def wrapped_view(*args, **kwargs):
+        admin_user = get_current_admin_user()
+
+        if admin_user is None:
+            session.clear()
+
+            flash(
+                (
+                    "Please sign in to access the "
+                    "administration system."
+                ),
+                "error",
+            )
+
+            return redirect(
+                url_for(
+                    "admin_login",
+                    next=request.path,
+                )
+            )
+
+        stored_session_version = session.get(
+            "admin_session_version"
+        )
+
+        account_is_available = bool(
+            admin_user["is_active"]
+            and admin_user["account_status"] == "active"
+        )
+
+        session_is_current = bool(
+            stored_session_version is not None
+            and stored_session_version
+            == admin_user["session_version"]
+        )
+
+        if (
+            not account_is_available
+            or not session_is_current
+        ):
+            session.clear()
+
+            flash(
+                (
+                    "Your administrator session is "
+                    "no longer valid."
+                ),
+                "error",
+            )
+
+            return redirect(
+                url_for("admin_login")
+            )
+
+        if admin_user["role"] != "owner":
+            flash(
+                (
+                    "Only the system owner can access "
+                    "that administration area."
+                ),
+                "error",
+            )
+
+            return redirect(
+                url_for(
+                    "admin_website_dashboard"
+                )
+            )
+
+        return view_function(
+            *args,
+            **kwargs,
+        )
 
     return wrapped_view
 
@@ -1554,20 +1823,33 @@ def public_learning_article(slug):
 # ADMIN LOGIN
 # =========================================================
 
-@app.route("/admin/login", methods=["GET", "POST"])
+@app.route(
+    "/admin/login",
+    methods=["GET", "POST"],
+)
 def admin_login():
     if get_current_admin_user() is not None:
-        return redirect(url_for("admin_website_dashboard"))
+        return redirect(
+            url_for("admin_website_dashboard")
+        )
 
     if request.method == "POST":
         validate_csrf_token()
 
         submitted_email = normalize_email(
-            request.form.get("email", "")
+            request.form.get(
+                "email",
+                "",
+            )
         )
-        submitted_password = request.form.get("password", "")
+
+        submitted_password = request.form.get(
+            "password",
+            "",
+        )
 
         connection = get_db_connection()
+
         admin_user = connection.execute(
             """
             SELECT *
@@ -1580,6 +1862,7 @@ def admin_login():
         login_succeeded = bool(
             admin_user
             and admin_user["is_active"]
+            and admin_user["account_status"] == "active"
             and check_password_hash(
                 admin_user["password_hash"],
                 submitted_password,
@@ -1588,37 +1871,71 @@ def admin_login():
 
         if login_succeeded:
             now = current_timestamp()
+
             connection.execute(
                 """
                 UPDATE admin_users
-                SET last_login = ?, updated_at = ?
+                SET
+                    last_login = ?,
+                    updated_at = ?
                 WHERE id = ?
                 """,
-                (now, now, admin_user["id"]),
+                (
+                    now,
+                    now,
+                    admin_user["id"],
+                ),
             )
+
             connection.commit()
             connection.close()
 
             session.clear()
-            session["admin_user_id"] = admin_user["id"]
-            session["csrf_token"] = secrets.token_hex(32)
+
+            session["admin_user_id"] = (
+                admin_user["id"]
+            )
+
+            session["admin_session_version"] = (
+                admin_user["session_version"]
+            )
+
+            session["csrf_token"] = (
+                secrets.token_hex(32)
+            )
 
             write_audit_log(
                 action="login_succeeded",
                 category="security",
-                description=f'{admin_user["email"]} signed in.',
+                description=(
+                    f'{admin_user["email"]} '
+                    "signed in."
+                ),
                 admin_user_id=admin_user["id"],
                 entity_type="admin_user",
                 entity_id=admin_user["id"],
             )
 
-            flash("You are now signed in.", "success")
+            flash(
+                "You are now signed in.",
+                "success",
+            )
 
-            next_page = request.args.get("next", "")
-            if is_safe_admin_redirect(next_page):
+            next_page = request.args.get(
+                "next",
+                "",
+            )
+
+            if is_safe_admin_redirect(
+                next_page
+            ):
                 return redirect(next_page)
 
-            return redirect(url_for("admin_website_dashboard"))
+            return redirect(
+                url_for(
+                    "admin_website_dashboard"
+                )
+            )
 
         connection.close()
 
@@ -1626,17 +1943,38 @@ def admin_login():
             action="login_failed",
             category="security",
             description=(
-                "An unsuccessful sign-in attempt was made for "
+                "An unsuccessful sign-in attempt "
+                "was made for "
                 f"{submitted_email or 'a blank email address'}."
             ),
-            admin_user_id=admin_user["id"] if admin_user else None,
-            entity_type="admin_user" if admin_user else None,
-            entity_id=admin_user["id"] if admin_user else None,
+            admin_user_id=(
+                admin_user["id"]
+                if admin_user
+                else None
+            ),
+            entity_type=(
+                "admin_user"
+                if admin_user
+                else None
+            ),
+            entity_id=(
+                admin_user["id"]
+                if admin_user
+                else None
+            ),
         )
 
-        flash("The email address or password was incorrect.", "error")
+        flash(
+            (
+                "The email address or password "
+                "was incorrect."
+            ),
+            "error",
+        )
 
-    return render_template("admin_login.html")
+    return render_template(
+        "admin_login.html"
+    )
 
 @app.route(
     "/admin/forgot-password",
@@ -1677,6 +2015,7 @@ def admin_forgot_password():
             FROM admin_users
             WHERE email = ?
               AND is_active = 1
+              AND account_status = 'active'
             """,
             (submitted_email,),
         ).fetchone()
@@ -1757,9 +2096,11 @@ def admin_forgot_password():
 def admin_reset_password(token):
     connection = get_db_connection()
 
-    reset_record = get_valid_admin_password_reset(
-        connection,
-        token,
+    reset_record = (
+        get_valid_admin_password_reset(
+            connection,
+            token,
+        )
     )
 
     if reset_record is None:
@@ -1775,7 +2116,9 @@ def admin_reset_password(token):
         )
 
         return redirect(
-            url_for("admin_forgot_password")
+            url_for(
+                "admin_forgot_password"
+            )
         )
 
     if request.method == "POST":
@@ -1791,8 +2134,10 @@ def admin_reset_password(token):
             "",
         )
 
-        password_error = validate_admin_password(
-            new_password
+        password_error = (
+            validate_admin_password(
+                new_password
+            )
         )
 
         if password_error:
@@ -1812,7 +2157,30 @@ def admin_reset_password(token):
             connection.close()
 
             flash(
-                "The passwords did not match.",
+                (
+                    "The passwords did not "
+                    "match."
+                ),
+                "error",
+            )
+
+            return render_template(
+                "admin_reset_password.html",
+                token=token,
+            )
+
+        if check_password_hash(
+            reset_record["password_hash"],
+            new_password,
+        ):
+            connection.close()
+
+            flash(
+                (
+                    "Your new password must be "
+                    "different from your current "
+                    "password."
+                ),
                 "error",
             )
 
@@ -1828,6 +2196,8 @@ def admin_reset_password(token):
             UPDATE admin_users
             SET
                 password_hash = ?,
+                session_version =
+                    session_version + 1,
                 updated_at = ?
             WHERE id = ?
             """,
@@ -1836,7 +2206,9 @@ def admin_reset_password(token):
                     new_password
                 ),
                 now,
-                reset_record["admin_user_id"],
+                reset_record[
+                    "admin_user_id"
+                ],
             ),
         )
 
@@ -1863,7 +2235,9 @@ def admin_reset_password(token):
             """,
             (
                 now,
-                reset_record["admin_user_id"],
+                reset_record[
+                    "admin_user_id"
+                ],
                 reset_record["id"],
             ),
         )
@@ -1874,11 +2248,14 @@ def admin_reset_password(token):
         session.clear()
 
         write_audit_log(
-            action="password_reset_completed",
+            action=(
+                "password_reset_completed"
+            ),
             category="security",
             description=(
                 f'{reset_record["email"]} '
-                "reset their administrator password."
+                "reset their administrator "
+                "password."
             ),
             admin_user_id=reset_record[
                 "admin_user_id"
@@ -1891,8 +2268,12 @@ def admin_reset_password(token):
 
         try:
             send_admin_password_changed_email(
-                recipient_email=reset_record["email"],
-                first_name=reset_record["first_name"],
+                recipient_email=(
+                    reset_record["email"]
+                ),
+                first_name=(
+                    reset_record["first_name"]
+                ),
             )
 
         except (
@@ -1901,7 +2282,8 @@ def admin_reset_password(token):
         ):
             app.logger.exception(
                 "Unable to send administrator "
-                "password-change confirmation email."
+                "password-change confirmation "
+                "email."
             )
 
         flash(
