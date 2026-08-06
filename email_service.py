@@ -17,7 +17,6 @@ class EmailConfigurationError(RuntimeError):
 class EmailDeliveryError(RuntimeError):
     pass
 
-
 def _required_setting(name: str) -> str:
     value = os.getenv(name, "").strip()
 
@@ -27,7 +26,6 @@ def _required_setting(name: str) -> str:
         )
 
     return value
-
 
 def _get_access_token() -> str:
     tenant_id = _required_setting("MS_TENANT_ID")
@@ -66,7 +64,6 @@ def _get_access_token() -> str:
         )
 
     return access_token
-
 
 def _send_email(
     recipient: str,
@@ -141,7 +138,6 @@ def _send_email(
             f"{details}"
         )
 
-
 def _display(value: str) -> str:
     value = value.strip()
 
@@ -150,7 +146,6 @@ def _display(value: str) -> str:
         if value
         else "Not provided"
     )
-
 
 def send_contact_email(
     form_data: Mapping[str, str],
@@ -458,6 +453,96 @@ def send_admin_password_changed_email(
         subject=(
             "Security Notice: Testa Roofing "
             "Administrator Password Changed"
+        ),
+        body_html=body_html,
+    )
+
+def send_admin_invitation_email(
+    recipient_email: str,
+    first_name: str,
+    inviter_name: str,
+    invitation_url: str,
+) -> None:
+    safe_name = html.escape(
+        first_name.strip()
+        or "Administrator"
+    )
+
+    safe_inviter_name = html.escape(
+        inviter_name.strip()
+        or "the Testa Roofing system owner"
+    )
+
+    safe_invitation_url = html.escape(
+        invitation_url,
+        quote=True,
+    )
+
+    body_html = f"""
+    <html>
+      <body
+        style="
+          font-family:Arial,sans-serif;
+          color:#1f2933;
+          line-height:1.6;
+        "
+      >
+        <h2 style="color:#123b5d;">
+          Testa Roofing Administrator Invitation
+        </h2>
+
+        <p>
+          Hello {safe_name},
+        </p>
+
+        <p>
+          {safe_inviter_name} invited you to create
+          a Testa Roofing administrator account.
+        </p>
+
+        <p>
+          This secure invitation link will expire
+          in <strong>24 hours</strong>.
+        </p>
+
+        <p style="margin:28px 0;">
+          <a
+            href="{safe_invitation_url}"
+            style="
+              background:#123b5d;
+              color:#ffffff;
+              text-decoration:none;
+              padding:12px 20px;
+              border-radius:5px;
+              display:inline-block;
+              font-weight:bold;
+            "
+          >
+            Create Administrator Account
+          </a>
+        </p>
+
+        <p>
+          You will be asked to create a password
+          containing at least 16 characters.
+        </p>
+
+        <p>
+          If you were not expecting this invitation,
+          do not use or forward this email.
+        </p>
+
+        <p>
+          Testa Roofing
+        </p>
+      </body>
+    </html>
+    """.strip()
+
+    _send_email(
+        recipient=recipient_email,
+        subject=(
+            "Testa Roofing Administrator Invitation"
         ),
         body_html=body_html,
     )

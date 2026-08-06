@@ -30,6 +30,7 @@ from dotenv import load_dotenv
 from email_service import (
     EmailConfigurationError,
     EmailDeliveryError,
+    send_admin_invitation_email,
     send_admin_password_changed_email,
     send_admin_password_reset_email,
     send_contact_email,
@@ -230,6 +231,59 @@ def ensure_database_schema():
         SET account_status = 'disabled'
         WHERE is_active = 0
           AND account_status = 'active'
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_invitations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+            email TEXT NOT NULL COLLATE NOCASE,
+            role TEXT NOT NULL,
+            token_hash TEXT NOT NULL UNIQUE,
+            invited_by INTEGER NOT NULL,
+            created_at TEXT NOT NULL,
+            expires_at TEXT NOT NULL,
+            used_at TEXT,
+            cancelled_at TEXT,
+            cancelled_by INTEGER,
+            FOREIGN KEY (invited_by)
+                REFERENCES admin_users (id)
+                ON DELETE CASCADE,
+            FOREIGN KEY (cancelled_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+            CHECK (
+                role IN (
+                    'owner',
+                    'administrator',
+                    'editor'
+                )
+            )
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_admin_invitations_email
+        ON admin_invitations (
+            email,
+            created_at
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_admin_invitations_status
+        ON admin_invitations (
+            used_at,
+            cancelled_at,
+            expires_at
+        )
         """
     )
 
@@ -651,6 +705,66 @@ def hash_password_reset_token(token):
         token.encode("utf-8")
     ).hexdigest()
 
+ADMIN_INVITATION_HOURS = 24
+
+
+def hash_admin_invitation_token(token):
+    return hashlib.sha256(
+        token.encode("utf-8")
+    ).hexdigest()
+
+
+def create_admin_invitation_token():
+    return secrets.token_urlsafe(48)
+
+
+def get_valid_admin_invitation(
+    connection,
+    raw_token,
+):
+    if not raw_token:
+        return None
+
+    token_hash = hash_admin_invitation_token(
+        raw_token
+    )
+
+    invitation = connection.execute(
+        """
+        SELECT
+            admin_invitations.*,
+            inviter.first_name
+                AS inviter_first_name,
+            inviter.last_name
+                AS inviter_last_name,
+            inviter.email
+                AS inviter_email
+        FROM admin_invitations
+        JOIN admin_users AS inviter
+            ON inviter.id =
+               admin_invitations.invited_by
+        WHERE admin_invitations.token_hash = ?
+        """,
+        (token_hash,),
+    ).fetchone()
+
+    if invitation is None:
+        return None
+
+    if invitation["used_at"] is not None:
+        return None
+
+    if invitation["cancelled_at"] is not None:
+        return None
+
+    expires_at = datetime.fromisoformat(
+        invitation["expires_at"]
+    )
+
+    if expires_at <= datetime.now(UTC):
+        return None
+
+    return invitation
 
 def get_request_ip_address():
     forwarded_for = request.headers.get(
@@ -2409,12 +2523,764 @@ def admin_users():
         """
     ).fetchall()
 
+    pending_invitations = connection.execute(
+        """
+        SELECT
+            admin_invitations.*,
+            inviter.first_name
+                AS inviter_first_name,
+            inviter.last_name
+                AS inviter_last_name
+        FROM admin_invitations
+        JOIN admin_users AS inviter
+            ON inviter.id =
+               admin_invitations.invited_by
+        WHERE admin_invitations.used_at IS NULL
+          AND admin_invitations.cancelled_at IS NULL
+          AND admin_invitations.expires_at > ?
+        ORDER BY admin_invitations.created_at DESC
+        """,
+        (current_timestamp(),),
+    ).fetchall()
+
     connection.close()
 
     return render_template(
         "admin_users.html",
         admin_users=admin_user_rows,
+        pending_invitations=pending_invitations,
         current_admin=current_admin,
+    )
+
+@app.route(
+    "/admin/users/invite",
+    methods=["POST"],
+)
+@owner_required
+def admin_user_invite():
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    first_name = request.form.get(
+        "first_name",
+        "",
+    ).strip()
+
+    last_name = request.form.get(
+        "last_name",
+        "",
+    ).strip()
+
+    email = normalize_email(
+        request.form.get(
+            "email",
+            "",
+        )
+    )
+
+    role = request.form.get(
+        "role",
+        "",
+    ).strip()
+
+    allowed_roles = {
+        "owner",
+        "administrator",
+        "editor",
+    }
+
+    if not first_name or not last_name:
+        flash(
+            "First name and last name are required.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if not email or "@" not in email:
+        flash(
+            "Enter a valid email address.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if role not in allowed_roles:
+        flash(
+            "Select a valid administrator role.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    connection = get_db_connection()
+
+    existing_user = connection.execute(
+        """
+        SELECT id
+        FROM admin_users
+        WHERE email = ?
+        """,
+        (email,),
+    ).fetchone()
+
+    if existing_user is not None:
+        connection.close()
+
+        flash(
+            (
+                "An administrator account already "
+                "exists for that email address."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    now = datetime.now(UTC)
+
+    now_text = now.isoformat(
+        timespec="seconds"
+    )
+
+    expires_at = (
+        now
+        + timedelta(
+            hours=ADMIN_INVITATION_HOURS
+        )
+    ).isoformat(
+        timespec="seconds"
+    )
+
+    # Cancel any existing unused invitation
+    # for the same email address.
+    connection.execute(
+        """
+        UPDATE admin_invitations
+        SET
+            cancelled_at = ?,
+            cancelled_by = ?
+        WHERE email = ?
+          AND used_at IS NULL
+          AND cancelled_at IS NULL
+        """,
+        (
+            now_text,
+            current_admin["id"],
+            email,
+        ),
+    )
+
+    raw_token = create_admin_invitation_token()
+
+    token_hash = hash_admin_invitation_token(
+        raw_token
+    )
+
+    cursor = connection.execute(
+        """
+        INSERT INTO admin_invitations (
+            first_name,
+            last_name,
+            email,
+            role,
+            token_hash,
+            invited_by,
+            created_at,
+            expires_at
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            first_name,
+            last_name,
+            email,
+            role,
+            token_hash,
+            current_admin["id"],
+            now_text,
+            expires_at,
+        ),
+    )
+
+    invitation_id = cursor.lastrowid
+
+    connection.commit()
+    connection.close()
+
+    invitation_url = url_for(
+        "admin_accept_invitation",
+        token=raw_token,
+        _external=True,
+        _scheme=(
+            "https"
+            if not app.debug
+            else None
+        ),
+    )
+
+    inviter_name = (
+        f'{current_admin["first_name"]} '
+        f'{current_admin["last_name"]}'
+    ).strip()
+
+    try:
+        send_admin_invitation_email(
+            recipient_email=email,
+            first_name=first_name,
+            inviter_name=inviter_name,
+            invitation_url=invitation_url,
+        )
+
+    except (
+        EmailConfigurationError,
+        EmailDeliveryError,
+    ):
+        app.logger.exception(
+            "Unable to send administrator invitation."
+        )
+
+        flash(
+            (
+                "The invitation was created, but "
+                "the email could not be delivered."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    write_audit_log(
+        action="admin_invitation_sent",
+        category="security",
+        description=(
+            f'{current_admin["email"]} invited '
+            f'{email} as {role}.'
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_invitation",
+        entity_id=invitation_id,
+    )
+
+    flash(
+        (
+            f"An administrator invitation was sent "
+            f"to {email}."
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
+@app.route(
+    "/admin/users/invitations/<int:invitation_id>/cancel",
+    methods=["POST"],
+)
+@owner_required
+def admin_invitation_cancel(invitation_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    connection = get_db_connection()
+
+    invitation = connection.execute(
+        """
+        SELECT *
+        FROM admin_invitations
+        WHERE id = ?
+        """,
+        (invitation_id,),
+    ).fetchone()
+
+    if invitation is None:
+        connection.close()
+
+        flash(
+            "That invitation could not be found.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if invitation["used_at"] is not None:
+        connection.close()
+
+        flash(
+            (
+                "A completed invitation cannot "
+                "be cancelled."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if invitation["cancelled_at"] is not None:
+        connection.close()
+
+        flash(
+            "That invitation is already cancelled.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_invitations
+        SET
+            cancelled_at = ?,
+            cancelled_by = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            current_admin["id"],
+            invitation_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    write_audit_log(
+        action="admin_invitation_cancelled",
+        category="security",
+        description=(
+            f'{current_admin["email"]} cancelled '
+            f'the invitation for {invitation["email"]}.'
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_invitation",
+        entity_id=invitation_id,
+    )
+
+    flash(
+        (
+            f'The invitation for '
+            f'{invitation["email"]} was cancelled.'
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
+@app.route(
+    "/admin/users/invitations/<int:invitation_id>/resend",
+    methods=["POST"],
+)
+@owner_required
+def admin_invitation_resend(invitation_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    connection = get_db_connection()
+
+    invitation = connection.execute(
+        """
+        SELECT *
+        FROM admin_invitations
+        WHERE id = ?
+        """,
+        (invitation_id,),
+    ).fetchone()
+
+    if invitation is None:
+        connection.close()
+
+        flash(
+            "That invitation could not be found.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if invitation["used_at"] is not None:
+        connection.close()
+
+        flash(
+            (
+                "A completed invitation cannot "
+                "be resent."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    existing_user = connection.execute(
+        """
+        SELECT id
+        FROM admin_users
+        WHERE email = ?
+        """,
+        (invitation["email"],),
+    ).fetchone()
+
+    if existing_user is not None:
+        connection.close()
+
+        flash(
+            (
+                "An administrator account now "
+                "exists for that email address."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    now = datetime.now(UTC)
+
+    now_text = now.isoformat(
+        timespec="seconds"
+    )
+
+    expires_at = (
+        now
+        + timedelta(
+            hours=ADMIN_INVITATION_HOURS
+        )
+    ).isoformat(
+        timespec="seconds"
+    )
+
+    raw_token = create_admin_invitation_token()
+
+    token_hash = hash_admin_invitation_token(
+        raw_token
+    )
+
+    connection.execute(
+        """
+        UPDATE admin_invitations
+        SET
+            token_hash = ?,
+            created_at = ?,
+            expires_at = ?,
+            cancelled_at = NULL,
+            cancelled_by = NULL
+        WHERE id = ?
+        """,
+        (
+            token_hash,
+            now_text,
+            expires_at,
+            invitation_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    invitation_url = url_for(
+        "admin_accept_invitation",
+        token=raw_token,
+        _external=True,
+        _scheme=(
+            "https"
+            if not app.debug
+            else None
+        ),
+    )
+
+    inviter_name = (
+        f'{current_admin["first_name"]} '
+        f'{current_admin["last_name"]}'
+    ).strip()
+
+    try:
+        send_admin_invitation_email(
+            recipient_email=invitation["email"],
+            first_name=invitation["first_name"],
+            inviter_name=inviter_name,
+            invitation_url=invitation_url,
+        )
+
+    except (
+        EmailConfigurationError,
+        EmailDeliveryError,
+    ):
+        app.logger.exception(
+            "Unable to resend administrator invitation."
+        )
+
+        flash(
+            (
+                "The invitation was refreshed, but "
+                "the email could not be delivered."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    write_audit_log(
+        action="admin_invitation_resent",
+        category="security",
+        description=(
+            f'{current_admin["email"]} resent '
+            f'the invitation for '
+            f'{invitation["email"]}.'
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_invitation",
+        entity_id=invitation_id,
+    )
+
+    flash(
+        (
+            f'The invitation for '
+            f'{invitation["email"]} was resent.'
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
+@app.route(
+    "/admin/invitation/<token>",
+    methods=["GET", "POST"],
+)
+def admin_accept_invitation(token):
+    if get_current_admin_user() is not None:
+        return redirect(
+            url_for("admin_website_dashboard")
+        )
+
+    connection = get_db_connection()
+
+    invitation = get_valid_admin_invitation(
+        connection,
+        token,
+    )
+
+    if invitation is None:
+        connection.close()
+
+        flash(
+            (
+                "That administrator invitation is "
+                "invalid, expired, or has already "
+                "been used."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    existing_user = connection.execute(
+        """
+        SELECT id
+        FROM admin_users
+        WHERE email = ?
+        """,
+        (invitation["email"],),
+    ).fetchone()
+
+    if existing_user is not None:
+        connection.close()
+
+        flash(
+            (
+                "An administrator account already "
+                "exists for that email address."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        password = request.form.get(
+            "password",
+            "",
+        )
+
+        confirm_password = request.form.get(
+            "confirm_password",
+            "",
+        )
+
+        password_error = validate_admin_password(
+            password
+        )
+
+        if password_error:
+            connection.close()
+
+            flash(
+                password_error,
+                "error",
+            )
+
+            return render_template(
+                "admin_accept_invitation.html",
+                invitation=invitation,
+                token=token,
+            )
+
+        if password != confirm_password:
+            connection.close()
+
+            flash(
+                "The passwords did not match.",
+                "error",
+            )
+
+            return render_template(
+                "admin_accept_invitation.html",
+                invitation=invitation,
+                token=token,
+            )
+
+        now = current_timestamp()
+
+        cursor = connection.execute(
+            """
+            INSERT INTO admin_users (
+                first_name,
+                last_name,
+                email,
+                password_hash,
+                role,
+                is_active,
+                account_status,
+                session_version,
+                email_verified,
+                created_at,
+                updated_at,
+                created_by
+            )
+            VALUES (
+                ?, ?, ?, ?, ?,
+                1,
+                'active',
+                1,
+                1,
+                ?, ?, ?
+            )
+            """,
+            (
+                invitation["first_name"],
+                invitation["last_name"],
+                invitation["email"],
+                generate_password_hash(
+                    password
+                ),
+                invitation["role"],
+                now,
+                now,
+                invitation["invited_by"],
+            ),
+        )
+
+        new_admin_user_id = cursor.lastrowid
+
+        connection.execute(
+            """
+            UPDATE admin_invitations
+            SET used_at = ?
+            WHERE id = ?
+            """,
+            (
+                now,
+                invitation["id"],
+            ),
+        )
+
+        # Any other outstanding invitation
+        # for this email is now invalid.
+        connection.execute(
+            """
+            UPDATE admin_invitations
+            SET
+                cancelled_at = ?,
+                cancelled_by = ?
+            WHERE email = ?
+              AND id != ?
+              AND used_at IS NULL
+              AND cancelled_at IS NULL
+            """,
+            (
+                now,
+                invitation["invited_by"],
+                invitation["email"],
+                invitation["id"],
+            ),
+        )
+
+        connection.commit()
+        connection.close()
+
+        write_audit_log(
+            action="admin_invitation_completed",
+            category="security",
+            description=(
+                f'{invitation["email"]} completed '
+                "their administrator invitation."
+            ),
+            admin_user_id=new_admin_user_id,
+            entity_type="admin_user",
+            entity_id=new_admin_user_id,
+        )
+
+        flash(
+            (
+                "Your administrator account has "
+                "been created. You can now sign in."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_accept_invitation.html",
+        invitation=invitation,
+        token=token,
     )
 
 @app.route(

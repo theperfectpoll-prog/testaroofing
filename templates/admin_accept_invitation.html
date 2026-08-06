@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+    Administrator Invitation | Testa Roofing
+{% endblock %}
+
+
+{% block extra_head %}
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/admin.css') }}"
+    >
+{% endblock %}
+
+
+{% block content %}
+
+<section class="admin-login-section">
+
+    <div class="admin-login-card">
+
+        <span class="admin-eyebrow">
+            Testa Roofing
+        </span>
+
+        <h1>Create Administrator Account</h1>
+
+        <p>
+            You have been invited to join the
+            Testa Roofing administration system.
+        </p>
+
+        <div class="admin-invitation-summary">
+
+            <strong>
+                {{ invitation["first_name"] }}
+                {{ invitation["last_name"] }}
+            </strong>
+
+            <span>
+                {{ invitation["email"] }}
+            </span>
+
+            <span>
+                Role:
+                {% if invitation["role"] == "owner" %}
+                    Owner
+                {% elif invitation["role"] == "administrator" %}
+                    Administrator
+                {% else %}
+                    Editor
+                {% endif %}
+            </span>
+
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                <div class="admin-flash-list">
+                    {% for category, message in messages %}
+                        <div class="admin-flash admin-flash-{{ category }}">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        <form
+            method="post"
+            class="admin-login-form"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <div class="admin-field">
+
+                <label for="password">
+                    Password
+                </label>
+
+                <input
+                    type="password"
+                    id="password"
+                    name="password"
+                    minlength="16"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    required
+                >
+
+                <small>
+                    Minimum 16 characters.
+                </small>
+
+            </div>
+
+            <div class="admin-field">
+
+                <label for="confirm_password">
+                    Confirm Password
+                </label>
+
+                <input
+                    type="password"
+                    id="confirm_password"
+                    name="confirm_password"
+                    minlength="16"
+                    maxlength="128"
+                    autocomplete="new-password"
+                    required
+                >
+
+            </div>
+
+            <button
+                type="submit"
+                class="admin-primary-button"
+            >
+                Create Account
+            </button>
+
+        </form>
+
+    </div>
+
+</section>
+
+{% endblock %}

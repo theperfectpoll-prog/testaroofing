@@ -25,6 +25,285 @@
 
 </header>
 
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Invite Administrator</h3>
+
+            <p>
+                Administrator accounts can only be
+                created through a secure owner-issued
+                invitation.
+            </p>
+        </div>
+
+    </div>
+
+
+    <form
+        method="post"
+        action="{{ url_for('admin_user_invite') }}"
+        class="admin-invite-form"
+    >
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <div class="admin-invite-grid">
+
+            <div class="admin-field">
+
+                <label for="first_name">
+                    First Name
+                </label>
+
+                <input
+                    type="text"
+                    id="first_name"
+                    name="first_name"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="last_name">
+                    Last Name
+                </label>
+
+                <input
+                    type="text"
+                    id="last_name"
+                    name="last_name"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="email">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    autocomplete="off"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="role">
+                    Role
+                </label>
+
+                <select
+                    id="role"
+                    name="role"
+                    required
+                >
+                    <option value="">
+                        Select Role
+                    </option>
+
+                    <option value="administrator">
+                        Administrator
+                    </option>
+
+                    <option value="editor">
+                        Editor
+                    </option>
+
+                    <option value="owner">
+                        Owner
+                    </option>
+                </select>
+
+            </div>
+
+        </div>
+
+        <p class="admin-security-help">
+            The invitation expires after 24 hours.
+            Sending another invitation to the same
+            email address invalidates the previous one.
+        </p>
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Send Invitation
+        </button>
+
+    </form>
+
+</section>
+
+{% if pending_invitations %}
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Pending Invitations</h3>
+
+            <p>
+                Invitations that have not yet been
+                completed.
+            </p>
+        </div>
+
+    </div>
+
+    <div class="admin-user-list">
+
+        {% for invitation in pending_invitations %}
+
+            <article class="admin-user-card">
+
+                <div class="admin-user-card-header">
+
+                    <div>
+
+                        <div class="admin-user-name-row">
+
+                            <h4>
+                                {{ invitation["first_name"] }}
+                                {{ invitation["last_name"] }}
+                            </h4>
+
+                            <span class="admin-status-badge admin-status-frozen">
+                                Pending
+                            </span>
+
+                        </div>
+
+                        <div class="admin-user-email">
+                            {{ invitation["email"] }}
+                        </div>
+
+                    </div>
+
+                    <div class="admin-user-role">
+
+                        {% if invitation["role"] == "owner" %}
+                            Owner
+                        {% elif invitation["role"] == "administrator" %}
+                            Administrator
+                        {% else %}
+                            Editor
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+
+                <div class="admin-user-details-grid">
+
+                    <div>
+                        <span>Invited</span>
+                        <strong>
+                            {{ invitation["created_at"] }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Expires</span>
+                        <strong>
+                            {{ invitation["expires_at"] }}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Invited By</span>
+                        <strong>
+                            {{ invitation["inviter_first_name"] }}
+                            {{ invitation["inviter_last_name"] }}
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                <div class="admin-user-actions">
+
+                    <form
+                        method="post"
+                        action="{{ url_for(
+                            'admin_invitation_resend',
+                            invitation_id=invitation['id']
+                        ) }}"
+                        class="admin-inline-form"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="csrf_token"
+                            value="{{ csrf_token() }}"
+                        >
+
+                        <button
+                            type="submit"
+                            class="admin-secondary-button"
+                        >
+                            Resend Invitation
+                        </button>
+
+                    </form>
+
+
+                    <form
+                        method="post"
+                        action="{{ url_for(
+                            'admin_invitation_cancel',
+                            invitation_id=invitation['id']
+                        ) }}"
+                        class="admin-inline-form"
+                    >
+
+                        <input
+                            type="hidden"
+                            name="csrf_token"
+                            value="{{ csrf_token() }}"
+                        >
+
+                        <button
+                            type="submit"
+                            class="admin-danger-button"
+                        >
+                            Cancel Invitation
+                        </button>
+
+                    </form>
+
+                </div>
+
+            </article>
+
+        {% endfor %}
+
+    </div>
+
+</section>
+
+{% endif %}
 
 <section class="admin-panel">
 

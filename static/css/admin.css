@@ -2229,3 +2229,56 @@
     }
 
 }
+
+/* ---------------------------------------------------------
+   ADMIN INVITATIONS
+--------------------------------------------------------- */
+
+.admin-invite-form {
+    margin-top: 1rem;
+}
+
+.admin-invite-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.admin-invite-grid input,
+.admin-invite-grid select {
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.admin-inline-form {
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.admin-invitation-summary {
+    display: grid;
+    gap: 0.25rem;
+
+    margin: 1.25rem 0;
+
+    padding: 1rem;
+
+    border-radius: 7px;
+
+    background: #f2f6f8;
+
+    color: #334b5c;
+}
+
+.admin-invitation-summary strong {
+    color: #123b5d;
+}
+
+@media (max-width: 800px) {
+
+    .admin-invite-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
