@@ -1,0 +1,451 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Users & Security | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Administration
+        </span>
+
+        <h2>Users & Security</h2>
+
+        <p>
+            Manage administrator access, security holds,
+            and account status.
+        </p>
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Administrator Accounts</h3>
+
+            <p>
+                Only the system owner can freeze, disable,
+                restore, or reactivate administrator accounts.
+            </p>
+        </div>
+
+        <div class="admin-security-summary">
+            <span>
+                {{ admin_users|length }}
+                Administrator{% if admin_users|length != 1 %}s{% endif %}
+            </span>
+        </div>
+
+    </div>
+
+
+    <div class="admin-user-list">
+
+        {% for admin_user in admin_users %}
+
+            <article class="admin-user-card">
+
+                <div class="admin-user-card-header">
+
+                    <div>
+
+                        <div class="admin-user-name-row">
+
+                            <h4>
+                                {{ admin_user["first_name"] }}
+                                {{ admin_user["last_name"] }}
+                            </h4>
+
+                            {% if admin_user["account_status"] == "active" %}
+                                <span class="admin-status-badge admin-status-active">
+                                    Active
+                                </span>
+
+                            {% elif admin_user["account_status"] == "frozen" %}
+                                <span class="admin-status-badge admin-status-frozen">
+                                    Frozen
+                                </span>
+
+                            {% elif admin_user["account_status"] == "disabled" %}
+                                <span class="admin-status-badge admin-status-disabled">
+                                    Disabled
+                                </span>
+                            {% endif %}
+
+                        </div>
+
+                        <div class="admin-user-email">
+                            {{ admin_user["email"] }}
+                        </div>
+
+                    </div>
+
+
+                    <div class="admin-user-role">
+
+                        {% if admin_user["role"] == "owner" %}
+                            Owner
+                        {% elif admin_user["role"] == "administrator" %}
+                            Administrator
+                        {% else %}
+                            Editor
+                        {% endif %}
+
+                    </div>
+
+                </div>
+
+
+                <div class="admin-user-details-grid">
+
+                    <div>
+                        <span>Last Login</span>
+
+                        <strong>
+                            {% if admin_user["last_login"] %}
+                                {{ admin_user["last_login"] }}
+                            {% else %}
+                                Never
+                            {% endif %}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Email Verified</span>
+
+                        <strong>
+                            {% if admin_user["email_verified"] %}
+                                Yes
+                            {% else %}
+                                No
+                            {% endif %}
+                        </strong>
+                    </div>
+
+                    <div>
+                        <span>Account Created</span>
+
+                        <strong>
+                            {{ admin_user["created_at"] }}
+                        </strong>
+                    </div>
+
+                </div>
+
+
+                {% if admin_user["account_status"] == "frozen" %}
+
+                    <div class="admin-security-notice admin-security-notice-warning">
+
+                        <strong>
+                            Security Hold
+                        </strong>
+
+                        <p>
+                            {{ admin_user["frozen_reason"] }}
+                        </p>
+
+                        {% if admin_user["frozen_at"] %}
+                            <small>
+                                Frozen {{ admin_user["frozen_at"] }}
+                                {% if admin_user["frozen_by_first_name"] %}
+                                    by
+                                    {{ admin_user["frozen_by_first_name"] }}
+                                    {{ admin_user["frozen_by_last_name"] }}
+                                {% endif %}
+                            </small>
+                        {% endif %}
+
+                    </div>
+
+                {% elif admin_user["account_status"] == "disabled" %}
+
+                    <div class="admin-security-notice admin-security-notice-disabled">
+
+                        <strong>
+                            Account Disabled
+                        </strong>
+
+                        <p>
+                            {{ admin_user["disabled_reason"] }}
+                        </p>
+
+                        {% if admin_user["disabled_at"] %}
+                            <small>
+                                Disabled {{ admin_user["disabled_at"] }}
+                                {% if admin_user["disabled_by_first_name"] %}
+                                    by
+                                    {{ admin_user["disabled_by_first_name"] }}
+                                    {{ admin_user["disabled_by_last_name"] }}
+                                {% endif %}
+                            </small>
+                        {% endif %}
+
+                    </div>
+
+                {% endif %}
+
+
+                <div class="admin-user-actions">
+
+                    {% if admin_user["id"] == current_admin["id"] %}
+
+                        <div class="admin-protected-account">
+                            <strong>
+                                Your Account
+                            </strong>
+
+                            <span>
+                                You cannot freeze or disable
+                                your own owner account.
+                            </span>
+                        </div>
+
+
+                    {% elif admin_user["account_status"] == "active" %}
+
+                        <details class="admin-security-action">
+
+                            <summary>
+                                Freeze Account
+                            </summary>
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'admin_user_freeze',
+                                    admin_user_id=admin_user['id']
+                                ) }}"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="csrf_token"
+                                    value="{{ csrf_token() }}"
+                                >
+
+                                <label
+                                    for="freeze_reason_{{ admin_user['id'] }}"
+                                >
+                                    Reason for security hold
+                                </label>
+
+                                <textarea
+                                    id="freeze_reason_{{ admin_user['id'] }}"
+                                    name="freeze_reason"
+                                    rows="3"
+                                    required
+                                ></textarea>
+
+                                <p class="admin-security-help">
+                                    Freezing immediately blocks login,
+                                    invalidates existing sessions, and
+                                    cancels unused password-reset links.
+                                </p>
+
+                                <button
+                                    type="submit"
+                                    class="admin-warning-button"
+                                >
+                                    Freeze Account
+                                </button>
+
+                            </form>
+
+                        </details>
+
+
+                        <details class="admin-security-action">
+
+                            <summary>
+                                Disable Account
+                            </summary>
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'admin_user_disable',
+                                    admin_user_id=admin_user['id']
+                                ) }}"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="csrf_token"
+                                    value="{{ csrf_token() }}"
+                                >
+
+                                <label
+                                    for="disable_reason_{{ admin_user['id'] }}"
+                                >
+                                    Reason for disabling account
+                                </label>
+
+                                <textarea
+                                    id="disable_reason_{{ admin_user['id'] }}"
+                                    name="disable_reason"
+                                    rows="3"
+                                    required
+                                ></textarea>
+
+                                <p class="admin-security-help">
+                                    Use Disable when this person should
+                                    no longer have administrator access.
+                                </p>
+
+                                <button
+                                    type="submit"
+                                    class="admin-danger-button"
+                                >
+                                    Disable Account
+                                </button>
+
+                            </form>
+
+                        </details>
+
+
+                    {% elif admin_user["account_status"] == "frozen" %}
+
+                        <form
+                            method="post"
+                            action="{{ url_for(
+                                'admin_user_restore',
+                                admin_user_id=admin_user['id']
+                            ) }}"
+                        >
+
+                            <input
+                                type="hidden"
+                                name="csrf_token"
+                                value="{{ csrf_token() }}"
+                            >
+
+                            <button
+                                type="submit"
+                                class="admin-primary-button"
+                            >
+                                Restore Account
+                            </button>
+
+                        </form>
+
+
+                    {% elif admin_user["account_status"] == "disabled" %}
+
+                        <form
+                            method="post"
+                            action="{{ url_for(
+                                'admin_user_reactivate',
+                                admin_user_id=admin_user['id']
+                            ) }}"
+                        >
+
+                            <input
+                                type="hidden"
+                                name="csrf_token"
+                                value="{{ csrf_token() }}"
+                            >
+
+                            <button
+                                type="submit"
+                                class="admin-primary-button"
+                            >
+                                Reactivate Account
+                            </button>
+
+                        </form>
+
+                    {% endif %}
+
+                </div>
+
+            </article>
+
+        {% endfor %}
+
+    </div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Security Response</h3>
+
+            <p>
+                Recommended steps when unauthorized
+                account activity is suspected.
+            </p>
+        </div>
+
+    </div>
+
+
+    <div class="admin-security-response-grid">
+
+        <div class="admin-security-response-step">
+            <span>1</span>
+            <div>
+                <strong>Freeze the account</strong>
+                <p>
+                    Immediately stop access to the
+                    Testa Roofing administration system.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-security-response-step">
+            <span>2</span>
+            <div>
+                <strong>Secure the email account</strong>
+                <p>
+                    Change the user's company email password
+                    through the GoDaddy / Microsoft 365
+                    administration system.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-security-response-step">
+            <span>3</span>
+            <div>
+                <strong>Restore Testa access</strong>
+                <p>
+                    Restore the account only after the
+                    associated email account has been secured.
+                </p>
+            </div>
+        </div>
+
+        <div class="admin-security-response-step">
+            <span>4</span>
+            <div>
+                <strong>Reset credentials</strong>
+                <p>
+                    Have the administrator request a new
+                    password reset before signing back in.
+                    MFA will also be re-established when
+                    that feature is added.
+                </p>
+            </div>
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

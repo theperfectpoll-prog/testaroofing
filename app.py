@@ -831,6 +831,34 @@ def get_valid_admin_password_reset(
 
     return reset_record
 
+def invalidate_admin_reset_tokens(
+    connection,
+    admin_user_id,
+    timestamp=None,
+):
+    if timestamp is None:
+        timestamp = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_password_reset_tokens
+        SET invalidated_at = ?
+        WHERE admin_user_id = ?
+          AND used_at IS NULL
+          AND invalidated_at IS NULL
+        """,
+        (
+            timestamp,
+            admin_user_id,
+        ),
+    )
+
+@app.context_processor
+def inject_current_admin_user():
+    return {
+        "current_admin_user": get_current_admin_user()
+    }
+
 def write_audit_log(
     action,
     category,
@@ -2324,6 +2352,569 @@ def admin_logout():
     flash("You have been signed out.", "success")
 
     return redirect(url_for("admin_login"))
+
+@app.route("/admin/users")
+@owner_required
+def admin_users():
+    current_admin = get_current_admin_user()
+
+    connection = get_db_connection()
+
+    admin_user_rows = connection.execute(
+        """
+        SELECT
+            u.id,
+            u.first_name,
+            u.last_name,
+            u.email,
+            u.role,
+            u.is_active,
+            u.account_status,
+            u.session_version,
+            u.email_verified,
+            u.last_login,
+            u.created_at,
+            u.updated_at,
+            u.frozen_at,
+            u.frozen_reason,
+            u.disabled_at,
+            u.disabled_reason,
+
+            frozen_by_user.first_name
+                AS frozen_by_first_name,
+            frozen_by_user.last_name
+                AS frozen_by_last_name,
+
+            disabled_by_user.first_name
+                AS disabled_by_first_name,
+            disabled_by_user.last_name
+                AS disabled_by_last_name
+
+        FROM admin_users AS u
+
+        LEFT JOIN admin_users AS frozen_by_user
+            ON frozen_by_user.id = u.frozen_by
+
+        LEFT JOIN admin_users AS disabled_by_user
+            ON disabled_by_user.id = u.disabled_by
+
+        ORDER BY
+            CASE u.role
+                WHEN 'owner' THEN 1
+                WHEN 'administrator' THEN 2
+                ELSE 3
+            END,
+            u.last_name COLLATE NOCASE,
+            u.first_name COLLATE NOCASE
+        """
+    ).fetchall()
+
+    connection.close()
+
+    return render_template(
+        "admin_users.html",
+        admin_users=admin_user_rows,
+        current_admin=current_admin,
+    )
+
+@app.route(
+    "/admin/users/<int:admin_user_id>/freeze",
+    methods=["POST"],
+)
+@owner_required
+def admin_user_freeze(admin_user_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    freeze_reason = request.form.get(
+        "freeze_reason",
+        "",
+    ).strip()
+
+    if not freeze_reason:
+        flash(
+            "A reason is required to freeze an account.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if admin_user_id == current_admin["id"]:
+        flash(
+            "You cannot freeze your own owner account.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    connection = get_db_connection()
+
+    target_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (admin_user_id,),
+    ).fetchone()
+
+    if target_user is None:
+        connection.close()
+
+        flash(
+            "That administrator account could not be found.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["account_status"] == "frozen":
+        connection.close()
+
+        flash(
+            "That administrator account is already frozen.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["account_status"] == "disabled":
+        connection.close()
+
+        flash(
+            (
+                "A disabled account cannot be frozen. "
+                "Reactivate it first if needed."
+            ),
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["role"] == "owner":
+        active_owner_count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM admin_users
+            WHERE role = 'owner'
+              AND is_active = 1
+              AND account_status = 'active'
+            """
+        ).fetchone()[0]
+
+        if active_owner_count <= 1:
+            connection.close()
+
+            flash(
+                (
+                    "The final active owner account "
+                    "cannot be frozen."
+                ),
+                "error",
+            )
+            return redirect(
+                url_for("admin_users")
+            )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_users
+        SET
+            account_status = 'frozen',
+            frozen_at = ?,
+            frozen_reason = ?,
+            frozen_by = ?,
+            session_version = session_version + 1,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            freeze_reason,
+            current_admin["id"],
+            now,
+            target_user["id"],
+        ),
+    )
+
+    invalidate_admin_reset_tokens(
+        connection,
+        target_user["id"],
+        now,
+    )
+
+    connection.commit()
+    connection.close()
+
+    write_audit_log(
+        action="admin_account_frozen",
+        category="security",
+        description=(
+            f'{target_user["email"]} was frozen by '
+            f'{current_admin["email"]}. '
+            f"Reason: {freeze_reason}"
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_user",
+        entity_id=target_user["id"],
+    )
+
+    flash(
+        (
+            f'{target_user["first_name"]} '
+            f'{target_user["last_name"]} has been frozen.'
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
+@app.route(
+    "/admin/users/<int:admin_user_id>/restore",
+    methods=["POST"],
+)
+@owner_required
+def admin_user_restore(admin_user_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    connection = get_db_connection()
+
+    target_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (admin_user_id,),
+    ).fetchone()
+
+    if target_user is None:
+        connection.close()
+
+        flash(
+            "That administrator account could not be found.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["account_status"] != "frozen":
+        connection.close()
+
+        flash(
+            "Only a frozen account can be restored.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_users
+        SET
+            account_status = 'active',
+            is_active = 1,
+            frozen_at = NULL,
+            frozen_reason = NULL,
+            frozen_by = NULL,
+            session_version = session_version + 1,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            target_user["id"],
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    write_audit_log(
+        action="admin_account_restored",
+        category="security",
+        description=(
+            f'{target_user["email"]} was restored by '
+            f'{current_admin["email"]}.'
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_user",
+        entity_id=target_user["id"],
+    )
+
+    flash(
+        (
+            f'{target_user["first_name"]} '
+            f'{target_user["last_name"]} has been restored.'
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
+@app.route(
+    "/admin/users/<int:admin_user_id>/disable",
+    methods=["POST"],
+)
+@owner_required
+def admin_user_disable(admin_user_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    disable_reason = request.form.get(
+        "disable_reason",
+        "",
+    ).strip()
+
+    if not disable_reason:
+        flash(
+            "A reason is required to disable an account.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if admin_user_id == current_admin["id"]:
+        flash(
+            "You cannot disable your own owner account.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    connection = get_db_connection()
+
+    target_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (admin_user_id,),
+    ).fetchone()
+
+    if target_user is None:
+        connection.close()
+
+        flash(
+            "That administrator account could not be found.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["account_status"] == "disabled":
+        connection.close()
+
+        flash(
+            "That administrator account is already disabled.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["role"] == "owner":
+        active_owner_count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM admin_users
+            WHERE role = 'owner'
+              AND is_active = 1
+              AND account_status = 'active'
+            """
+        ).fetchone()[0]
+
+        if (
+            target_user["account_status"] == "active"
+            and active_owner_count <= 1
+        ):
+            connection.close()
+
+            flash(
+                (
+                    "The final active owner account "
+                    "cannot be disabled."
+                ),
+                "error",
+            )
+            return redirect(
+                url_for("admin_users")
+            )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_users
+        SET
+            account_status = 'disabled',
+            is_active = 0,
+            disabled_at = ?,
+            disabled_reason = ?,
+            disabled_by = ?,
+            frozen_at = NULL,
+            frozen_reason = NULL,
+            frozen_by = NULL,
+            session_version = session_version + 1,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            disable_reason,
+            current_admin["id"],
+            now,
+            target_user["id"],
+        ),
+    )
+
+    invalidate_admin_reset_tokens(
+        connection,
+        target_user["id"],
+        now,
+    )
+
+    connection.commit()
+    connection.close()
+
+    write_audit_log(
+        action="admin_account_disabled",
+        category="security",
+        description=(
+            f'{target_user["email"]} was disabled by '
+            f'{current_admin["email"]}. '
+            f"Reason: {disable_reason}"
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_user",
+        entity_id=target_user["id"],
+    )
+
+    flash(
+        (
+            f'{target_user["first_name"]} '
+            f'{target_user["last_name"]} has been disabled.'
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
+@app.route(
+    "/admin/users/<int:admin_user_id>/reactivate",
+    methods=["POST"],
+)
+@owner_required
+def admin_user_reactivate(admin_user_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    connection = get_db_connection()
+
+    target_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (admin_user_id,),
+    ).fetchone()
+
+    if target_user is None:
+        connection.close()
+
+        flash(
+            "That administrator account could not be found.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["account_status"] != "disabled":
+        connection.close()
+
+        flash(
+            "Only a disabled account can be reactivated.",
+            "error",
+        )
+        return redirect(
+            url_for("admin_users")
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_users
+        SET
+            account_status = 'active',
+            is_active = 1,
+            disabled_at = NULL,
+            disabled_reason = NULL,
+            disabled_by = NULL,
+            session_version = session_version + 1,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            target_user["id"],
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    write_audit_log(
+        action="admin_account_reactivated",
+        category="security",
+        description=(
+            f'{target_user["email"]} was reactivated by '
+            f'{current_admin["email"]}.'
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_user",
+        entity_id=target_user["id"],
+    )
+
+    flash(
+        (
+            f'{target_user["first_name"]} '
+            f'{target_user["last_name"]} has been reactivated.'
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
 
 # =========================================================
 # WEBSITE ADMINISTRATION

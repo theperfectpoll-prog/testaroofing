@@ -1819,3 +1819,413 @@
 .admin-login-help a:hover {
     text-decoration: underline;
 }
+
+/* ---------------------------------------------------------
+   ADMIN NAVIGATION SECTIONS
+--------------------------------------------------------- */
+
+.admin-navigation-section {
+    display: block;
+    margin: 1.5rem 0 0.5rem;
+    padding: 0 0.75rem;
+
+    color: #8292a1;
+
+    font-size: 0.72rem;
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+
+/* ---------------------------------------------------------
+   USERS & SECURITY
+--------------------------------------------------------- */
+
+.admin-security-summary {
+    display: flex;
+    align-items: center;
+
+    font-size: 0.9rem;
+    font-weight: 700;
+
+    color: #506172;
+}
+
+
+.admin-user-list {
+    display: grid;
+    gap: 1.25rem;
+}
+
+
+.admin-user-card {
+    padding: 1.5rem;
+
+    border: 1px solid #dbe3ea;
+    border-radius: 10px;
+
+    background: #ffffff;
+}
+
+
+.admin-user-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+
+    gap: 1rem;
+}
+
+
+.admin-user-name-row {
+    display: flex;
+    align-items: center;
+
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+
+.admin-user-name-row h4 {
+    margin: 0;
+
+    font-size: 1.15rem;
+    color: #123b5d;
+}
+
+
+.admin-user-email {
+    margin-top: 0.25rem;
+
+    color: #5f6f7f;
+    font-size: 0.92rem;
+}
+
+
+.admin-user-role {
+    padding: 0.35rem 0.65rem;
+
+    border-radius: 999px;
+
+    background: #edf3f7;
+    color: #123b5d;
+
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+
+.admin-status-badge {
+    display: inline-flex;
+
+    padding: 0.25rem 0.55rem;
+
+    border-radius: 999px;
+
+    font-size: 0.72rem;
+    font-weight: 700;
+
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+
+.admin-status-active {
+    background: #dff5e5;
+    color: #1b6b35;
+}
+
+
+.admin-status-frozen {
+    background: #fff1c9;
+    color: #8a5a00;
+}
+
+
+.admin-status-disabled {
+    background: #f8d7da;
+    color: #8b1e28;
+}
+
+
+.admin-user-details-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(3, minmax(0, 1fr));
+
+    gap: 1rem;
+
+    margin-top: 1.25rem;
+}
+
+
+.admin-user-details-grid > div {
+    padding: 0.9rem;
+
+    border-radius: 7px;
+
+    background: #f6f8fa;
+}
+
+
+.admin-user-details-grid span {
+    display: block;
+
+    margin-bottom: 0.25rem;
+
+    color: #6d7b88;
+
+    font-size: 0.76rem;
+    font-weight: 700;
+
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+
+.admin-user-details-grid strong {
+    display: block;
+
+    font-size: 0.9rem;
+
+    color: #253746;
+
+    overflow-wrap: anywhere;
+}
+
+
+.admin-user-actions {
+    margin-top: 1.25rem;
+}
+
+
+.admin-protected-account {
+    padding: 0.9rem 1rem;
+
+    border-left: 4px solid #123b5d;
+
+    background: #edf3f7;
+}
+
+
+.admin-protected-account strong,
+.admin-protected-account span {
+    display: block;
+}
+
+
+.admin-protected-account span {
+    margin-top: 0.2rem;
+
+    font-size: 0.88rem;
+    color: #5a6977;
+}
+
+
+.admin-security-action {
+    margin-top: 0.75rem;
+
+    border: 1px solid #dbe3ea;
+    border-radius: 7px;
+
+    overflow: hidden;
+}
+
+
+.admin-security-action summary {
+    padding: 0.8rem 1rem;
+
+    cursor: pointer;
+
+    font-weight: 700;
+
+    color: #253746;
+    background: #f7f9fb;
+}
+
+
+.admin-security-action form {
+    padding: 1rem;
+}
+
+
+.admin-security-action label {
+    display: block;
+
+    margin-bottom: 0.4rem;
+
+    font-weight: 700;
+}
+
+
+.admin-security-action textarea {
+    width: 100%;
+
+    box-sizing: border-box;
+
+    padding: 0.75rem;
+
+    border: 1px solid #cbd6df;
+    border-radius: 6px;
+
+    resize: vertical;
+}
+
+
+.admin-security-help {
+    margin: 0.65rem 0 1rem;
+
+    color: #657583;
+
+    font-size: 0.85rem;
+}
+
+
+.admin-warning-button,
+.admin-danger-button {
+    display: inline-block;
+
+    border: 0;
+    border-radius: 6px;
+
+    padding: 0.7rem 1rem;
+
+    cursor: pointer;
+
+    color: #ffffff;
+
+    font-weight: 700;
+}
+
+
+.admin-warning-button {
+    background: #b46a00;
+}
+
+
+.admin-danger-button {
+    background: #a52834;
+}
+
+
+.admin-security-notice {
+    margin-top: 1rem;
+
+    padding: 1rem;
+
+    border-radius: 7px;
+}
+
+
+.admin-security-notice strong {
+    display: block;
+
+    margin-bottom: 0.25rem;
+}
+
+
+.admin-security-notice p {
+    margin: 0.25rem 0;
+}
+
+
+.admin-security-notice small {
+    display: block;
+
+    margin-top: 0.5rem;
+}
+
+
+.admin-security-notice-warning {
+    background: #fff6da;
+    border: 1px solid #efd486;
+
+    color: #725000;
+}
+
+
+.admin-security-notice-disabled {
+    background: #fce8ea;
+    border: 1px solid #e8aeb4;
+
+    color: #7e1e28;
+}
+
+
+/* ---------------------------------------------------------
+   SECURITY RESPONSE GUIDE
+--------------------------------------------------------- */
+
+.admin-security-response-grid {
+    display: grid;
+
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+
+    gap: 1rem;
+}
+
+
+.admin-security-response-step {
+    display: flex;
+
+    gap: 0.9rem;
+
+    padding: 1rem;
+
+    border: 1px solid #dbe3ea;
+    border-radius: 8px;
+
+    background: #f8fafb;
+}
+
+
+.admin-security-response-step > span {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    flex: 0 0 2rem;
+    height: 2rem;
+
+    border-radius: 50%;
+
+    background: #123b5d;
+    color: #ffffff;
+
+    font-weight: 700;
+}
+
+
+.admin-security-response-step strong {
+    color: #123b5d;
+}
+
+
+.admin-security-response-step p {
+    margin: 0.3rem 0 0;
+
+    color: #5f6f7f;
+
+    font-size: 0.88rem;
+}
+
+
+@media (max-width: 800px) {
+
+    .admin-user-card-header {
+        flex-direction: column;
+    }
+
+    .admin-user-details-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .admin-security-response-grid {
+        grid-template-columns: 1fr;
+    }
+
+}

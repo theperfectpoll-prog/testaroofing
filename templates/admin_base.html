@@ -16,19 +16,28 @@
     <div class="admin-sidebar">
 
         <div class="admin-sidebar-heading">
-            <span class="admin-eyebrow">Testa Roofing</span>
-            <h1>Website Editor</h1>
+            <span class="admin-eyebrow">
+                Testa Roofing
+            </span>
+
+            <h1>Administration</h1>
         </div>
+
 
         <nav
             class="admin-navigation"
-            aria-label="Website administration"
+            aria-label="Testa Roofing administration"
         >
+
+            <span class="admin-navigation-section">
+                Website
+            </span>
+
             <a
                 href="{{ url_for('admin_website_dashboard') }}"
                 class="{% if request.endpoint == 'admin_website_dashboard' %}active{% endif %}"
             >
-                Dashboard
+                Website Dashboard
             </a>
 
             <a
@@ -44,7 +53,11 @@
 
             <a
                 href="{{ url_for('admin_learning_center') }}"
-                class="{% if request.endpoint in ['admin_learning_center', 'admin_learning_article_new', 'admin_learning_article_edit'] %}active{% endif %}"
+                class="{% if request.endpoint in [
+                    'admin_learning_center',
+                    'admin_learning_article_new',
+                    'admin_learning_article_edit'
+                ] %}active{% endif %}"
             >
                 Learning Center
             </a>
@@ -58,13 +71,39 @@
                 Service Areas
                 <small>Coming later</small>
             </span>
+
+
+            {% if current_admin_user
+                  and current_admin_user["role"] == "owner" %}
+
+                <span class="admin-navigation-section">
+                    Administration
+                </span>
+
+                <a
+                    href="{{ url_for('admin_users') }}"
+                    class="{% if request.endpoint in [
+                        'admin_users',
+                        'admin_user_freeze',
+                        'admin_user_restore',
+                        'admin_user_disable',
+                        'admin_user_reactivate'
+                    ] %}active{% endif %}"
+                >
+                    Users & Security
+                </a>
+
+            {% endif %}
+
         </nav>
+
 
         <form
             method="post"
             action="{{ url_for('admin_logout') }}"
             class="admin-logout-form"
         >
+
             <input
                 type="hidden"
                 name="csrf_token"
@@ -74,6 +113,7 @@
             <button type="submit">
                 Sign Out
             </button>
+
         </form>
 
     </div>
@@ -82,16 +122,27 @@
     <div class="admin-main">
 
         {% with messages = get_flashed_messages(with_categories=true) %}
+
             {% if messages %}
+
                 <div class="admin-flash-list">
+
                     {% for category, message in messages %}
-                        <div class="admin-flash admin-flash-{{ category }}">
+
+                        <div
+                            class="admin-flash admin-flash-{{ category }}"
+                        >
                             {{ message }}
                         </div>
+
                     {% endfor %}
+
                 </div>
+
             {% endif %}
+
         {% endwith %}
+
 
         {% block admin_content %}
         {% endblock %}
