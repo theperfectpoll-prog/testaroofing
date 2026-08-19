@@ -4,6 +4,11 @@ import secrets
 import shutil
 import sqlite3
 import hashlib
+import base64
+import io
+import pyotp
+import qrcode
+from cryptography.fernet import Fernet, InvalidToken
 
 import click
 from datetime import UTC, datetime, timedelta
@@ -121,6 +126,10 @@ def ensure_database_schema():
             disabled_at TEXT,
             disabled_reason TEXT,
             disabled_by INTEGER,
+            mfa_enabled INTEGER NOT NULL DEFAULT 0,
+            mfa_secret TEXT,
+            mfa_enrolled_at TEXT,
+            mfa_reset_required INTEGER NOT NULL DEFAULT 0,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL,
             created_by INTEGER,
@@ -224,6 +233,40 @@ def ensure_database_schema():
             """
         )
 
+    if "mfa_enabled" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN mfa_enabled INTEGER
+            NOT NULL DEFAULT 0
+            """
+        )
+
+    if "mfa_secret" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN mfa_secret TEXT
+            """
+        )
+
+    if "mfa_enrolled_at" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN mfa_enrolled_at TEXT
+            """
+        )
+
+    if "mfa_reset_required" not in admin_user_columns:
+        cursor.execute(
+            """
+            ALTER TABLE admin_users
+            ADD COLUMN mfa_reset_required INTEGER
+            NOT NULL DEFAULT 0
+            """
+        )
+
     # Preserve compatibility with the existing is_active field.
     cursor.execute(
         """
@@ -283,6 +326,31 @@ def ensure_database_schema():
             used_at,
             cancelled_at,
             expires_at
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS admin_mfa_recovery_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            admin_user_id INTEGER NOT NULL,
+            code_hash TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            used_at TEXT,
+            FOREIGN KEY (admin_user_id)
+                REFERENCES admin_users (id)
+                ON DELETE CASCADE
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_admin_mfa_recovery_codes_user
+        ON admin_mfa_recovery_codes (
+            admin_user_id,
+            used_at
         )
         """
     )
@@ -706,7 +774,201 @@ def hash_password_reset_token(token):
     ).hexdigest()
 
 ADMIN_INVITATION_HOURS = 24
+MFA_CHALLENGE_MINUTES = 10
+MFA_CHALLENGE_MAX_ATTEMPTS = 5
 
+def get_mfa_cipher():
+    encryption_key = os.getenv(
+        "MFA_ENCRYPTION_KEY",
+        "",
+    ).strip()
+
+    if not encryption_key:
+        raise RuntimeError(
+            "MFA_ENCRYPTION_KEY is not configured."
+        )
+
+    try:
+        return Fernet(
+            encryption_key.encode("utf-8")
+        )
+    except (ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "MFA_ENCRYPTION_KEY is invalid."
+        ) from exc
+
+
+def encrypt_mfa_secret(secret):
+    if not secret:
+        return None
+
+    return get_mfa_cipher().encrypt(
+        secret.encode("utf-8")
+    ).decode("utf-8")
+
+
+def decrypt_mfa_secret(encrypted_secret):
+    if not encrypted_secret:
+        return None
+
+    try:
+        return get_mfa_cipher().decrypt(
+            encrypted_secret.encode("utf-8")
+        ).decode("utf-8")
+
+    except InvalidToken as exc:
+        raise RuntimeError(
+            "The stored MFA secret could not be decrypted."
+        ) from exc
+
+def create_mfa_setup_data(
+    email,
+    secret,
+):
+    totp = pyotp.TOTP(secret)
+
+    provisioning_uri = totp.provisioning_uri(
+        name=email,
+        issuer_name="Testa Roofing",
+    )
+
+    qr_image = qrcode.make(
+        provisioning_uri
+    )
+
+    image_buffer = io.BytesIO()
+
+    qr_image.save(
+        image_buffer,
+        format="PNG",
+    )
+
+    qr_code_base64 = base64.b64encode(
+        image_buffer.getvalue()
+    ).decode("utf-8")
+
+    qr_code_data_uri = (
+        "data:image/png;base64,"
+        + qr_code_base64
+    )
+
+    return {
+        "provisioning_uri": provisioning_uri,
+        "qr_code_data_uri": qr_code_data_uri,
+    }
+
+def clear_pending_mfa_login():
+    session.pop(
+        "pending_admin_user_id",
+        None,
+    )
+
+    session.pop(
+        "pending_admin_session_version",
+        None,
+    )
+
+    session.pop(
+        "pending_admin_started_at",
+        None,
+    )
+
+    session.pop(
+        "pending_admin_attempts",
+        None,
+    )
+
+    session.pop(
+        "pending_admin_next",
+        None,
+    )
+
+MFA_RECOVERY_CODE_COUNT = 10
+MFA_RECOVERY_CODE_LENGTH = 12
+
+MFA_RECOVERY_CODE_ALPHABET = (
+    "ABCDEFGHJKLMNPQRSTUVWXYZ"
+    "23456789"
+)
+
+
+def normalize_mfa_recovery_code(code):
+    return (
+        (code or "")
+        .strip()
+        .upper()
+        .replace("-", "")
+        .replace(" ", "")
+    )
+
+
+def generate_mfa_recovery_codes():
+    recovery_codes = []
+
+    for _ in range(
+        MFA_RECOVERY_CODE_COUNT
+    ):
+        raw_code = "".join(
+            secrets.choice(
+                MFA_RECOVERY_CODE_ALPHABET
+            )
+            for _ in range(
+                MFA_RECOVERY_CODE_LENGTH
+            )
+        )
+
+        formatted_code = (
+            f"{raw_code[:4]}-"
+            f"{raw_code[4:8]}-"
+            f"{raw_code[8:]}"
+        )
+
+        recovery_codes.append(
+            formatted_code
+        )
+
+    return recovery_codes
+
+
+def replace_mfa_recovery_codes(
+    connection,
+    admin_user_id,
+    recovery_codes,
+):
+    connection.execute(
+        """
+        DELETE FROM admin_mfa_recovery_codes
+        WHERE admin_user_id = ?
+        """,
+        (admin_user_id,),
+    )
+
+    now = current_timestamp()
+
+    for recovery_code in recovery_codes:
+        normalized_code = (
+            normalize_mfa_recovery_code(
+                recovery_code
+            )
+        )
+
+        connection.execute(
+            """
+            INSERT INTO admin_mfa_recovery_codes (
+                admin_user_id,
+                code_hash,
+                created_at
+            )
+            VALUES (?, ?, ?)
+            """,
+            (
+                admin_user_id,
+                generate_password_hash(
+                    normalized_code
+                ),
+                now,
+            ),
+        )
 
 def hash_admin_invitation_token(token):
     return hashlib.sha256(
@@ -2001,7 +2263,7 @@ def admin_login():
             (submitted_email,),
         ).fetchone()
 
-        login_succeeded = bool(
+        password_succeeded = bool(
             admin_user
             and admin_user["is_active"]
             and admin_user["account_status"] == "active"
@@ -2011,71 +2273,99 @@ def admin_login():
             )
         )
 
-        if login_succeeded:
-            now = current_timestamp()
-
-            connection.execute(
-                """
-                UPDATE admin_users
-                SET
-                    last_login = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    now,
-                    now,
-                    admin_user["id"],
-                ),
+        if password_succeeded:
+            next_page = request.args.get(
+                "next",
+                "",
             )
 
-            connection.commit()
+            if not is_safe_admin_redirect(
+                next_page
+            ):
+                next_page = ""
+
+            needs_mfa_enrollment = bool(
+                not admin_user["mfa_enabled"]
+                or admin_user["mfa_reset_required"]
+                or not admin_user["mfa_secret"]
+            )
+
             connection.close()
 
             session.clear()
 
-            session["admin_user_id"] = (
-                admin_user["id"]
+            session[
+                "pending_admin_user_id"
+            ] = admin_user["id"]
+
+            session[
+                "pending_admin_session_version"
+            ] = admin_user["session_version"]
+
+            session[
+                "pending_admin_started_at"
+            ] = datetime.now(
+                UTC
+            ).isoformat(
+                timespec="seconds"
             )
 
-            session["admin_session_version"] = (
-                admin_user["session_version"]
-            )
+            session[
+                "pending_admin_attempts"
+            ] = 0
+
+            session[
+                "pending_admin_next"
+            ] = next_page
 
             session["csrf_token"] = (
                 secrets.token_hex(32)
             )
 
+            if needs_mfa_enrollment:
+                session[
+                    "pending_mfa_enrollment"
+                ] = True
+
+                write_audit_log(
+                    action="mfa_enrollment_required",
+                    category="security",
+                    description=(
+                        f'{admin_user["email"]} '
+                        "passed password verification "
+                        "and was sent to MFA enrollment."
+                    ),
+                    admin_user_id=admin_user["id"],
+                    entity_type="admin_user",
+                    entity_id=admin_user["id"],
+                )
+
+                return redirect(
+                    url_for(
+                        "admin_mfa_setup"
+                    )
+                )
+
+            session[
+                "pending_mfa_enrollment"
+            ] = False
+
             write_audit_log(
-                action="login_succeeded",
+                action="mfa_login_required",
                 category="security",
                 description=(
                     f'{admin_user["email"]} '
-                    "signed in."
+                    "passed password verification "
+                    "and was sent to MFA."
                 ),
                 admin_user_id=admin_user["id"],
                 entity_type="admin_user",
                 entity_id=admin_user["id"],
             )
 
-            flash(
-                "You are now signed in.",
-                "success",
-            )
-
-            next_page = request.args.get(
-                "next",
-                "",
-            )
-
-            if is_safe_admin_redirect(
-                next_page
-            ):
-                return redirect(next_page)
-
             return redirect(
                 url_for(
-                    "admin_website_dashboard"
+                    "admin_mfa_challenge"
                 )
             )
 
@@ -2489,6 +2779,9 @@ def admin_users():
             u.last_login,
             u.created_at,
             u.updated_at,
+            u.mfa_enabled,
+            u.mfa_enrolled_at,
+            u.mfa_reset_required,
             u.frozen_at,
             u.frozen_reason,
             u.disabled_at,
@@ -2550,6 +2843,1014 @@ def admin_users():
         admin_users=admin_user_rows,
         pending_invitations=pending_invitations,
         current_admin=current_admin,
+    )
+
+@app.route(
+    "/admin/security/mfa/setup",
+    methods=["GET", "POST"],
+)
+def admin_mfa_setup():
+    fully_authenticated_user = (
+        get_current_admin_user()
+    )
+
+    if fully_authenticated_user is not None:
+        connection = get_db_connection()
+
+        current_record = connection.execute(
+            """
+            SELECT *
+            FROM admin_users
+            WHERE id = ?
+            """,
+            (
+                fully_authenticated_user["id"],
+            ),
+        ).fetchone()
+
+        if (
+            current_record
+            and current_record["mfa_enabled"]
+            and not current_record[
+                "mfa_reset_required"
+            ]
+        ):
+            connection.close()
+
+            flash(
+                (
+                    "MFA is already enabled "
+                    "for your account."
+                ),
+                "success",
+            )
+
+            return redirect(
+                url_for("admin_users")
+            )
+
+        connection.close()
+
+        session.clear()
+
+        flash(
+            (
+                "Please enter your email and "
+                "password to begin MFA enrollment."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    pending_admin_user_id = session.get(
+        "pending_admin_user_id"
+    )
+
+    pending_session_version = session.get(
+        "pending_admin_session_version"
+    )
+
+    pending_started_at = session.get(
+        "pending_admin_started_at"
+    )
+
+    pending_mfa_enrollment = session.get(
+        "pending_mfa_enrollment"
+    )
+
+    if (
+        not pending_admin_user_id
+        or pending_session_version is None
+        or not pending_started_at
+        or not pending_mfa_enrollment
+    ):
+        clear_pending_mfa_login()
+
+        session.pop(
+            "pending_mfa_enrollment",
+            None,
+        )
+
+        session.pop(
+            "pending_mfa_secret",
+            None,
+        )
+
+        flash(
+            (
+                "Please enter your email and "
+                "password to begin MFA enrollment."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    try:
+        enrollment_started_at = (
+            datetime.fromisoformat(
+                pending_started_at
+            )
+        )
+
+    except ValueError:
+        clear_pending_mfa_login()
+
+        session.pop(
+            "pending_mfa_enrollment",
+            None,
+        )
+
+        session.pop(
+            "pending_mfa_secret",
+            None,
+        )
+
+        flash(
+            "Please sign in again.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    enrollment_expires_at = (
+        enrollment_started_at
+        + timedelta(
+            minutes=MFA_CHALLENGE_MINUTES
+        )
+    )
+
+    if datetime.now(UTC) >= enrollment_expires_at:
+        clear_pending_mfa_login()
+
+        session.pop(
+            "pending_mfa_enrollment",
+            None,
+        )
+
+        session.pop(
+            "pending_mfa_secret",
+            None,
+        )
+
+        flash(
+            (
+                "Your MFA enrollment session "
+                "expired. Please sign in again."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    connection = get_db_connection()
+
+    admin_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (pending_admin_user_id,),
+    ).fetchone()
+
+    if (
+        admin_user is None
+        or not admin_user["is_active"]
+        or admin_user["account_status"] != "active"
+        or admin_user["session_version"]
+            != pending_session_version
+    ):
+        connection.close()
+
+        clear_pending_mfa_login()
+
+        session.pop(
+            "pending_mfa_enrollment",
+            None,
+        )
+
+        session.pop(
+            "pending_mfa_secret",
+            None,
+        )
+
+        flash(
+            (
+                "Your sign-in session is no longer "
+                "valid. Please sign in again."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    pending_secret = session.get(
+        "pending_mfa_secret"
+    )
+
+    if not pending_secret:
+        pending_secret = (
+            pyotp.random_base32()
+        )
+
+        session[
+            "pending_mfa_secret"
+        ] = pending_secret
+
+    setup_data = create_mfa_setup_data(
+        admin_user["email"],
+        pending_secret,
+    )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        submitted_code = request.form.get(
+            "mfa_code",
+            "",
+        ).strip().replace(" ", "")
+
+        if (
+            len(submitted_code) != 6
+            or not submitted_code.isdigit()
+        ):
+            connection.close()
+
+            flash(
+                (
+                    "Enter the six-digit code "
+                    "from your authenticator app."
+                ),
+                "error",
+            )
+
+            return render_template(
+                "admin_mfa_setup.html",
+                admin_user=admin_user,
+                qr_code_data_uri=setup_data[
+                    "qr_code_data_uri"
+                ],
+                manual_secret=pending_secret,
+            )
+
+        code_is_valid = pyotp.TOTP(
+            pending_secret
+        ).verify(
+            submitted_code,
+            valid_window=1,
+        )
+
+        if not code_is_valid:
+            connection.close()
+
+            write_audit_log(
+                action="mfa_enrollment_failed",
+                category="security",
+                description=(
+                    f'{admin_user["email"]} entered '
+                    "an invalid MFA enrollment code."
+                ),
+                admin_user_id=admin_user["id"],
+                entity_type="admin_user",
+                entity_id=admin_user["id"],
+            )
+
+            flash(
+                (
+                    "That authenticator code was "
+                    "not valid. Wait for a new "
+                    "code and try again."
+                ),
+                "error",
+            )
+
+            return render_template(
+                "admin_mfa_setup.html",
+                admin_user=admin_user,
+                qr_code_data_uri=setup_data[
+                    "qr_code_data_uri"
+                ],
+                manual_secret=pending_secret,
+            )
+
+        now = current_timestamp()
+
+        encrypted_secret = encrypt_mfa_secret(
+            pending_secret
+        )
+
+        recovery_codes = (
+            generate_mfa_recovery_codes()
+        )
+
+        connection.execute(
+            """
+            UPDATE admin_users
+            SET
+                mfa_enabled = 1,
+                mfa_secret = ?,
+                mfa_enrolled_at = ?,
+                mfa_reset_required = 0,
+                last_login = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                encrypted_secret,
+                now,
+                now,
+                now,
+                admin_user["id"],
+            ),
+        )
+
+        replace_mfa_recovery_codes(
+            connection,
+            admin_user["id"],
+            recovery_codes,
+        )
+
+        connection.commit()
+        connection.close()
+
+        next_page = session.get(
+            "pending_admin_next",
+            "",
+        )
+
+        session.clear()
+
+        session["admin_user_id"] = (
+            admin_user["id"]
+        )
+
+        session[
+            "admin_session_version"
+        ] = admin_user["session_version"]
+
+        session["csrf_token"] = (
+            secrets.token_hex(32)
+        )
+
+        session[
+            "new_mfa_recovery_codes"
+        ] = recovery_codes
+
+        if is_safe_admin_redirect(
+            next_page
+        ):
+            session[
+                "post_recovery_redirect"
+            ] = next_page
+
+        write_audit_log(
+            action="mfa_enrollment_completed",
+            category="security",
+            description=(
+                f'{admin_user["email"]} enabled '
+                "authenticator-app MFA and "
+                "received recovery codes."
+            ),
+            admin_user_id=admin_user["id"],
+            entity_type="admin_user",
+            entity_id=admin_user["id"],
+        )
+
+        write_audit_log(
+            action="login_succeeded",
+            category="security",
+            description=(
+                f'{admin_user["email"]} '
+                "signed in after completing "
+                "MFA enrollment."
+            ),
+            admin_user_id=admin_user["id"],
+            entity_type="admin_user",
+            entity_id=admin_user["id"],
+        )
+
+        return redirect(
+            url_for(
+                "admin_mfa_recovery_codes_show"
+            )
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_mfa_setup.html",
+        admin_user=admin_user,
+        qr_code_data_uri=setup_data[
+            "qr_code_data_uri"
+        ],
+        manual_secret=pending_secret,
+    )
+
+@app.route(
+    "/admin/security/mfa/recovery-codes",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_mfa_recovery_codes():
+    admin_user = get_current_admin_user()
+
+    connection = get_db_connection()
+
+    current_record = connection.execute(
+        """
+        SELECT
+            id,
+            email,
+            mfa_enabled,
+            mfa_secret
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (admin_user["id"],),
+    ).fetchone()
+
+    if (
+        current_record is None
+        or not current_record["mfa_enabled"]
+        or not current_record["mfa_secret"]
+    ):
+        connection.close()
+
+        flash(
+            (
+                "MFA must be enabled before "
+                "recovery codes can be generated."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    unused_code_count = connection.execute(
+        """
+        SELECT COUNT(*)
+        FROM admin_mfa_recovery_codes
+        WHERE admin_user_id = ?
+          AND used_at IS NULL
+        """,
+        (admin_user["id"],),
+    ).fetchone()[0]
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        submitted_code = request.form.get(
+            "mfa_code",
+            "",
+        ).strip().replace(" ", "")
+
+        if (
+            len(submitted_code) != 6
+            or not submitted_code.isdigit()
+        ):
+            connection.close()
+
+            flash(
+                (
+                    "Enter the six-digit code "
+                    "from your authenticator app."
+                ),
+                "error",
+            )
+
+            return render_template(
+                "admin_mfa_recovery_codes.html",
+                unused_code_count=unused_code_count,
+            )
+
+        try:
+            secret = decrypt_mfa_secret(
+                current_record["mfa_secret"]
+            )
+
+        except RuntimeError:
+            connection.close()
+
+            app.logger.exception(
+                "Unable to decrypt administrator "
+                "MFA secret while generating "
+                "recovery codes."
+            )
+
+            flash(
+                (
+                    "Recovery codes could not be "
+                    "generated. Contact the system "
+                    "owner."
+                ),
+                "error",
+            )
+
+            return redirect(
+                url_for("admin_users")
+            )
+
+        code_is_valid = pyotp.TOTP(
+            secret
+        ).verify(
+            submitted_code,
+            valid_window=1,
+        )
+
+        if not code_is_valid:
+            connection.close()
+
+            write_audit_log(
+                action=(
+                    "mfa_recovery_codes_failed"
+                ),
+                category="security",
+                description=(
+                    f'{admin_user["email"]} entered '
+                    "an invalid authenticator code "
+                    "while generating recovery codes."
+                ),
+                admin_user_id=admin_user["id"],
+                entity_type="admin_user",
+                entity_id=admin_user["id"],
+            )
+
+            flash(
+                (
+                    "That authenticator code was "
+                    "not accepted."
+                ),
+                "error",
+            )
+
+            return render_template(
+                "admin_mfa_recovery_codes.html",
+                unused_code_count=unused_code_count,
+            )
+
+        recovery_codes = (
+            generate_mfa_recovery_codes()
+        )
+
+        replace_mfa_recovery_codes(
+            connection,
+            admin_user["id"],
+            recovery_codes,
+        )
+
+        connection.commit()
+        connection.close()
+
+        session[
+            "new_mfa_recovery_codes"
+        ] = recovery_codes
+
+        write_audit_log(
+            action=(
+                "mfa_recovery_codes_generated"
+            ),
+            category="security",
+            description=(
+                f'{admin_user["email"]} generated '
+                "a new set of MFA recovery codes."
+            ),
+            admin_user_id=admin_user["id"],
+            entity_type="admin_user",
+            entity_id=admin_user["id"],
+        )
+
+        return redirect(
+            url_for(
+                "admin_mfa_recovery_codes_show"
+            )
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_mfa_recovery_codes.html",
+        unused_code_count=unused_code_count,
+    )
+
+@app.route(
+    "/admin/security/mfa/recovery-codes/show"
+)
+@admin_required
+def admin_mfa_recovery_codes_show():
+    recovery_codes = session.pop(
+        "new_mfa_recovery_codes",
+        None,
+    )
+
+    if not recovery_codes:
+        flash(
+            (
+                "Recovery codes can only be "
+                "displayed immediately after "
+                "they are generated."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_mfa_recovery_codes"
+            )
+        )
+
+    return render_template(
+        "admin_mfa_recovery_codes_show.html",
+        recovery_codes=recovery_codes,
+    )
+
+@app.route(
+    "/admin/mfa-challenge",
+    methods=["GET", "POST"],
+)
+def admin_mfa_challenge():
+    if get_current_admin_user() is not None:
+        return redirect(
+            url_for("admin_website_dashboard")
+        )
+
+    pending_admin_user_id = session.get(
+        "pending_admin_user_id"
+    )
+
+    pending_session_version = session.get(
+        "pending_admin_session_version"
+    )
+
+    pending_started_at = session.get(
+        "pending_admin_started_at"
+    )
+
+    if (
+        not pending_admin_user_id
+        or pending_session_version is None
+        or not pending_started_at
+    ):
+        clear_pending_mfa_login()
+
+        flash(
+            "Please sign in to continue.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    try:
+        challenge_started_at = (
+            datetime.fromisoformat(
+                pending_started_at
+            )
+        )
+
+    except ValueError:
+        clear_pending_mfa_login()
+
+        flash(
+            "Please sign in to continue.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    challenge_expires_at = (
+        challenge_started_at
+        + timedelta(
+            minutes=MFA_CHALLENGE_MINUTES
+        )
+    )
+
+    if datetime.now(UTC) >= challenge_expires_at:
+        clear_pending_mfa_login()
+
+        flash(
+            (
+                "Your sign-in verification expired. "
+                "Please enter your email and password again."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    connection = get_db_connection()
+
+    admin_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (pending_admin_user_id,),
+    ).fetchone()
+
+    if (
+        admin_user is None
+        or not admin_user["is_active"]
+        or admin_user["account_status"] != "active"
+        or admin_user["session_version"]
+            != pending_session_version
+        or not admin_user["mfa_enabled"]
+        or not admin_user["mfa_secret"]
+    ):
+        connection.close()
+
+        clear_pending_mfa_login()
+
+        flash(
+            (
+                "Your sign-in session is no longer "
+                "valid. Please sign in again."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_login")
+        )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        submitted_code = request.form.get(
+            "mfa_code",
+            "",
+        ).strip()
+
+        current_attempts = session.get(
+            "pending_admin_attempts",
+            0,
+        )
+
+        normalized_recovery_code = (
+            normalize_mfa_recovery_code(
+                submitted_code
+            )
+        )
+
+        recovery_code_record = None
+
+        if normalized_recovery_code:
+            recovery_code_rows = connection.execute(
+                """
+                SELECT
+                    id,
+                    code_hash
+                FROM admin_mfa_recovery_codes
+                WHERE admin_user_id = ?
+                  AND used_at IS NULL
+                """,
+                (
+                    admin_user["id"],
+                ),
+            ).fetchall()
+
+            for recovery_code_row in recovery_code_rows:
+                if check_password_hash(
+                    recovery_code_row["code_hash"],
+                    normalized_recovery_code,
+                ):
+                    recovery_code_record = (
+                        recovery_code_row
+                    )
+                    break
+
+        authenticator_code = (
+            submitted_code
+            .replace(" ", "")
+        )
+
+        authenticator_code_is_valid = False
+
+        if (
+            len(authenticator_code) == 6
+            and authenticator_code.isdigit()
+        ):
+            try:
+                mfa_secret = decrypt_mfa_secret(
+                    admin_user["mfa_secret"]
+                )
+
+            except RuntimeError:
+                connection.close()
+
+                clear_pending_mfa_login()
+
+                app.logger.exception(
+                    "Unable to decrypt administrator "
+                    "MFA secret."
+                )
+
+                flash(
+                    (
+                        "Sign-in verification could not "
+                        "be completed. Contact the "
+                        "system owner."
+                    ),
+                    "error",
+                )
+
+                return redirect(
+                    url_for("admin_login")
+                )
+
+            authenticator_code_is_valid = (
+                pyotp.TOTP(
+                    mfa_secret
+                ).verify(
+                    authenticator_code,
+                    valid_window=1,
+                )
+            )
+
+        code_is_valid = bool(
+            authenticator_code_is_valid
+            or recovery_code_record is not None
+        )
+
+        if not code_is_valid:
+            current_attempts += 1
+
+            session[
+                "pending_admin_attempts"
+            ] = current_attempts
+
+            connection.close()
+
+            write_audit_log(
+                action="mfa_login_failed",
+                category="security",
+                description=(
+                    f'{admin_user["email"]} entered '
+                    "an invalid MFA or recovery code."
+                ),
+                admin_user_id=admin_user["id"],
+                entity_type="admin_user",
+                entity_id=admin_user["id"],
+            )
+
+            if (
+                current_attempts
+                >= MFA_CHALLENGE_MAX_ATTEMPTS
+            ):
+                clear_pending_mfa_login()
+
+                flash(
+                    (
+                        "Sign-in verification failed. "
+                        "Please enter your email and "
+                        "password again."
+                    ),
+                    "error",
+                )
+
+                return redirect(
+                    url_for("admin_login")
+                )
+
+            flash(
+                (
+                    "The verification code was "
+                    "not accepted."
+                ),
+                "error",
+            )
+
+            return render_template(
+                "admin_mfa_challenge.html"
+            )
+
+        now = current_timestamp()
+
+        if recovery_code_record is not None:
+            connection.execute(
+                """
+                UPDATE admin_mfa_recovery_codes
+                SET used_at = ?
+                WHERE id = ?
+                """,
+                (
+                    now,
+                    recovery_code_record["id"],
+                ),
+            )
+
+        next_page = session.get(
+            "pending_admin_next",
+            "",
+        )
+
+        connection.execute(
+            """
+            UPDATE admin_users
+            SET
+                last_login = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                now,
+                now,
+                admin_user["id"],
+            ),
+        )
+
+        connection.commit()
+        connection.close()
+
+        session.clear()
+
+        session["admin_user_id"] = (
+            admin_user["id"]
+        )
+
+        session[
+            "admin_session_version"
+        ] = admin_user["session_version"]
+
+        session["csrf_token"] = (
+            secrets.token_hex(32)
+        )
+
+        if recovery_code_record is not None:
+            write_audit_log(
+                action="login_succeeded_recovery_code",
+                category="security",
+                description=(
+                    f'{admin_user["email"]} '
+                    "signed in with an MFA recovery code."
+                ),
+                admin_user_id=admin_user["id"],
+                entity_type="admin_user",
+                entity_id=admin_user["id"],
+            )
+
+            flash(
+                (
+                    "You are now signed in. "
+                    "A one-time recovery code was used."
+                ),
+                "success",
+            )
+
+        else:
+            write_audit_log(
+                action="login_succeeded",
+                category="security",
+                description=(
+                    f'{admin_user["email"]} '
+                    "signed in with MFA."
+                ),
+                admin_user_id=admin_user["id"],
+                entity_type="admin_user",
+                entity_id=admin_user["id"],
+            )
+
+            flash(
+                "You are now signed in.",
+                "success",
+            )
+
+        if is_safe_admin_redirect(
+            next_page
+        ):
+            return redirect(
+                next_page
+            )
+
+        return redirect(
+            url_for(
+                "admin_website_dashboard"
+            )
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_mfa_challenge.html"
     )
 
 @app.route(
@@ -3782,6 +5083,125 @@ def admin_user_reactivate(admin_user_id):
         url_for("admin_users")
     )
 
+@app.route(
+    "/admin/users/<int:admin_user_id>/reset-mfa",
+    methods=["POST"],
+)
+@owner_required
+def admin_user_reset_mfa(admin_user_id):
+    validate_csrf_token()
+
+    current_admin = get_current_admin_user()
+
+    if admin_user_id == current_admin["id"]:
+        flash(
+            (
+                "You cannot reset MFA for your own "
+                "Owner account from this screen."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    connection = get_db_connection()
+
+    target_user = connection.execute(
+        """
+        SELECT *
+        FROM admin_users
+        WHERE id = ?
+        """,
+        (admin_user_id,),
+    ).fetchone()
+
+    if target_user is None:
+        connection.close()
+
+        flash(
+            "That administrator account could not be found.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    if target_user["account_status"] != "active":
+        connection.close()
+
+        flash(
+            (
+                "MFA can only be reset for an "
+                "active administrator account."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_users")
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE admin_users
+        SET
+            mfa_enabled = 0,
+            mfa_secret = NULL,
+            mfa_enrolled_at = NULL,
+            mfa_reset_required = 1,
+            session_version = session_version + 1,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            target_user["id"],
+        ),
+    )
+
+    connection.execute(
+        """
+        DELETE FROM admin_mfa_recovery_codes
+        WHERE admin_user_id = ?
+        """,
+        (target_user["id"],),
+    )
+
+    connection.commit()
+    connection.close()
+
+    write_audit_log(
+        action="admin_mfa_reset",
+        category="security",
+        description=(
+            f'{current_admin["email"]} reset MFA for '
+            f'{target_user["email"]}.'
+        ),
+        admin_user_id=current_admin["id"],
+        entity_type="admin_user",
+        entity_id=target_user["id"],
+    )
+
+    flash(
+        (
+            f'MFA was reset for '
+            f'{target_user["first_name"]} '
+            f'{target_user["last_name"]}. '
+            "They must enroll again before MFA "
+            "can protect the account."
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_users")
+    )
+
 # =========================================================
 # WEBSITE ADMINISTRATION
 # =========================================================
@@ -3805,6 +5225,36 @@ def admin_website_dashboard():
 
     featured_count = connection.execute(
         "SELECT COUNT(*) AS total FROM projects WHERE is_featured = 1"
+    ).fetchone()["total"]
+
+    article_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM learning_articles
+        """
+    ).fetchone()["total"]
+
+    published_article_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM learning_articles
+        WHERE status = 'published'
+        """
+    ).fetchone()["total"]
+
+    article_draft_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM learning_articles
+        WHERE status = 'draft'
+        """
+    ).fetchone()["total"]
+
+    topic_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM learning_topics
+        """
     ).fetchone()["total"]
 
     featured_project = connection.execute(
@@ -3887,6 +5337,10 @@ def admin_website_dashboard():
         published_count=published_count,
         draft_count=draft_count,
         featured_count=featured_count,
+        article_count=article_count,
+        published_article_count=published_article_count,
+        article_draft_count=article_draft_count,
+        topic_count=topic_count,
         featured_project=featured_project,
         hero_slides=hero_slides,
         active_hero_count=active_hero_count,

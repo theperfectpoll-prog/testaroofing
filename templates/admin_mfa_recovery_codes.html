@@ -1,0 +1,112 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    MFA Recovery Codes | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Security
+        </span>
+
+        <h2>MFA Recovery Codes</h2>
+
+        <p>
+            Recovery codes provide emergency access
+            if your authenticator app is unavailable.
+        </p>
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Generate Recovery Codes</h3>
+
+            <p>
+                Generating a new set permanently
+                invalidates every previous recovery code.
+            </p>
+        </div>
+
+    </div>
+
+
+    <div class="admin-security-notice admin-security-notice-warning">
+
+        <strong>
+            Store these codes securely.
+        </strong>
+
+        <p>
+            Each recovery code can be used only once.
+            The system will show the new codes only
+            immediately after they are generated.
+        </p>
+
+        <p>
+            You currently have
+            <strong>{{ unused_code_count }}</strong>
+            unused recovery
+            {% if unused_code_count == 1 %}
+                code.
+            {% else %}
+                codes.
+            {% endif %}
+        </p>
+
+    </div>
+
+
+    <form
+        method="post"
+        class="admin-login-form"
+    >
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <div class="admin-field">
+
+            <label for="mfa_code">
+                Current Authenticator Code
+            </label>
+
+            <input
+                type="text"
+                id="mfa_code"
+                name="mfa_code"
+                inputmode="numeric"
+                pattern="[0-9]{6}"
+                maxlength="6"
+                autocomplete="one-time-code"
+                required
+            >
+
+        </div>
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Generate New Recovery Codes
+        </button>
+
+    </form>
+
+</section>
+
+{% endblock %}

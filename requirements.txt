@@ -3,3 +3,6 @@ gunicorn
 msal
 requests
 python-dotenv
+pyotp
+cryptography
+qrcode[pil]

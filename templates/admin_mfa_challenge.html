@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+    Verify Sign In | Testa Roofing
+{% endblock %}
+
+
+{% block extra_head %}
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/admin.css') }}"
+    >
+{% endblock %}
+
+
+{% block content %}
+
+<section class="admin-login-section">
+
+    <div class="admin-login-card">
+
+        <span class="admin-eyebrow">
+            Testa Roofing
+        </span>
+
+        <h1>Verify Sign In</h1>
+
+        <p>
+            Enter the six-digit code from your
+            authenticator app or use one of your
+            one-time recovery codes.
+        </p>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+
+            {% if messages %}
+
+                <div class="admin-flash-list">
+
+                    {% for category, message in messages %}
+
+                        <div
+                            class="admin-flash admin-flash-{{ category }}"
+                        >
+                            {{ message }}
+                        </div>
+
+                    {% endfor %}
+
+                </div>
+
+            {% endif %}
+
+        {% endwith %}
+
+
+        <form
+            method="post"
+            class="admin-login-form"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <div class="admin-field">
+
+                <label for="mfa_code">
+                    Authenticator or Recovery Code
+                </label>
+
+                <input
+                    type="text"
+                    id="mfa_code"
+                    name="mfa_code"
+                    inputmode="numeric"
+                    maxlength="20"
+                    autocomplete="one-time-code"
+                    autofocus
+                    required
+                >
+
+            </div>
+
+            <button
+                type="submit"
+                class="admin-primary-button"
+            >
+                Verify Sign In
+            </button>
+
+        </form>
+
+
+        <div class="admin-login-help">
+
+            <a href="{{ url_for('admin_login') }}">
+                Return to Sign In
+            </a>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

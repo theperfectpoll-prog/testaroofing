@@ -1,0 +1,83 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Save Recovery Codes | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Security
+        </span>
+
+        <h2>Save Your Recovery Codes</h2>
+
+        <p>
+            This is the only time these recovery
+            codes will be displayed.
+        </p>
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-security-notice admin-security-notice-warning">
+
+        <strong>
+            Save these before leaving this page.
+        </strong>
+
+        <p>
+            Store them somewhere secure and separate
+            from your authenticator device.
+        </p>
+
+        <p>
+            Each code can be used only once.
+        </p>
+
+    </div>
+
+
+    <div class="admin-recovery-code-grid">
+
+        {% for recovery_code in recovery_codes %}
+
+            <code class="admin-recovery-code">
+                {{ recovery_code }}
+            </code>
+
+        {% endfor %}
+
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <button
+            type="button"
+            class="admin-secondary-button"
+            onclick="window.print()"
+        >
+            Print Recovery Codes
+        </button>
+
+        <a
+            href="{{ url_for('admin_website_dashboard') }}"
+            class="admin-primary-button"
+        >
+            I Have Saved My Codes
+        </a>
+
+    </div>
+
+</section>
+
+{% endblock %}

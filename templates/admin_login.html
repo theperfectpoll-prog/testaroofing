@@ -31,6 +31,23 @@
             administration system.
         </p>
 
+        <div class="admin-security-notice">
+
+            <strong>
+                Protected Administrator Access
+            </strong>
+
+            <p>
+                Administrator accounts are protected
+                with multi-factor authentication (MFA).
+                After entering your password, you'll
+                verify your identity using your
+                authenticator app or a one-time
+                recovery code.
+            </p>
+
+        </div>
+
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 <div class="admin-flash-list">

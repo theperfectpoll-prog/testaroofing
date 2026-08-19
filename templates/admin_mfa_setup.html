@@ -1,0 +1,142 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Set Up MFA | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Security
+        </span>
+
+        <h2>Set Up Multi-Factor Authentication</h2>
+
+        <p>
+            Protect your administrator account with
+            an authenticator app.
+        </p>
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Authenticator App</h3>
+
+            <p>
+                Use Microsoft Authenticator, Google
+                Authenticator, 1Password, or another
+                compatible authenticator app.
+            </p>
+        </div>
+
+    </div>
+
+
+    <div class="admin-mfa-setup-grid">
+
+        <div class="admin-mfa-qr">
+
+            <img
+                src="{{ qr_code_data_uri }}"
+                alt="Testa Roofing MFA QR code"
+            >
+
+        </div>
+
+
+        <div class="admin-mfa-instructions">
+
+            <ol>
+                <li>
+                    Open your authenticator app.
+                </li>
+
+                <li>
+                    Add a new account and scan the QR code.
+                </li>
+
+                <li>
+                    Confirm that the account appears as
+                    <strong>Testa Roofing</strong>.
+                </li>
+
+                <li>
+                    Enter the six-digit code shown in the app.
+                </li>
+            </ol>
+
+
+            <div class="admin-security-notice">
+
+                <strong>
+                    Can't scan the QR code?
+                </strong>
+
+                <p>
+                    Enter this setup key manually:
+                </p>
+
+                <code class="admin-mfa-secret">
+                    {{ manual_secret }}
+                </code>
+
+            </div>
+
+
+            <form
+                method="post"
+                class="admin-login-form"
+            >
+
+                <input
+                    type="hidden"
+                    name="csrf_token"
+                    value="{{ csrf_token() }}"
+                >
+
+                <div class="admin-field">
+
+                    <label for="mfa_code">
+                        Six-Digit Authenticator Code
+                    </label>
+
+                    <input
+                        type="text"
+                        id="mfa_code"
+                        name="mfa_code"
+                        inputmode="numeric"
+                        pattern="[0-9]{6}"
+                        maxlength="6"
+                        autocomplete="one-time-code"
+                        required
+                    >
+
+                </div>
+
+                <button
+                    type="submit"
+                    class="admin-primary-button"
+                >
+                    Verify and Enable MFA
+                </button>
+
+            </form>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

@@ -412,6 +412,30 @@
                     </div>
 
                     <div>
+                        <span>MFA Security</span>
+
+                        {% if admin_user["mfa_reset_required"] %}
+
+                            <strong class="admin-mfa-status admin-mfa-status-warning">
+                                Re-enrollment Required
+                            </strong>
+
+                        {% elif admin_user["mfa_enabled"] %}
+
+                            <strong class="admin-mfa-status admin-mfa-status-protected">
+                                MFA Protected
+                            </strong>
+
+                        {% else %}
+
+                            <strong class="admin-mfa-status admin-mfa-status-unprotected">
+                                Not Enrolled
+                            </strong>
+
+                        {% endif %}
+                    </div>
+
+                    <div>
                         <span>Account Created</span>
 
                         <strong>
@@ -480,16 +504,17 @@
                     {% if admin_user["id"] == current_admin["id"] %}
 
                         <div class="admin-protected-account">
+
                             <strong>
                                 Your Account
                             </strong>
 
                             <span>
-                                You cannot freeze or disable
-                                your own owner account.
+                                You cannot freeze, disable, or reset MFA
+                                for your own Owner account from this screen.
                             </span>
-                        </div>
 
+                        </div>
 
                     {% elif admin_user["account_status"] == "active" %}
 
@@ -593,6 +618,49 @@
 
                         </details>
 
+
+                        {% if admin_user["mfa_enabled"] %}
+
+                            <details class="admin-security-action">
+
+                                <summary>
+                                    Reset MFA
+                                </summary>
+
+                                <form
+                                    method="post"
+                                    action="{{ url_for(
+                                        'admin_user_reset_mfa',
+                                        admin_user_id=admin_user['id']
+                                    ) }}"
+                                >
+
+                                    <input
+                                        type="hidden"
+                                        name="csrf_token"
+                                        value="{{ csrf_token() }}"
+                                    >
+
+                                    <p class="admin-security-help">
+                                        Resetting MFA immediately invalidates
+                                        this administrator's active sessions,
+                                        removes all recovery codes, and
+                                        requires the user to enroll a new
+                                        authenticator.
+                                    </p>
+
+                                    <button
+                                        type="submit"
+                                        class="admin-warning-button"
+                                    >
+                                        Reset MFA
+                                    </button>
+
+                                </form>
+
+                            </details>
+
+                        {% endif %}
 
                     {% elif admin_user["account_status"] == "frozen" %}
 

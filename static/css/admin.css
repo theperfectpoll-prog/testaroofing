@@ -2138,6 +2138,38 @@
     margin-top: 0.5rem;
 }
 
+.admin-security-notice {
+    margin: 1.5rem 0;
+
+    padding: 1rem 1.15rem;
+
+    border: 1px solid #d7e3ec;
+    border-left: 4px solid #123b5d;
+
+    border-radius: 8px;
+
+    background: #f6f9fc;
+}
+
+.admin-security-notice strong {
+    display: block;
+
+    margin-bottom: 0.45rem;
+
+    color: #123b5d;
+
+    font-size: 0.95rem;
+}
+
+.admin-security-notice p {
+    margin: 0;
+
+    color: #506272;
+
+    font-size: 0.88rem;
+
+    line-height: 1.5;
+}
 
 .admin-security-notice-warning {
     background: #fff6da;
@@ -2281,4 +2313,167 @@
         grid-template-columns: 1fr;
     }
 
+}
+
+/* ---------------------------------------------------------
+   MFA SETUP
+--------------------------------------------------------- */
+
+.admin-mfa-setup-grid {
+    display: grid;
+    grid-template-columns:
+        minmax(220px, 320px)
+        minmax(0, 1fr);
+
+    gap: 2rem;
+    align-items: start;
+}
+
+.admin-mfa-qr {
+    padding: 1rem;
+
+    border: 1px solid #dbe3ea;
+    border-radius: 10px;
+
+    background: #ffffff;
+
+    text-align: center;
+}
+
+.admin-mfa-qr img {
+    display: block;
+
+    width: 100%;
+    max-width: 280px;
+
+    margin: 0 auto;
+}
+
+.admin-mfa-instructions ol {
+    margin-top: 0;
+
+    padding-left: 1.25rem;
+}
+
+.admin-mfa-instructions li {
+    margin-bottom: 0.75rem;
+}
+
+.admin-mfa-secret {
+    display: block;
+
+    margin-top: 0.75rem;
+
+    padding: 0.8rem;
+
+    border-radius: 6px;
+
+    background: #eef3f6;
+
+    color: #123b5d;
+
+    font-size: 0.9rem;
+    font-weight: 700;
+
+    letter-spacing: 0.05em;
+
+    overflow-wrap: anywhere;
+}
+
+@media (max-width: 800px) {
+
+    .admin-mfa-setup-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+/* ---------------------------------------------------------
+   MFA RECOVERY CODES
+--------------------------------------------------------- */
+
+.admin-recovery-code-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(2, minmax(0, 1fr));
+
+    gap: 0.75rem;
+
+    margin: 1.5rem 0;
+}
+
+.admin-recovery-code {
+    display: block;
+
+    padding: 0.85rem 1rem;
+
+    border: 1px solid #dbe3ea;
+    border-radius: 6px;
+
+    background: #f4f7f9;
+
+    color: #123b5d;
+
+    font-size: 1rem;
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+
+    text-align: center;
+}
+
+
+@media print {
+
+    .admin-sidebar,
+    .admin-page-actions {
+        display: none !important;
+    }
+
+    .admin-main {
+        width: 100%;
+    }
+
+}
+
+
+@media (max-width: 800px) {
+
+    .admin-recovery-code-grid {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+/* ---------------------------------------------------------
+   MFA STATUS
+--------------------------------------------------------- */
+
+.admin-mfa-status {
+    display: inline-flex;
+    align-items: center;
+
+    width: fit-content;
+
+    padding: 0.3rem 0.6rem;
+
+    border-radius: 999px;
+
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.admin-mfa-status-protected {
+    background: #dff5e5;
+    color: #1b6b35;
+}
+
+.admin-mfa-status-warning {
+    background: #fff1c9;
+    color: #8a5a00;
+}
+
+.admin-mfa-status-unprotected {
+    background: #edf1f4;
+    color: #5b6975;
 }
