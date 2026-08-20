@@ -1,0 +1,202 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Add Personnel | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Company
+        </span>
+
+        <h2>Add Personnel</h2>
+
+        <p>
+            Add a Testa Roofing employee or company
+            personnel record.
+        </p>
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for('admin_personnel') }}"
+            class="admin-secondary-button"
+        >
+            Back to Personnel
+        </a>
+
+    </div>
+
+</header>
+
+
+<form
+    method="post"
+    class="admin-project-form"
+>
+
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+                <h3>Personnel Information</h3>
+
+                <p>
+                    Basic company personnel details.
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+
+                <label for="first_name">
+                    First Name
+                </label>
+
+                <input
+                    type="text"
+                    id="first_name"
+                    name="first_name"
+                    value="{{ request.form.get('first_name', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="last_name">
+                    Last Name
+                </label>
+
+                <input
+                    type="text"
+                    id="last_name"
+                    name="last_name"
+                    value="{{ request.form.get('last_name', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="job_title">
+                    Job Title / Role
+                </label>
+
+                <input
+                    type="text"
+                    id="job_title"
+                    name="job_title"
+                    value="{{ request.form.get('job_title', '') }}"
+                    placeholder="Sales, Service Technician, Office, etc."
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="phone">
+                    Phone Number
+                </label>
+
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value="{{ request.form.get('phone', '') }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label for="email">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value="{{ request.form.get('email', '') }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label class="admin-checkbox">
+
+                    <input
+                        type="checkbox"
+                        name="is_salesperson"
+                        value="1"
+                        {% if request.form.get('is_salesperson') %}
+                            checked
+                        {% endif %}
+                    >
+
+                    This person can be assigned as a salesperson
+
+                </label>
+
+                <small class="admin-field-help">
+                    Salespeople appear in customer and
+                    estimate assignment dropdowns.
+                </small>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <div class="admin-form-actions">
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Save Personnel
+        </button>
+
+        <a
+            href="{{ url_for('admin_personnel') }}"
+            class="admin-secondary-button"
+        >
+            Cancel
+        </a>
+
+    </div>
+
+</form>
+
+{% endblock %}

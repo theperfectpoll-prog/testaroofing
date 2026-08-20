@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+    Terms of Use | Testa Roofing
+{% endblock %}
+
+
+{% block content %}
+
+<section class="page-section">
+
+    <div class="container">
+
+        <div class="legal-content">
+
+            <span class="eyebrow">
+                Testa Roofing
+            </span>
+
+            <h1>
+                Application Terms of Use
+            </h1>
+
+            <p>
+                Last updated: August 20, 2026
+            </p>
+
+
+            <h2>Application Purpose</h2>
+
+            <p>
+                The Testa Roofing administration system is
+                an internal business application operated by
+                Absolute Roof Solutions, doing business as
+                Testa Roofing.
+            </p>
+
+            <p>
+                The system is intended to support Testa
+                Roofing business operations, including
+                customer management, estimating, project
+                management, work orders, scheduling,
+                accounting coordination, reporting, website
+                administration, and related business
+                activities.
+            </p>
+
+
+            <h2>Authorized Use</h2>
+
+            <p>
+                Access to the Testa Roofing administration
+                system is limited to authorized users.
+            </p>
+
+            <p>
+                Users are responsible for protecting their
+                login credentials, multi-factor authentication
+                methods, recovery codes, and other security
+                information associated with their account.
+            </p>
+
+            <p>
+                Unauthorized access, attempted access, use of
+                another person's credentials, or interference
+                with the operation or security of the system
+                is prohibited.
+            </p>
+
+
+            <h2>QuickBooks Online</h2>
+
+            <p>
+                The Testa Roofing administration system may
+                connect to QuickBooks Online through services
+                provided by Intuit.
+            </p>
+
+            <p>
+                Authorized users may permit the application
+                to retrieve, create, update, or otherwise
+                process QuickBooks information when necessary
+                for Testa Roofing business operations.
+            </p>
+
+            <p>
+                Use of QuickBooks Online remains subject to
+                applicable Intuit and QuickBooks terms and
+                policies.
+            </p>
+
+
+            <h2>Business Records</h2>
+
+            <p>
+                Information displayed or maintained within
+                the administration system may include
+                customer records, contacts, estimates,
+                proposals, work orders, project information,
+                materials, labor information, invoices,
+                payments, and related business records.
+            </p>
+
+            <p>
+                Authorized users are expected to use
+                reasonable care when entering, modifying,
+                exporting, or deleting business information.
+            </p>
+
+
+            <h2>System Availability</h2>
+
+            <p>
+                Testa Roofing may modify, maintain, suspend,
+                or discontinue portions of the administration
+                system when reasonably necessary for
+                maintenance, security, operational, or
+                business purposes.
+            </p>
+
+
+            <h2>Security</h2>
+
+            <p>
+                Testa Roofing may restrict, freeze, disable,
+                or terminate administrative access when
+                unauthorized activity, account compromise,
+                employment changes, or other security
+                concerns require such action.
+            </p>
+
+            <p>
+                Administrative activity may be logged and
+                reviewed for operational and security
+                purposes.
+            </p>
+
+
+            <h2>Third-Party Services</h2>
+
+            <p>
+                The administration system may interact with
+                third-party services, including accounting,
+                email, hosting, and other technology
+                providers.
+            </p>
+
+            <p>
+                Those services are governed by their own
+                terms, privacy policies, and availability.
+            </p>
+
+
+            <h2>Changes to These Terms</h2>
+
+            <p>
+                Testa Roofing may update these Terms of Use
+                as the administration system or its
+                integrations change.
+            </p>
+
+            <p>
+                The current version will be made available
+                on this page.
+            </p>
+
+
+            <h2>Contact</h2>
+
+            <p>
+                Questions regarding these terms may be
+                directed to:
+            </p>
+
+            <p>
+                <strong>
+                    Testa Roofing
+                </strong>
+                <br>
+
+                Absolute Roof Solutions
+                <br>
+
+                <a href="mailto:{{ site_settings['public_email'] }}">
+                    {{ site_settings["public_email"] }}
+                </a>
+                <br>
+
+                <a href="tel:{{ site_settings['phone_link'] }}">
+                    {{ site_settings["phone_display"] }}
+                </a>
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

@@ -1,136 +1,568 @@
 {% extends "admin_base.html" %}
 
+
 {% block title %}
-    Website Dashboard | Testa Roofing
+    Administration Dashboard | Testa Roofing
 {% endblock %}
+
 
 {% block admin_content %}
 
 <header class="admin-page-header">
+
     <div>
-        <span class="admin-eyebrow">Administration</span>
-        <h2>Website Dashboard</h2>
-        <p>Manage projects and Learning Center content from one place.</p>
+        <span class="admin-eyebrow">
+            Testa Roofing
+        </span>
+
+        <h2>Administration Dashboard</h2>
+
+        <p>
+            Manage company operations, website content,
+            marketing, and administration from one place.
+        </p>
     </div>
 
-    <div class="admin-page-actions">
-        <a href="{{ url_for('admin_learning_article_new') }}" class="admin-primary-button">Add Article</a>
-        <a href="{{ url_for('admin_project_new') }}" class="admin-secondary-button">Add Project</a>
-    </div>
 </header>
 
-<section class="admin-panel">
-    <div class="admin-panel-heading">
-        <div>
-            <h3>Projects</h3>
-            <p>Track published projects, drafts, and the project selected for homepage emphasis.</p>
-        </div>
-
-        <a href="{{ url_for('admin_projects') }}" class="admin-secondary-button">Manage Projects</a>
-    </div>
-
-    <div class="admin-stat-grid">
-        <div class="admin-stat-card">
-            <span>Total Projects</span>
-            <strong>{{ project_count|default(0) }}</strong>
-        </div>
-
-        <div class="admin-stat-card">
-            <span>Published Projects</span>
-            <strong>{{ published_count|default(0) }}</strong>
-        </div>
-
-        <div class="admin-stat-card">
-            <span>Project Drafts</span>
-            <strong>{{ draft_count|default(0) }}</strong>
-        </div>
-    </div>
-
-    {% if featured_project %}
-        <div class="admin-featured-summary">
-            <div>
-                <span class="admin-eyebrow">Featured Project</span>
-                <strong>{{ featured_project["title"] }}</strong>
-            </div>
-
-            <a href="{{ url_for('admin_project_edit', project_id=featured_project['id']) }}">Edit Project</a>
-        </div>
-    {% else %}
-        <div class="admin-empty-state">No project has been selected as the featured project.</div>
-    {% endif %}
-</section>
 
 <section class="admin-panel">
+
     <div class="admin-panel-heading">
+
         <div>
-            <h3>Learning Center</h3>
+            <h3>Business Operations</h3>
+
             <p>
-                Publish roofing articles and answers to common questions. Each article can use
-                multiple controlled topics for filtering, related-content matching, and
-                consistent SEO support.
+                The operational side of the Testa Roofing
+                administration system will be built here.
             </p>
         </div>
 
-        <div class="admin-page-actions">
-            <a href="{{ url_for('admin_learning_center') }}" class="admin-secondary-button">Manage Articles</a>
-            <a href="{{ url_for('admin_learning_article_new') }}" class="admin-primary-button">Add Article</a>
-        </div>
     </div>
 
-    <div class="admin-stat-grid">
-        <div class="admin-stat-card">
-            <span>Total Articles</span>
-            <strong>{{ article_count|default(0) }}</strong>
-        </div>
-
-        <div class="admin-stat-card">
-            <span>Published Articles</span>
-            <strong>{{ published_article_count|default(0) }}</strong>
-        </div>
-
-        <div class="admin-stat-card">
-            <span>Article Drafts</span>
-            <strong>{{ article_draft_count|default(0) }}</strong>
-        </div>
-
-        <div class="admin-stat-card">
-            <span>Active Topics</span>
-            <strong>{{ topic_count|default(0) }}</strong>
-        </div>
-    </div>
 
     <div class="admin-section-card-grid">
-        <a href="{{ url_for('admin_learning_center') }}" class="admin-section-card">
-            <strong>Articles</strong>
-            <span>Create, edit, publish, and organize Learning Center content.</span>
-        </a>
 
-        <a href="{{ url_for('admin_learning_center') }}#topics" class="admin-section-card">
-            <strong>Topic Library</strong>
-            <span>Manage the controlled topics used for article filters, related articles, and SEO organization.</span>
-        </a>
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Customers
+            </strong>
+
+            <span>
+                Companies, locations, contacts,
+                billing information, and project addresses.
+            </span>
+
+            <small>
+                Next Module
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Work Orders
+            </strong>
+
+            <span>
+                Service calls, scopes of work, labor,
+                materials, field notes, and job costing.
+            </span>
+
+            <small>
+                Coming Soon
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Estimates
+            </strong>
+
+            <span>
+                Track proposals, costs, won/lost status,
+                and conversion into work orders.
+            </span>
+
+            <small>
+                Coming Soon
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Scheduling
+            </strong>
+
+            <span>
+                Schedule work, expected arrival times,
+                technicians, and upcoming jobs.
+            </span>
+
+            <small>
+                Coming Soon
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Labor & Payroll
+            </strong>
+
+            <span>
+                Track technician hours, travel hours,
+                and labor costs by work order.
+            </span>
+
+            <small>
+                Coming Soon
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Invoices & Job Costing
+            </strong>
+
+            <span>
+                Track labor, materials, additional costs,
+                invoicing, payments, and project margins.
+            </span>
+
+            <small>
+                Coming Soon
+            </small>
+
+        </div>
+
     </div>
+
 </section>
 
+
 <section class="admin-panel">
+
     <div class="admin-panel-heading">
+
         <div>
-            <h3>Additional Website Controls</h3>
-            <p>These areas will be added only when regular editing is needed.</p>
+            <h3>Quick Actions</h3>
+
+            <p>
+                Jump directly into the areas currently
+                available in the administration system.
+            </p>
         </div>
+
     </div>
+
 
     <div class="admin-section-card-grid">
-        <div class="admin-section-card admin-section-card-disabled">
-            <strong>Homepage Content</strong>
-            <span>Editable homepage areas will be added when needed.</span>
+
+        <a
+            href="{{ url_for('admin_learning_article_new') }}"
+            class="admin-section-card"
+        >
+
+            <strong>
+                Write Article
+            </strong>
+
+            <span>
+                Create a new Learning Center article.
+            </span>
+
+        </a>
+
+
+        <a
+            href="{{ url_for('admin_project_new') }}"
+            class="admin-section-card"
+        >
+
+            <strong>
+                Add Project
+            </strong>
+
+            <span>
+                Add another completed roofing project
+                to the website.
+            </span>
+
+        </a>
+
+
+        {% if current_admin_user
+              and current_admin_user["role"] == "owner" %}
+
+            <a
+                href="{{ url_for('admin_users') }}"
+                class="admin-section-card"
+            >
+
+                <strong>
+                    Users & Security
+                </strong>
+
+                <span>
+                    Manage administrator access,
+                    invitations, and account security.
+                </span>
+
+            </a>
+
+        {% endif %}
+
+    </div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Website & Marketing</h3>
+
+            <p>
+                Current content and publishing activity
+                for the Testa Roofing website.
+            </p>
         </div>
 
-        <div class="admin-section-card admin-section-card-disabled">
-            <strong>Service Areas</strong>
-            <span>Residential and commercial service-area controls will be added later.</span>
-        </div>
     </div>
+
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+
+            <span>
+                Published Projects
+            </span>
+
+            <strong>
+                {{ published_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Project Drafts
+            </span>
+
+            <strong>
+                {{ draft_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Published Articles
+            </span>
+
+            <strong>
+                {{ published_article_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Article Drafts
+            </span>
+
+            <strong>
+                {{ article_draft_count|default(0) }}
+            </strong>
+
+        </div>
+
+    </div>
+
+
+    <div class="admin-section-card-grid">
+
+        <a
+            href="{{ url_for('admin_projects') }}"
+            class="admin-section-card"
+        >
+
+            <strong>
+                Projects
+            </strong>
+
+            <span>
+                {{ project_count|default(0) }}
+                total projects.
+                Manage published projects,
+                drafts, and featured content.
+            </span>
+
+        </a>
+
+
+        <a
+            href="{{ url_for('admin_learning_center') }}"
+            class="admin-section-card"
+        >
+
+            <strong>
+                Learning Center
+            </strong>
+
+            <span>
+                {{ article_count|default(0) }}
+                total articles across
+                {{ topic_count|default(0) }}
+                controlled topics.
+            </span>
+
+        </a>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Social Publishing
+            </strong>
+
+            <span>
+                Publish Learning Center content to
+                Facebook and LinkedIn from the
+                administration system.
+            </span>
+
+            <small>
+                Planned
+            </small>
+
+        </div>
+
+    </div>
+
+
+    {% if featured_project %}
+
+        <div class="admin-featured-summary">
+
+            <div>
+                <span class="admin-eyebrow">
+                    Featured Project
+                </span>
+
+                <strong>
+                    {{ featured_project["title"] }}
+                </strong>
+            </div>
+
+            <a
+                href="{{ url_for(
+                    'admin_project_edit',
+                    project_id=featured_project['id']
+                ) }}"
+            >
+                Edit Project
+            </a>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+
+{% if current_admin_user
+      and current_admin_user["role"] == "owner" %}
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Administration & Security</h3>
+
+            <p>
+                Administrator access and security status.
+            </p>
+        </div>
+
+        <a
+            href="{{ url_for('admin_users') }}"
+            class="admin-secondary-button"
+        >
+            Manage Users
+        </a>
+
+    </div>
+
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+
+            <span>
+                Administrators
+            </span>
+
+            <strong>
+                {{ admin_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Active
+            </span>
+
+            <strong>
+                {{ active_admin_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                MFA Protected
+            </span>
+
+            <strong>
+                {{ mfa_protected_admin_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Security Holds
+            </span>
+
+            <strong>
+                {{ frozen_admin_count|default(0) }}
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endif %}
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>Website Status</h3>
+
+            <p>
+                Basic status of the public-facing website.
+            </p>
+        </div>
+
+    </div>
+
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+
+            <span>
+                Homepage Slides
+            </span>
+
+            <strong>
+                {{ active_hero_count|default(0) }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Company Information
+            </span>
+
+            <strong>
+                {% if company_information_complete %}
+                    Ready
+                {% else %}
+                    Review
+                {% endif %}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Contact Information
+            </span>
+
+            <strong>
+                {% if contact_information_complete %}
+                    Ready
+                {% else %}
+                    Review
+                {% endif %}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Homepage
+            </span>
+
+            <strong>
+                {% if homepage_ready %}
+                    Ready
+                {% else %}
+                    Review
+                {% endif %}
+            </strong>
+
+        </div>
+
+    </div>
+
 </section>
 
 {% endblock %}

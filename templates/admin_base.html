@@ -30,68 +30,291 @@
         >
 
             <span class="admin-navigation-section">
-                Website
+                Home
             </span>
 
             <a
                 href="{{ url_for('admin_website_dashboard') }}"
                 class="{% if request.endpoint == 'admin_website_dashboard' %}active{% endif %}"
             >
-                Website Dashboard
+                Admin Home
             </a>
 
+
+            <span class="admin-navigation-section">
+                Customers
+            </span>
+
             <a
-                href="{{ url_for('admin_projects') }}"
+                href="{{ url_for('admin_customers') }}"
                 class="{% if request.endpoint in [
-                    'admin_projects',
-                    'admin_project_new',
-                    'admin_project_edit'
+                    'admin_customers',
+                    'admin_customer_new'
                 ] %}active{% endif %}"
             >
-                Projects
+                Customers
             </a>
 
-            <a
-                href="{{ url_for('admin_learning_center') }}"
-                class="{% if request.endpoint in [
+
+            <details
+                class="admin-navigation-group"
+                {% if request.endpoint in [
+                    'admin_work_orders',
+                    'admin_estimates',
+                    'admin_tracking',
+                    'admin_calendar'
+                ] %}
+                    open
+                {% endif %}
+            >
+
+                <summary>
+                    Projects
+                </summary>
+
+                <div class="admin-navigation-submenu">
+
+                    <span class="admin-navigation-disabled">
+                        Work Orders
+                        <small>Coming soon</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Estimates
+                        <small>Coming soon</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Tracking
+                        <small>Coming soon</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Calendar
+                        <small>Coming soon</small>
+                    </span>
+
+                </div>
+
+            </details>
+
+
+            <details
+                class="admin-navigation-group"
+                {% if request.endpoint in [
+                    'admin_personnel',
+                    'admin_personnel_new',
+                    'admin_personnel_edit',
+                    'admin_products'
+                ] %}
+                    open
+                {% endif %}
+            >
+
+                <summary>
+                    Company
+                </summary>
+
+                <div class="admin-navigation-submenu">
+
+                    <a
+                        href="{{ url_for('admin_personnel') }}"
+                        class="{% if request.endpoint in [
+                            'admin_personnel',
+                            'admin_personnel_new',
+                            'admin_personnel_edit'
+                        ] %}active{% endif %}"
+                    >
+                        Personnel
+                    </a>
+
+                    <span class="admin-navigation-disabled">
+                        Products / Materials
+                        <small>Coming soon</small>
+                    </span>
+
+                </div>
+
+            </details>
+
+            <details
+                class="admin-navigation-group"
+                {% if request.endpoint in [
+                    'admin_financial_reports',
+                    'admin_customer_reports',
+                    'admin_work_order_reports',
+                    'admin_estimate_reports'
+                ] %}
+                    open
+                {% endif %}
+            >
+
+                <summary>
+                    Reporting
+                </summary>
+
+                <div class="admin-navigation-submenu">
+
+                    <span class="admin-navigation-disabled">
+                        Financial Reports
+                        <small>Coming soon</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Customer Reports
+                        <small>Coming soon</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Work Order Reports
+                        <small>Coming soon</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Estimate Reports
+                        <small>Coming soon</small>
+                    </span>
+
+                </div>
+
+            </details>
+
+
+            <details
+                class="admin-navigation-group"
+                {% if request.endpoint in [
+                    'admin_personnel',
+                    'admin_products'
+                ] %}
+                    open
+                {% endif %}
+            >
+
+                <summary>
+                    Company
+                </summary>
+
+                <div class="admin-navigation-submenu">
+
+                    <a
+                        class="{% if request.endpoint in [
+                            'admin_personnel',
+                            'admin_personnel_new',
+                            'admin_personnel_edit'
+                        ] %}active{% endif %}"
+                    >
+                        Personnel
+                    </a>
+
+                    <span class="admin-navigation-disabled">
+                        Products / Materials
+                        <small>Coming soon</small>
+                    </span>
+
+                </div>
+
+            </details>
+
+
+            <details
+                class="admin-navigation-group"
+                {% if request.endpoint in [
+                    'admin_projects',
+                    'admin_project_new',
+                    'admin_project_edit',
                     'admin_learning_center',
                     'admin_learning_article_new',
                     'admin_learning_article_edit'
-                ] %}active{% endif %}"
+                ] %}
+                    open
+                {% endif %}
             >
-                Learning Center
-            </a>
 
-            <span class="admin-navigation-disabled">
-                Homepage Content
-                <small>Coming later</small>
-            </span>
+                <summary>
+                    Marketing / Website
+                </summary>
 
-            <span class="admin-navigation-disabled">
-                Service Areas
-                <small>Coming later</small>
-            </span>
+                <div class="admin-navigation-submenu">
+
+                    <a
+                        href="{{ url_for('admin_projects') }}"
+                        class="{% if request.endpoint in [
+                            'admin_projects',
+                            'admin_project_new',
+                            'admin_project_edit'
+                        ] %}active{% endif %}"
+                    >
+                        Website Projects
+                    </a>
+
+                    <a
+                        href="{{ url_for('admin_learning_center') }}"
+                        class="{% if request.endpoint in [
+                            'admin_learning_center',
+                            'admin_learning_article_new',
+                            'admin_learning_article_edit'
+                        ] %}active{% endif %}"
+                    >
+                        Learning Center
+                    </a>
+
+                    <span class="admin-navigation-disabled">
+                        Homepage Content
+                        <small>Coming later</small>
+                    </span>
+
+                    <span class="admin-navigation-disabled">
+                        Service Areas
+                        <small>Coming later</small>
+                    </span>
+
+                </div>
+
+            </details>
 
 
             {% if current_admin_user
                   and current_admin_user["role"] == "owner" %}
 
-                <span class="admin-navigation-section">
-                    Administration
-                </span>
-
-                <a
-                    href="{{ url_for('admin_users') }}"
-                    class="{% if request.endpoint in [
+                <details
+                    class="admin-navigation-group"
+                    {% if request.endpoint in [
                         'admin_users',
+                        'admin_user_invite',
                         'admin_user_freeze',
                         'admin_user_restore',
                         'admin_user_disable',
-                        'admin_user_reactivate'
-                    ] %}active{% endif %}"
+                        'admin_user_reactivate',
+                        'admin_user_reset_mfa'
+                    ] %}
+                        open
+                    {% endif %}
                 >
-                    Users & Security
-                </a>
+
+                    <summary>
+                        Administration
+                    </summary>
+
+                    <div class="admin-navigation-submenu">
+
+                        <a
+                            href="{{ url_for('admin_users') }}"
+                            class="{% if request.endpoint in [
+                                'admin_users',
+                                'admin_user_invite',
+                                'admin_user_freeze',
+                                'admin_user_restore',
+                                'admin_user_disable',
+                                'admin_user_reactivate',
+                                'admin_user_reset_mfa'
+                            ] %}active{% endif %}"
+                        >
+                            Users & Security
+                        </a>
+
+                    </div>
+
+                </details>
 
             {% endif %}
 

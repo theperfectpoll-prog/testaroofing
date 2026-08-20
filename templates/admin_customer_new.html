@@ -1,0 +1,554 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Add Customer | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Customers
+        </span>
+
+        <h2>Add Customer</h2>
+
+        <p>
+            Create a residential or commercial customer
+            and their primary contact.
+        </p>
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for('admin_customers') }}"
+            class="admin-secondary-button"
+        >
+            Back to Customers
+        </a>
+
+    </div>
+
+</header>
+
+
+<form
+    method="post"
+    class="admin-project-form"
+>
+
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+                <h3>Customer Information</h3>
+
+                <p>
+                    Identify the customer and their
+                    primary service address.
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+
+                <label for="customer_type">
+                    Customer Type
+                </label>
+
+                <select
+                    id="customer_type"
+                    name="customer_type"
+                    required
+                >
+
+                    <option value="">
+                        Select Type
+                    </option>
+
+                    <option
+                        value="residential"
+                        {% if request.form.get('customer_type') == 'residential' %}
+                            selected
+                        {% endif %}
+                    >
+                        Residential
+                    </option>
+
+                    <option
+                        value="commercial"
+                        {% if request.form.get('customer_type') == 'commercial' %}
+                            selected
+                        {% endif %}
+                    >
+                        Commercial
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="commercial_name">
+                    Commercial Customer Name
+                </label>
+
+                <input
+                    type="text"
+                    id="commercial_name"
+                    name="commercial_name"
+                    value="{{ request.form.get('commercial_name', '') }}"
+                >
+
+                <small>
+                    Required for commercial customers.
+                </small>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label class="admin-checkbox">
+
+                    <input
+                        type="checkbox"
+                        name="is_general_contractor"
+                        value="1"
+                        {% if request.form.get('is_general_contractor') %}
+                            checked
+                        {% endif %}
+                    >
+
+                    This customer is a General Contractor
+
+                </label>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="address_line_1">
+                    Address
+                </label>
+
+                <input
+                    type="text"
+                    id="address_line_1"
+                    name="address_line_1"
+                    value="{{ request.form.get('address_line_1', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="address_line_2">
+                    Address Line 2
+                </label>
+
+                <input
+                    type="text"
+                    id="address_line_2"
+                    name="address_line_2"
+                    value="{{ request.form.get('address_line_2', '') }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="city">
+                    City
+                </label>
+
+                <input
+                    type="text"
+                    id="city"
+                    name="city"
+                    value="{{ request.form.get('city', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="state">
+                    State
+                </label>
+
+                <input
+                    type="text"
+                    id="state"
+                    name="state"
+                    maxlength="2"
+                    value="{{ request.form.get('state', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="postal_code">
+                    ZIP / Postal Code
+                </label>
+
+                <input
+                    type="text"
+                    id="postal_code"
+                    name="postal_code"
+                    value="{{ request.form.get('postal_code', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="salesperson_id">
+                    Default Salesperson
+                </label>
+
+                <select
+                    id="salesperson_id"
+                    name="salesperson_id"
+                >
+
+                    <option value="">
+                        Not Assigned
+                    </option>
+
+                    {% for salesperson in salespeople %}
+
+                        <option
+                            value="{{ salesperson['id'] }}"
+                            {% if request.form.get('salesperson_id') == salesperson['id']|string %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ salesperson["first_name"] }}
+                            {{ salesperson["last_name"] }}
+
+                            {% if salesperson["job_title"] %}
+                                — {{ salesperson["job_title"] }}
+                            {% endif %}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+                {% if not salespeople %}
+
+                    <small>
+                        Salespeople will appear here after
+                        Company Personnel records are added.
+                    </small>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+                <h3>Primary Contact</h3>
+
+                <p>
+                    Every customer requires a primary
+                    person of contact.
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+
+                <label for="first_name">
+                    First Name
+                </label>
+
+                <input
+                    type="text"
+                    id="first_name"
+                    name="first_name"
+                    value="{{ request.form.get('first_name', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="last_name">
+                    Last Name
+                </label>
+
+                <input
+                    type="text"
+                    id="last_name"
+                    name="last_name"
+                    value="{{ request.form.get('last_name', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="job_title">
+                    Title / Role
+                </label>
+
+                <input
+                    type="text"
+                    id="job_title"
+                    name="job_title"
+                    value="{{ request.form.get('job_title', '') }}"
+                    placeholder="Project Manager, Facility Manager, etc."
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="phone">
+                    Phone Number
+                </label>
+
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value="{{ request.form.get('phone', '') }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="phone_type">
+                    Phone Type
+                </label>
+
+                <select
+                    id="phone_type"
+                    name="phone_type"
+                    required
+                >
+
+                    <option value="">
+                        Select Type
+                    </option>
+
+                    {% for phone_type in [
+                        'mobile',
+                        'work',
+                        'home'
+                    ] %}
+
+                        <option
+                            value="{{ phone_type }}"
+                            {% if request.form.get('phone_type') == phone_type %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ phone_type|title }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="email">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value="{{ request.form.get('email', '') }}"
+                    required
+                >
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+                <h3>Billing</h3>
+
+                <p>
+                    Configure a default third-party billing
+                    customer only when another entity normally
+                    handles invoices for this customer.
+                </p>
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field admin-field-full">
+
+                <label class="admin-checkbox">
+
+                    <input
+                        type="checkbox"
+                        name="uses_third_party_billing"
+                        value="1"
+                        {% if request.form.get('uses_third_party_billing') %}
+                            checked
+                        {% endif %}
+                    >
+
+                    This customer normally uses a
+                    third-party billing customer
+
+                </label>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="default_billing_customer_id">
+                    Default Billing Customer
+                </label>
+
+                <select
+                    id="default_billing_customer_id"
+                    name="default_billing_customer_id"
+                >
+
+                    <option value="">
+                        Select Customer
+                    </option>
+
+                    {% for billing_customer in billing_customers %}
+
+                        <option
+                            value="{{ billing_customer['id'] }}"
+                            {% if request.form.get('default_billing_customer_id') == billing_customer['id']|string %}
+                                selected
+                            {% endif %}
+                        >
+
+                            {% if billing_customer["customer_type"] == "commercial" %}
+
+                                {{ billing_customer["commercial_name"] }}
+
+                            {% else %}
+
+                                {{ billing_customer["first_name"] }}
+                                {{ billing_customer["last_name"] }}
+
+                            {% endif %}
+
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label for="notes">
+                    Customer Notes
+                </label>
+
+                <textarea
+                    id="notes"
+                    name="notes"
+                    rows="5"
+                >{{ request.form.get('notes', '') }}</textarea>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <div class="admin-form-actions">
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Save Customer
+        </button>
+
+        <a
+            href="{{ url_for('admin_customers') }}"
+            class="admin-secondary-button"
+        >
+            Cancel
+        </a>
+
+    </div>
+
+</form>
+
+{% endblock %}

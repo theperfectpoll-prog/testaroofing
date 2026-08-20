@@ -1,0 +1,332 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Customers | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Customers
+        </span>
+
+        <h2>Customers</h2>
+
+        <p>
+            Manage residential and commercial customers,
+            contacts, sales assignments, and accounting
+            relationships.
+        </p>
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for('admin_customer_new') }}"
+            class="admin-primary-button"
+        >
+            Add Customer
+        </a>
+
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+            <span>Total Customers</span>
+            <strong>{{ customer_count }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Commercial</span>
+            <strong>{{ commercial_customer_count }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Residential</span>
+            <strong>{{ residential_customer_count }}</strong>
+        </div>
+
+    </div>
+
+
+    {% if customers %}
+
+        <div class="admin-table-wrapper">
+
+            <table class="admin-project-table">
+
+                <thead>
+
+                    <tr>
+                        <th>Customer</th>
+                        <th>Primary Contact</th>
+                        <th>Location</th>
+                        <th>Salesperson</th>
+                        <th>QuickBooks</th>
+                        <th>Status</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for customer in customers %}
+
+                        <tr>
+
+                            <td>
+
+                                <strong>
+
+                                    {% if customer["customer_type"] == "commercial" %}
+
+                                        {{ customer["commercial_name"] }}
+
+                                    {% else %}
+
+                                        {{ customer["primary_first_name"] }}
+                                        {{ customer["primary_last_name"] }}
+
+                                    {% endif %}
+
+                                </strong>
+
+                                <small>
+
+                                    {% if customer["customer_type"] == "commercial" %}
+                                        Commercial
+                                    {% else %}
+                                        Residential
+                                    {% endif %}
+
+                                    {% if customer["is_general_contractor"] %}
+                                        · General Contractor
+                                    {% endif %}
+
+                                </small>
+
+                            </td>
+
+
+                            <td>
+
+                                <strong>
+                                    {{ customer["primary_first_name"] }}
+                                    {{ customer["primary_last_name"] }}
+                                </strong>
+
+                                <small>
+                                    {{ customer["primary_phone"] }}
+                                    ·
+                                    {{ customer["primary_phone_type"]|title }}
+                                </small>
+
+                                <small>
+                                    {{ customer["primary_email"] }}
+                                </small>
+
+                            </td>
+
+
+                            <td>
+
+                                <strong>
+                                    {{ customer["city"] }},
+                                    {{ customer["state"] }}
+                                </strong>
+
+                                <small>
+                                    {{ customer["address_line_1"] }}
+                                </small>
+
+                            </td>
+
+
+                            <td>
+
+                                {% if customer["salesperson_first_name"] %}
+
+                                    <strong>
+                                        {{ customer["salesperson_first_name"] }}
+                                        {{ customer["salesperson_last_name"] }}
+                                    </strong>
+
+                                {% else %}
+
+                                    <span class="admin-muted-text">
+                                        Not Assigned
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if customer["quickbooks_customer_id"] %}
+
+                                    <span class="admin-status admin-status-published">
+                                        Connected
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="admin-status admin-status-draft">
+                                        Not Connected
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if customer["status"] == "active" %}
+
+                                    <span class="admin-status admin-status-published">
+                                        Active
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="admin-status admin-status-draft">
+                                        Inactive
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <div class="admin-empty-state admin-empty-state-large">
+
+            <h3>No Customers Yet</h3>
+
+            <p>
+                The Testa Roofing customer database is ready.
+                Existing customers will eventually be imported
+                from QuickBooks, or you can create a customer
+                manually now.
+            </p>
+
+            <a
+                href="{{ url_for('admin_customer_new') }}"
+                class="admin-primary-button"
+            >
+                Add First Customer
+            </a>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>QuickBooks Integration</h3>
+
+            <p>
+                QuickBooks currently contains the existing
+                Testa Roofing customer list. The integration
+                will import those customers into this
+                operational database and keep accounting
+                records linked by QuickBooks Customer ID.
+            </p>
+        </div>
+
+    </div>
+
+
+    <div class="admin-section-card-grid">
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Connect QuickBooks
+            </strong>
+
+            <span>
+                Authorize Testa Roofing to securely access
+                the QuickBooks Online customer database.
+            </span>
+
+            <small>
+                Integration setup coming next
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Import Customers
+            </strong>
+
+            <span>
+                Pull the existing QuickBooks customer list
+                into Testa Roofing without re-entering
+                customer information.
+            </span>
+
+            <small>
+                Requires QuickBooks connection
+            </small>
+
+        </div>
+
+
+        <div class="admin-section-card admin-section-card-disabled">
+
+            <strong>
+                Sync Status
+            </strong>
+
+            <span>
+                Review which customers are connected to
+                QuickBooks and identify records needing
+                attention.
+            </span>
+
+            <small>
+                Requires QuickBooks connection
+            </small>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

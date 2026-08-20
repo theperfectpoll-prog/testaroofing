@@ -12,13 +12,13 @@
 .admin-sidebar {
     display: flex;
     flex-direction: column;
-    padding: 38px 26px;
+    padding: 28px 22px;
     color: #ffffff;
     background-color: #11233a;
 }
 
 .admin-sidebar-heading {
-    margin-bottom: 36px;
+    margin-bottom: 18px;
 }
 
 .admin-sidebar-heading h1 {
@@ -39,14 +39,14 @@
 .admin-navigation {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
 }
 
 .admin-navigation a,
 .admin-navigation-disabled {
     display: flex;
     flex-direction: column;
-    padding: 13px 15px;
+    padding: 8px 12px;
     color: rgba(255, 255, 255, 0.72);
     border-radius: 6px;
     font-weight: 700;
@@ -1826,18 +1826,94 @@
 
 .admin-navigation-section {
     display: block;
-    margin: 1.5rem 0 0.5rem;
+    margin: 0.85rem 0 0.25rem;
     padding: 0 0.75rem;
 
     color: #8292a1;
 
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     font-weight: 700;
 
     letter-spacing: 0.08em;
     text-transform: uppercase;
 }
 
+.admin-navigation-section:first-child {
+    margin-top: 0;
+}
+
+.admin-navigation-group {
+    margin-top: 0.7rem;
+}
+
+.admin-navigation-group summary {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+
+    padding: 7px 12px;
+
+    color: #8292a1;
+
+    cursor: pointer;
+
+    font-size: 0.68rem;
+    font-weight: 700;
+
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+
+    list-style: none;
+}
+
+.admin-navigation-group summary::-webkit-details-marker {
+    display: none;
+}
+
+.admin-navigation-group summary::after {
+    content: "›";
+
+    margin-left: 10px;
+
+    color: #8292a1;
+
+    font-size: 1.05rem;
+    font-weight: 700;
+
+    transform: rotate(0deg);
+
+    transition: transform 0.15s ease;
+}
+
+.admin-navigation-group[open] summary::after {
+    transform: rotate(90deg);
+}
+
+.admin-navigation-group summary:hover,
+.admin-navigation-group summary:focus-visible {
+    color: #ffffff;
+}
+
+.admin-navigation-group summary:hover::after,
+.admin-navigation-group summary:focus-visible::after {
+    color: #ffffff;
+}
+
+.admin-navigation-submenu {
+    display: flex;
+    flex-direction: column;
+
+    margin-top: 2px;
+    padding-left: 8px;
+
+    gap: 2px;
+}
+
+.admin-navigation-submenu a,
+.admin-navigation-submenu .admin-navigation-disabled {
+    padding-left: 16px;
+}
 
 /* ---------------------------------------------------------
    USERS & SECURITY

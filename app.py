@@ -661,6 +661,247 @@ def ensure_database_schema():
         (datetime.now(UTC).isoformat(timespec="seconds"),),
     )
 
+    # ---------------------------------------------------------
+    # COMPANY PERSONNEL
+    # ---------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS company_personnel (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+
+            job_title TEXT,
+
+            email TEXT,
+            phone TEXT,
+
+            is_salesperson INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+
+            admin_user_id INTEGER,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (admin_user_id)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_company_personnel_active
+        ON company_personnel (is_active)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_company_personnel_salesperson
+        ON company_personnel (
+            is_salesperson,
+            is_active
+        )
+        """
+    )
+
+
+    # ---------------------------------------------------------
+    # CUSTOMERS
+    # ---------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            customer_type TEXT NOT NULL,
+
+            commercial_name TEXT,
+
+            is_general_contractor INTEGER
+                NOT NULL DEFAULT 0,
+
+            address_line_1 TEXT NOT NULL,
+            address_line_2 TEXT,
+            city TEXT NOT NULL,
+            state TEXT NOT NULL,
+            postal_code TEXT NOT NULL,
+
+            default_salesperson_id INTEGER,
+
+            uses_third_party_billing INTEGER
+                NOT NULL DEFAULT 0,
+
+            default_billing_customer_id INTEGER,
+
+            quickbooks_customer_id TEXT,
+
+            status TEXT NOT NULL DEFAULT 'active',
+
+            notes TEXT,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (default_salesperson_id)
+                REFERENCES company_personnel (id)
+                ON DELETE SET NULL,
+
+            FOREIGN KEY (default_billing_customer_id)
+                REFERENCES customers (id)
+                ON DELETE SET NULL,
+
+            CHECK (
+                customer_type IN (
+                    'residential',
+                    'commercial'
+                )
+            ),
+
+            CHECK (
+                status IN (
+                    'active',
+                    'inactive'
+                )
+            ),
+
+            CHECK (
+                customer_type != 'commercial'
+                OR (
+                    commercial_name IS NOT NULL
+                    AND TRIM(commercial_name) != ''
+                )
+            )
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_type
+        ON customers (customer_type)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_commercial_name
+        ON customers (commercial_name)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_salesperson
+        ON customers (default_salesperson_id)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_status
+        ON customers (status)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_general_contractor
+        ON customers (
+            is_general_contractor,
+            status
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_quickbooks
+        ON customers (quickbooks_customer_id)
+        """
+    )
+
+
+    # ---------------------------------------------------------
+    # CUSTOMER CONTACTS
+    # ---------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS customer_contacts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            customer_id INTEGER NOT NULL,
+
+            first_name TEXT NOT NULL,
+            last_name TEXT NOT NULL,
+
+            job_title TEXT,
+
+            phone TEXT NOT NULL,
+            phone_type TEXT NOT NULL,
+
+            email TEXT NOT NULL,
+
+            is_primary INTEGER NOT NULL DEFAULT 0,
+            is_billing_contact INTEGER NOT NULL DEFAULT 0,
+            is_active INTEGER NOT NULL DEFAULT 1,
+
+            notes TEXT,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (customer_id)
+                REFERENCES customers (id)
+                ON DELETE CASCADE,
+
+            CHECK (
+                phone_type IN (
+                    'home',
+                    'mobile',
+                    'work'
+                )
+            )
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customer_contacts_customer
+        ON customer_contacts (
+            customer_id,
+            is_active
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_customer_contacts_one_primary
+        ON customer_contacts (customer_id)
+        WHERE is_primary = 1
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customer_contacts_billing
+        ON customer_contacts (
+            customer_id,
+            is_billing_contact
+        )
+        """
+    )
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS admin_audit_log (
@@ -2226,6 +2467,19 @@ def public_learning_article(slug):
 # =========================================================
 # ADMIN LOGIN
 # =========================================================
+
+@app.route("/privacy")
+def privacy_policy():
+    return render_template(
+        "privacy.html"
+    )
+
+
+@app.route("/terms")
+def terms_of_use():
+    return render_template(
+        "terms.html"
+    )
 
 @app.route(
     "/admin/login",
@@ -5206,26 +5460,923 @@ def admin_user_reset_mfa(admin_user_id):
 # WEBSITE ADMINISTRATION
 # =========================================================
 
+@app.route("/admin/personnel")
+@admin_required
+def admin_personnel():
+    connection = get_db_connection()
+
+    personnel_rows = connection.execute(
+        """
+        SELECT
+            id,
+            first_name,
+            last_name,
+            job_title,
+            email,
+            phone,
+            is_salesperson,
+            is_active,
+            admin_user_id,
+            created_at,
+            updated_at
+        FROM company_personnel
+        ORDER BY
+            is_active DESC,
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE
+        """
+    ).fetchall()
+
+    active_personnel_count = sum(
+        1
+        for person in personnel_rows
+        if person["is_active"]
+    )
+
+    salesperson_count = sum(
+        1
+        for person in personnel_rows
+        if person["is_active"]
+        and person["is_salesperson"]
+    )
+
+    connection.close()
+
+    return render_template(
+        "admin_personnel.html",
+        personnel=personnel_rows,
+        personnel_count=len(personnel_rows),
+        active_personnel_count=active_personnel_count,
+        salesperson_count=salesperson_count,
+    )
+
+@app.route(
+    "/admin/personnel/new",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_personnel_new():
+    if request.method == "POST":
+        validate_csrf_token()
+
+        first_name = (
+            request.form.get(
+                "first_name",
+                ""
+            ).strip()
+        )
+
+        last_name = (
+            request.form.get(
+                "last_name",
+                ""
+            ).strip()
+        )
+
+        job_title = (
+            request.form.get(
+                "job_title",
+                ""
+            ).strip()
+        )
+
+        email = normalize_email(
+            request.form.get(
+                "email",
+                ""
+            )
+        )
+
+        phone = (
+            request.form.get(
+                "phone",
+                ""
+            ).strip()
+        )
+
+        is_salesperson = (
+            1
+            if request.form.get(
+                "is_salesperson"
+            )
+            else 0
+        )
+
+        errors = []
+
+        if not first_name:
+            errors.append(
+                "First name is required."
+            )
+
+        if not last_name:
+            errors.append(
+                "Last name is required."
+            )
+
+        if errors:
+            for error in errors:
+                flash(
+                    error,
+                    "error",
+                )
+
+            return render_template(
+                "admin_personnel_new.html"
+            )
+
+        now = current_timestamp()
+
+        connection = get_db_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO company_personnel (
+                first_name,
+                last_name,
+                job_title,
+                email,
+                phone,
+                is_salesperson,
+                is_active,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, 1, ?, ?
+            )
+            """,
+            (
+                first_name,
+                last_name,
+                job_title or None,
+                email or None,
+                phone or None,
+                is_salesperson,
+                now,
+                now,
+            ),
+        )
+
+        personnel_id = cursor.lastrowid
+
+        connection.commit()
+        connection.close()
+
+        write_audit_log(
+            action="personnel_created",
+            category="company",
+            description=(
+                f"Personnel record created: "
+                f"{first_name} {last_name}."
+            ),
+            entity_type="company_personnel",
+            entity_id=personnel_id,
+        )
+
+        flash(
+            (
+                f"{first_name} {last_name} "
+                "was added successfully."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for("admin_personnel")
+        )
+
+    return render_template(
+        "admin_personnel_new.html"
+    )
+
+@app.route(
+    "/admin/personnel/<int:personnel_id>/edit",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_personnel_edit(personnel_id):
+    connection = get_db_connection()
+
+    person = connection.execute(
+        """
+        SELECT *
+        FROM company_personnel
+        WHERE id = ?
+        """,
+        (personnel_id,),
+    ).fetchone()
+
+    if person is None:
+        connection.close()
+
+        flash(
+            "That personnel record could not be found.",
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_personnel")
+        )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        first_name = (
+            request.form.get(
+                "first_name",
+                ""
+            ).strip()
+        )
+
+        last_name = (
+            request.form.get(
+                "last_name",
+                ""
+            ).strip()
+        )
+
+        job_title = (
+            request.form.get(
+                "job_title",
+                ""
+            ).strip()
+        )
+
+        email = normalize_email(
+            request.form.get(
+                "email",
+                ""
+            )
+        )
+
+        phone = (
+            request.form.get(
+                "phone",
+                ""
+            ).strip()
+        )
+
+        is_salesperson = (
+            1
+            if request.form.get(
+                "is_salesperson"
+            )
+            else 0
+        )
+
+        is_active = (
+            1
+            if request.form.get(
+                "is_active"
+            )
+            else 0
+        )
+
+        errors = []
+
+        if not first_name:
+            errors.append(
+                "First name is required."
+            )
+
+        if not last_name:
+            errors.append(
+                "Last name is required."
+            )
+
+        if errors:
+            connection.close()
+
+            for error in errors:
+                flash(
+                    error,
+                    "error",
+                )
+
+            return render_template(
+                "admin_personnel_edit.html",
+                person=person,
+            )
+
+        now = current_timestamp()
+
+        connection.execute(
+            """
+            UPDATE company_personnel
+            SET
+                first_name = ?,
+                last_name = ?,
+                job_title = ?,
+                email = ?,
+                phone = ?,
+                is_salesperson = ?,
+                is_active = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                first_name,
+                last_name,
+                job_title or None,
+                email or None,
+                phone or None,
+                is_salesperson,
+                is_active,
+                now,
+                personnel_id,
+            ),
+        )
+
+        connection.commit()
+        connection.close()
+
+        write_audit_log(
+            action="personnel_updated",
+            category="company",
+            description=(
+                f"Personnel record updated: "
+                f"{first_name} {last_name}."
+            ),
+            entity_type="company_personnel",
+            entity_id=personnel_id,
+        )
+
+        flash(
+            (
+                f"{first_name} {last_name} "
+                "was updated successfully."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for("admin_personnel")
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_personnel_edit.html",
+        person=person,
+    )
+
+@app.route("/admin/customers")
+@admin_required
+def admin_customers():
+    connection = get_db_connection()
+
+    customer_rows = connection.execute(
+        """
+        SELECT
+            customers.id,
+            customers.customer_type,
+            customers.commercial_name,
+            customers.is_general_contractor,
+            customers.address_line_1,
+            customers.address_line_2,
+            customers.city,
+            customers.state,
+            customers.postal_code,
+            customers.quickbooks_customer_id,
+            customers.status,
+            customers.created_at,
+
+            primary_contact.first_name
+                AS primary_first_name,
+            primary_contact.last_name
+                AS primary_last_name,
+            primary_contact.phone
+                AS primary_phone,
+            primary_contact.phone_type
+                AS primary_phone_type,
+            primary_contact.email
+                AS primary_email,
+
+            salesperson.first_name
+                AS salesperson_first_name,
+            salesperson.last_name
+                AS salesperson_last_name
+
+        FROM customers
+
+        LEFT JOIN customer_contacts AS primary_contact
+            ON primary_contact.customer_id = customers.id
+           AND primary_contact.is_primary = 1
+
+        LEFT JOIN company_personnel AS salesperson
+            ON salesperson.id =
+               customers.default_salesperson_id
+
+        ORDER BY
+            CASE
+                WHEN customers.customer_type = 'commercial'
+                    THEN COALESCE(
+                        customers.commercial_name,
+                        ''
+                    )
+                ELSE COALESCE(
+                    primary_contact.last_name,
+                    ''
+                )
+            END COLLATE NOCASE,
+            COALESCE(
+                primary_contact.first_name,
+                ''
+            ) COLLATE NOCASE
+        """
+    ).fetchall()
+
+    active_customer_count = sum(
+        1
+        for customer in customer_rows
+        if customer["status"] == "active"
+    )
+
+    commercial_customer_count = sum(
+        1
+        for customer in customer_rows
+        if customer["customer_type"] == "commercial"
+    )
+
+    residential_customer_count = sum(
+        1
+        for customer in customer_rows
+        if customer["customer_type"] == "residential"
+    )
+
+    connection.close()
+
+    return render_template(
+        "admin_customers.html",
+        customers=customer_rows,
+        customer_count=len(customer_rows),
+        active_customer_count=active_customer_count,
+        commercial_customer_count=commercial_customer_count,
+        residential_customer_count=residential_customer_count,
+    )
+
+
+@app.route(
+    "/admin/customers/new",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_customer_new():
+    connection = get_db_connection()
+
+    salespeople = connection.execute(
+        """
+        SELECT
+            id,
+            first_name,
+            last_name,
+            job_title
+        FROM company_personnel
+        WHERE is_active = 1
+          AND is_salesperson = 1
+        ORDER BY
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE
+        """
+    ).fetchall()
+
+    billing_customers = connection.execute(
+        """
+        SELECT
+            customers.id,
+            customers.customer_type,
+            customers.commercial_name,
+            primary_contact.first_name,
+            primary_contact.last_name
+        FROM customers
+
+        LEFT JOIN customer_contacts AS primary_contact
+            ON primary_contact.customer_id = customers.id
+           AND primary_contact.is_primary = 1
+
+        WHERE customers.status = 'active'
+
+        ORDER BY
+            CASE
+                WHEN customers.customer_type = 'commercial'
+                    THEN COALESCE(
+                        customers.commercial_name,
+                        ''
+                    )
+                ELSE COALESCE(
+                    primary_contact.last_name,
+                    ''
+                )
+            END COLLATE NOCASE
+        """
+    ).fetchall()
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        customer_type = (
+            request.form.get(
+                "customer_type",
+                ""
+            )
+            .strip()
+            .lower()
+        )
+
+        commercial_name = (
+            request.form.get(
+                "commercial_name",
+                ""
+            ).strip()
+        )
+
+        first_name = (
+            request.form.get(
+                "first_name",
+                ""
+            ).strip()
+        )
+
+        last_name = (
+            request.form.get(
+                "last_name",
+                ""
+            ).strip()
+        )
+
+        address_line_1 = (
+            request.form.get(
+                "address_line_1",
+                ""
+            ).strip()
+        )
+
+        address_line_2 = (
+            request.form.get(
+                "address_line_2",
+                ""
+            ).strip()
+        )
+
+        city = (
+            request.form.get(
+                "city",
+                ""
+            ).strip()
+        )
+
+        state = (
+            request.form.get(
+                "state",
+                ""
+            ).strip()
+            .upper()
+        )
+
+        postal_code = (
+            request.form.get(
+                "postal_code",
+                ""
+            ).strip()
+        )
+
+        phone = (
+            request.form.get(
+                "phone",
+                ""
+            ).strip()
+        )
+
+        phone_type = (
+            request.form.get(
+                "phone_type",
+                ""
+            )
+            .strip()
+            .lower()
+        )
+
+        email = normalize_email(
+            request.form.get(
+                "email",
+                ""
+            )
+        )
+
+        job_title = (
+            request.form.get(
+                "job_title",
+                ""
+            ).strip()
+        )
+
+        salesperson_id = (
+            request.form.get(
+                "salesperson_id",
+                ""
+            ).strip()
+        )
+
+        is_general_contractor = (
+            1
+            if request.form.get(
+                "is_general_contractor"
+            )
+            else 0
+        )
+
+        uses_third_party_billing = (
+            1
+            if request.form.get(
+                "uses_third_party_billing"
+            )
+            else 0
+        )
+
+        default_billing_customer_id = (
+            request.form.get(
+                "default_billing_customer_id",
+                ""
+            ).strip()
+        )
+
+        notes = (
+            request.form.get(
+                "notes",
+                ""
+            ).strip()
+        )
+
+        errors = []
+
+        if customer_type not in {
+            "residential",
+            "commercial",
+        }:
+            errors.append(
+                "Select Residential or Commercial."
+            )
+
+        if (
+            customer_type == "commercial"
+            and not commercial_name
+        ):
+            errors.append(
+                "Commercial Customer Name is required."
+            )
+
+        if not first_name:
+            errors.append(
+                "Primary contact first name is required."
+            )
+
+        if not last_name:
+            errors.append(
+                "Primary contact last name is required."
+            )
+
+        if not address_line_1:
+            errors.append(
+                "Address is required."
+            )
+
+        if not city:
+            errors.append(
+                "City is required."
+            )
+
+        if not state:
+            errors.append(
+                "State is required."
+            )
+
+        if not postal_code:
+            errors.append(
+                "ZIP / Postal Code is required."
+            )
+
+        if not phone:
+            errors.append(
+                "Primary contact phone number is required."
+            )
+
+        if phone_type not in {
+            "home",
+            "mobile",
+            "work",
+        }:
+            errors.append(
+                "Select a phone type."
+            )
+
+        if not email:
+            errors.append(
+                "Primary contact email is required."
+            )
+
+        if (
+            uses_third_party_billing
+            and not default_billing_customer_id
+        ):
+            errors.append(
+                (
+                    "Select the default third-party "
+                    "billing customer."
+                )
+            )
+
+        if errors:
+            connection.close()
+
+            for error in errors:
+                flash(
+                    error,
+                    "error",
+                )
+
+            return render_template(
+                "admin_customer_new.html",
+                salespeople=salespeople,
+                billing_customers=billing_customers,
+            )
+
+        now = current_timestamp()
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO customers (
+                customer_type,
+                commercial_name,
+                is_general_contractor,
+                address_line_1,
+                address_line_2,
+                city,
+                state,
+                postal_code,
+                default_salesperson_id,
+                uses_third_party_billing,
+                default_billing_customer_id,
+                status,
+                notes,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                ?, ?, 'active', ?, ?, ?
+            )
+            """,
+            (
+                customer_type,
+                (
+                    commercial_name
+                    if customer_type == "commercial"
+                    else None
+                ),
+                is_general_contractor,
+                address_line_1,
+                address_line_2 or None,
+                city,
+                state,
+                postal_code,
+                int(salesperson_id)
+                if salesperson_id
+                else None,
+                uses_third_party_billing,
+                int(default_billing_customer_id)
+                if default_billing_customer_id
+                else None,
+                notes or None,
+                now,
+                now,
+            ),
+        )
+
+        customer_id = cursor.lastrowid
+
+        cursor.execute(
+            """
+            INSERT INTO customer_contacts (
+                customer_id,
+                first_name,
+                last_name,
+                job_title,
+                phone,
+                phone_type,
+                email,
+                is_primary,
+                is_billing_contact,
+                is_active,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?, ?,
+                1, 0, 1, ?, ?
+            )
+            """,
+            (
+                customer_id,
+                first_name,
+                last_name,
+                job_title or None,
+                phone,
+                phone_type,
+                email,
+                now,
+                now,
+            ),
+        )
+
+        connection.commit()
+        connection.close()
+
+        customer_display_name = (
+            commercial_name
+            if customer_type == "commercial"
+            else f"{first_name} {last_name}"
+        )
+
+        write_audit_log(
+            action="customer_created",
+            category="customers",
+            description=(
+                f"Customer created: "
+                f"{customer_display_name}."
+            ),
+            entity_type="customer",
+            entity_id=customer_id,
+        )
+
+        flash(
+            (
+                f"{customer_display_name} "
+                "was added successfully."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_customer_new.html",
+        salespeople=salespeople,
+        billing_customers=billing_customers,
+    )
+
 @app.route("/admin/website")
 @admin_required
 def admin_website_dashboard():
     connection = get_db_connection()
 
+    # ---------------------------------------------------------
+    # WEBSITE PROJECTS
+    # ---------------------------------------------------------
+
     project_count = connection.execute(
-        "SELECT COUNT(*) AS total FROM projects"
+        """
+        SELECT COUNT(*) AS total
+        FROM projects
+        """
     ).fetchone()["total"]
 
     published_count = connection.execute(
-        "SELECT COUNT(*) AS total FROM projects WHERE status = 'published'"
+        """
+        SELECT COUNT(*) AS total
+        FROM projects
+        WHERE status = 'published'
+        """
     ).fetchone()["total"]
 
     draft_count = connection.execute(
-        "SELECT COUNT(*) AS total FROM projects WHERE status = 'draft'"
+        """
+        SELECT COUNT(*) AS total
+        FROM projects
+        WHERE status = 'draft'
+        """
     ).fetchone()["total"]
 
-    featured_count = connection.execute(
-        "SELECT COUNT(*) AS total FROM projects WHERE is_featured = 1"
-    ).fetchone()["total"]
+    featured_project = connection.execute(
+        """
+        SELECT id, title
+        FROM projects
+        WHERE is_featured = 1
+        LIMIT 1
+        """
+    ).fetchone()
+
+
+    # ---------------------------------------------------------
+    # LEARNING CENTER
+    # ---------------------------------------------------------
 
     article_count = connection.execute(
         """
@@ -5257,14 +6408,58 @@ def admin_website_dashboard():
         """
     ).fetchone()["total"]
 
-    featured_project = connection.execute(
+
+    # ---------------------------------------------------------
+    # USERS & SECURITY
+    # ---------------------------------------------------------
+
+    admin_count = connection.execute(
         """
-        SELECT id, title
-        FROM projects
-        WHERE is_featured = 1
-        LIMIT 1
+        SELECT COUNT(*) AS total
+        FROM admin_users
         """
-    ).fetchone()
+    ).fetchone()["total"]
+
+    active_admin_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM admin_users
+        WHERE is_active = 1
+          AND account_status = 'active'
+        """
+    ).fetchone()["total"]
+
+    frozen_admin_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM admin_users
+        WHERE account_status = 'frozen'
+        """
+    ).fetchone()["total"]
+
+    disabled_admin_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM admin_users
+        WHERE account_status = 'disabled'
+        """
+    ).fetchone()["total"]
+
+    mfa_protected_admin_count = connection.execute(
+        """
+        SELECT COUNT(*) AS total
+        FROM admin_users
+        WHERE is_active = 1
+          AND account_status = 'active'
+          AND mfa_enabled = 1
+          AND mfa_reset_required = 0
+        """
+    ).fetchone()["total"]
+
+
+    # ---------------------------------------------------------
+    # WEBSITE STATUS
+    # ---------------------------------------------------------
 
     hero_slides = connection.execute(
         """
@@ -5275,7 +6470,9 @@ def admin_website_dashboard():
     ).fetchall()
 
     active_hero_count = sum(
-        1 for slide in hero_slides if slide["is_active"]
+        1
+        for slide in hero_slides
+        if slide["is_active"]
     )
 
     site_settings = connection.execute(
@@ -5292,22 +6489,55 @@ def admin_website_dashboard():
     ).fetchone()
 
     latest_project_update = connection.execute(
-        "SELECT MAX(updated_at) AS updated_at FROM projects"
+        """
+        SELECT MAX(updated_at) AS updated_at
+        FROM projects
+        """
     ).fetchone()["updated_at"]
 
     latest_hero_update = connection.execute(
-        "SELECT MAX(updated_at) AS updated_at FROM homepage_hero_slides"
+        """
+        SELECT MAX(updated_at) AS updated_at
+        FROM homepage_hero_slides
+        """
+    ).fetchone()["updated_at"]
+
+    latest_article_update = connection.execute(
+        """
+        SELECT MAX(updated_at) AS updated_at
+        FROM learning_articles
+        """
     ).fetchone()["updated_at"]
 
     connection.close()
 
+
+    # ---------------------------------------------------------
+    # DERIVED WEBSITE STATUS
+    # ---------------------------------------------------------
+
     update_candidates = [
-        site_settings["updated_at"] if site_settings else None,
+        (
+            site_settings["updated_at"]
+            if site_settings
+            else None
+        ),
         latest_project_update,
         latest_hero_update,
+        latest_article_update,
     ]
-    update_candidates = [value for value in update_candidates if value]
-    website_last_updated = max(update_candidates) if update_candidates else None
+
+    update_candidates = [
+        value
+        for value in update_candidates
+        if value
+    ]
+
+    website_last_updated = (
+        max(update_candidates)
+        if update_candidates
+        else None
+    )
 
     company_information_complete = bool(
         site_settings
@@ -5315,20 +6545,36 @@ def admin_website_dashboard():
         and site_settings["legal_name"]
         and site_settings["service_area_summary"]
     )
+
     contact_information_complete = bool(
         site_settings
         and site_settings["phone_display"]
         and site_settings["phone_link"]
         and site_settings["public_email"]
     )
-    homepage_ready = bool(active_hero_count and contact_information_complete)
-    projects_enabled = bool(published_count)
+
+    homepage_ready = bool(
+        active_hero_count
+        and contact_information_complete
+    )
 
     social_connections = {
-        "Facebook": bool(site_settings and site_settings["facebook_url"]),
-        "Instagram": bool(site_settings and site_settings["instagram_url"]),
-        "LinkedIn": bool(site_settings and site_settings["linkedin_url"]),
-        "YouTube": bool(site_settings and site_settings["youtube_url"]),
+        "Facebook": bool(
+            site_settings
+            and site_settings["facebook_url"]
+        ),
+        "Instagram": bool(
+            site_settings
+            and site_settings["instagram_url"]
+        ),
+        "LinkedIn": bool(
+            site_settings
+            and site_settings["linkedin_url"]
+        ),
+        "YouTube": bool(
+            site_settings
+            and site_settings["youtube_url"]
+        ),
     }
 
     return render_template(
@@ -5336,12 +6582,16 @@ def admin_website_dashboard():
         project_count=project_count,
         published_count=published_count,
         draft_count=draft_count,
-        featured_count=featured_count,
+        featured_project=featured_project,
         article_count=article_count,
         published_article_count=published_article_count,
         article_draft_count=article_draft_count,
         topic_count=topic_count,
-        featured_project=featured_project,
+        admin_count=admin_count,
+        active_admin_count=active_admin_count,
+        frozen_admin_count=frozen_admin_count,
+        disabled_admin_count=disabled_admin_count,
+        mfa_protected_admin_count=mfa_protected_admin_count,
         hero_slides=hero_slides,
         active_hero_count=active_hero_count,
         max_hero_slides=MAX_HOMEPAGE_HERO_SLIDES,
@@ -5350,7 +6600,6 @@ def admin_website_dashboard():
         company_information_complete=company_information_complete,
         contact_information_complete=contact_information_complete,
         homepage_ready=homepage_ready,
-        projects_enabled=projects_enabled,
         website_last_updated=website_last_updated,
     )
 

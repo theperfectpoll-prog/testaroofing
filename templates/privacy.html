@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+
+
+{% block title %}
+    Privacy Policy | Testa Roofing
+{% endblock %}
+
+
+{% block content %}
+
+<section class="page-section">
+
+    <div class="container">
+
+        <div class="legal-content">
+
+            <span class="eyebrow">
+                Testa Roofing
+            </span>
+
+            <h1>Privacy Policy</h1>
+
+            <p>
+                Last updated: August 20, 2026
+            </p>
+
+
+            <h2>Overview</h2>
+
+            <p>
+                Absolute Roof Solutions, doing business as
+                Testa Roofing, respects the privacy of our
+                customers, employees, business partners,
+                website visitors, and authorized users of
+                our administration system.
+            </p>
+
+            <p>
+                This Privacy Policy explains how information
+                may be collected, used, stored, and protected
+                through the Testa Roofing website and internal
+                administration system.
+            </p>
+
+
+            <h2>Information We Collect</h2>
+
+            <p>
+                Depending on how you interact with Testa
+                Roofing, we may collect information including:
+            </p>
+
+            <ul>
+                <li>
+                    Names and company names.
+                </li>
+
+                <li>
+                    Mailing, billing, project, and service
+                    addresses.
+                </li>
+
+                <li>
+                    Telephone numbers and email addresses.
+                </li>
+
+                <li>
+                    Customer contacts and project contacts.
+                </li>
+
+                <li>
+                    Estimate, project, work-order, invoice,
+                    and payment-related information.
+                </li>
+
+                <li>
+                    Communications and notes related to
+                    roofing services.
+                </li>
+
+                <li>
+                    Administrator account and security
+                    information used to protect access to
+                    the Testa Roofing administration system.
+                </li>
+            </ul>
+
+
+            <h2>QuickBooks Online Integration</h2>
+
+            <p>
+                The Testa Roofing administration system may
+                connect with QuickBooks Online to help manage
+                customer and accounting-related information.
+            </p>
+
+            <p>
+                When an authorized Testa Roofing user connects
+                QuickBooks Online, the application may access
+                information that is necessary to perform
+                authorized business functions, including
+                customer names, contact information, addresses,
+                accounting identifiers, invoices, payments,
+                and related accounting records.
+            </p>
+
+            <p>
+                QuickBooks information is used only for Testa
+                Roofing business operations and is not sold
+                to third parties.
+            </p>
+
+
+            <h2>How We Use Information</h2>
+
+            <p>
+                Information may be used to:
+            </p>
+
+            <ul>
+                <li>
+                    Prepare estimates and proposals.
+                </li>
+
+                <li>
+                    Perform and manage roofing work.
+                </li>
+
+                <li>
+                    Communicate with customers, contractors,
+                    property owners, and project contacts.
+                </li>
+
+                <li>
+                    Create and manage work orders.
+                </li>
+
+                <li>
+                    Schedule and track projects.
+                </li>
+
+                <li>
+                    Prepare invoices and record payments.
+                </li>
+
+                <li>
+                    Maintain customer and warranty history.
+                </li>
+
+                <li>
+                    Perform internal business reporting.
+                </li>
+
+                <li>
+                    Protect the security and integrity of
+                    Testa Roofing systems.
+                </li>
+            </ul>
+
+
+            <h2>Information Sharing</h2>
+
+            <p>
+                Testa Roofing does not sell customer or
+                business information.
+            </p>
+
+            <p>
+                Information may be shared with service
+                providers when reasonably necessary to
+                operate the business, provide roofing
+                services, maintain accounting records, host
+                technology systems, or comply with legal
+                obligations.
+            </p>
+
+
+            <h2>Data Security</h2>
+
+            <p>
+                Testa Roofing uses administrative and
+                technical safeguards intended to protect
+                information from unauthorized access,
+                disclosure, alteration, or loss.
+            </p>
+
+            <p>
+                Access to the Testa Roofing administration
+                system is restricted to authorized users and
+                may include password protection, multi-factor
+                authentication, account access controls, and
+                security auditing.
+            </p>
+
+
+            <h2>Data Retention</h2>
+
+            <p>
+                Information may be retained for as long as
+                reasonably necessary for business operations,
+                accounting, warranty records, project history,
+                legal obligations, and legitimate recordkeeping
+                purposes.
+            </p>
+
+
+            <h2>QuickBooks Disconnection and Data Requests</h2>
+
+            <p>
+                An authorized Testa Roofing administrator may
+                disconnect the QuickBooks Online integration
+                when it is no longer required.
+            </p>
+
+            <p>
+                Requests regarding information maintained by
+                Testa Roofing, including questions concerning
+                correction or deletion when applicable, may
+                be directed to Testa Roofing using the contact
+                information below.
+            </p>
+
+
+            <h2>Contact Us</h2>
+
+            <p>
+                Questions about this Privacy Policy may be
+                directed to:
+            </p>
+
+            <p>
+                <strong>
+                    Testa Roofing
+                </strong>
+                <br>
+
+                Absolute Roof Solutions
+                <br>
+
+                <a href="mailto:{{ site_settings['public_email'] }}">
+                    {{ site_settings["public_email"] }}
+                </a>
+                <br>
+
+                <a href="tel:{{ site_settings['phone_link'] }}">
+                    {{ site_settings["phone_display"] }}
+                </a>
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

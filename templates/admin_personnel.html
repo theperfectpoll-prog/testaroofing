@@ -1,0 +1,229 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Personnel | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Company
+        </span>
+
+        <h2>Personnel</h2>
+
+        <p>
+            Manage Testa Roofing personnel used for
+            sales assignments, work orders, scheduling,
+            and reporting.
+        </p>
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for('admin_personnel_new') }}"
+            class="admin-primary-button"
+        >
+            Add Personnel
+        </a>
+
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+            <span>Total Personnel</span>
+            <strong>{{ personnel_count }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Active Personnel</span>
+            <strong>{{ active_personnel_count }}</strong>
+        </div>
+
+        <div class="admin-stat-card">
+            <span>Salespeople</span>
+            <strong>{{ salesperson_count }}</strong>
+        </div>
+
+    </div>
+
+
+    {% if personnel %}
+
+        <div class="admin-table-wrapper">
+
+            <table class="admin-project-table">
+
+                <thead>
+
+                    <tr>
+                        <th>Name</th>
+                        <th>Title / Role</th>
+                        <th>Contact</th>
+                        <th>Salesperson</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for person in personnel %}
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    {{ person["first_name"] }}
+                                    {{ person["last_name"] }}
+                                </strong>
+                            </td>
+
+
+                            <td>
+
+                                {% if person["job_title"] %}
+
+                                    <strong>
+                                        {{ person["job_title"] }}
+                                    </strong>
+
+                                {% else %}
+
+                                    <span class="admin-muted-text">
+                                        Not Specified
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if person["phone"] %}
+                                    <strong>
+                                        {{ person["phone"] }}
+                                    </strong>
+                                {% endif %}
+
+                                {% if person["email"] %}
+                                    <small>
+                                        {{ person["email"] }}
+                                    </small>
+                                {% endif %}
+
+                                {% if not person["phone"]
+                                      and not person["email"] %}
+
+                                    <span class="admin-muted-text">
+                                        No Contact Information
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if person["is_salesperson"] %}
+
+                                    <span class="admin-status admin-status-published">
+                                        Yes
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="admin-status admin-status-draft">
+                                        No
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if person["is_active"] %}
+
+                                    <span class="admin-status admin-status-published">
+                                        Active
+                                    </span>
+
+                                {% else %}
+
+                                    <span class="admin-status admin-status-draft">
+                                        Inactive
+                                    </span>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td class="admin-table-actions">
+
+                                <a
+                                    href="{{ url_for(
+                                        'admin_personnel_edit',
+                                        personnel_id=person['id']
+                                    ) }}"
+                                >
+                                    Edit
+                                </a>
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <div class="admin-empty-state admin-empty-state-large">
+
+            <h3>No Personnel Yet</h3>
+
+            <p>
+                Add Testa Roofing personnel so they can
+                be assigned to customers, estimates,
+                work orders, scheduling, and reporting.
+            </p>
+
+            <a
+                href="{{ url_for('admin_personnel_new') }}"
+                class="admin-primary-button"
+            >
+                Add First Personnel Record
+            </a>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}
