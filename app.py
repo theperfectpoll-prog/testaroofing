@@ -22,6 +22,7 @@ from flask import (
     Response,
     abort,
     flash,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -102,6 +103,8 @@ QUICKBOOKS_TOKEN_ENCRYPTION_KEY = os.environ.get(
 QUICKBOOKS_ACCOUNTING_SCOPE = (
     "com.intuit.quickbooks.accounting"
 )
+
+QUICKBOOKS_CUSTOMER_IMPORT_BATCH_SIZE = 100
 
 QUICKBOOKS_DISCOVERY_URLS = {
     "sandbox": (
@@ -1051,7 +1054,35 @@ def map_quickbooks_customer_for_testa(
         ),
     }
 
-def import_quickbooks_customers():
+def process_quickbooks_customer_import_batch(
+    job_id,
+):
+    job = get_quickbooks_customer_import_job(
+        job_id
+    )
+
+    if job is None:
+        raise RuntimeError(
+            "QuickBooks customer import job "
+            "could not be found."
+        )
+
+    if job["status"] == "completed":
+        return {
+            "job_id": job_id,
+            "batch_count": 0,
+            "imported": 0,
+            "updated": 0,
+            "needs_review": 0,
+            "completed": True,
+        }
+
+    if job["status"] == "failed":
+        raise RuntimeError(
+            "QuickBooks customer import job "
+            "must be resumed before continuing."
+        )
+
     connection_data = (
         get_quickbooks_connection()
     )
@@ -1061,6 +1092,59 @@ def import_quickbooks_customers():
             "QuickBooks is not connected."
         )
 
+    if (
+        job["environment"]
+        != QUICKBOOKS_ENVIRONMENT
+        or job["quickbooks_realm_id"]
+        != connection_data["realm_id"]
+    ):
+        raise RuntimeError(
+            "QuickBooks customer import job "
+            "does not match the connected "
+            "QuickBooks company."
+        )
+
+    mark_quickbooks_customer_import_job_running(
+        job_id
+    )
+
+    start_position = job[
+        "next_start_position"
+    ]
+
+    batch_size = job[
+        "batch_size"
+    ]
+
+    try:
+        quickbooks_customers = (
+            query_quickbooks_customers(
+                start_position=start_position,
+                max_results=batch_size,
+            )
+        )
+
+    except Exception as exc:
+        fail_quickbooks_customer_import_job(
+            job_id,
+            str(exc),
+        )
+        raise
+
+    if not quickbooks_customers:
+        complete_quickbooks_customer_import_job(
+            job_id
+        )
+
+        return {
+            "job_id": job_id,
+            "batch_count": 0,
+            "imported": 0,
+            "updated": 0,
+            "needs_review": 0,
+            "completed": True,
+        }
+
     now = current_timestamp()
 
     connection = get_db_connection()
@@ -1069,460 +1153,779 @@ def import_quickbooks_customers():
     imported_count = 0
     updated_count = 0
     review_count = 0
-    total_count = 0
-
-    quickbooks_to_testa_ids = {}
 
     try:
-        for quickbooks_customers in (
-            iter_quickbooks_customer_batches()
+        for quickbooks_customer in (
+            quickbooks_customers
         ):
-            total_count += len(
-                quickbooks_customers
+            mapped = (
+                map_quickbooks_customer_for_testa(
+                    quickbooks_customer
+                )
             )
 
-            # ---------------------------------------------
-            # PASS 1
-            # Create or update this QuickBooks batch.
-            # ---------------------------------------------
+            quickbooks_customer_id = mapped[
+                "quickbooks_customer_id"
+            ]
 
-            for quickbooks_customer in quickbooks_customers:
-                mapped = (
-                    map_quickbooks_customer_for_testa(
-                        quickbooks_customer
-                    )
+            existing_customer = cursor.execute(
+                """
+                SELECT id
+                FROM customers
+                WHERE quickbooks_environment = ?
+                  AND quickbooks_realm_id = ?
+                  AND quickbooks_customer_id = ?
+                """,
+                (
+                    QUICKBOOKS_ENVIRONMENT,
+                    connection_data[
+                        "realm_id"
+                    ],
+                    quickbooks_customer_id,
+                ),
+            ).fetchone()
+
+            customer_type = mapped[
+                "proposed_customer_type"
+            ]
+
+            if customer_type not in {
+                "residential",
+                "commercial",
+            }:
+                customer_type = None
+
+            commercial_name = None
+
+            if customer_type == "commercial":
+                commercial_name = (
+                    mapped["company_name"]
+                    or mapped["display_name"]
+                    or None
                 )
 
-                quickbooks_customer_id = mapped[
-                    "quickbooks_customer_id"
-                ]
+            display_name = (
+                mapped["display_name"]
+                or mapped["company_name"]
+                or (
+                    (
+                        f"{mapped['first_name']} "
+                        f"{mapped['last_name']}"
+                    ).strip()
+                )
+                or None
+            )
 
-                existing_customer = cursor.execute(
+            review_notes = None
+
+            if mapped["missing_fields"]:
+                review_notes = (
+                    "Profile may need updating. "
+                    "Missing: "
+                    + ", ".join(
+                        mapped["missing_fields"]
+                    )
+                    + "."
+                )
+
+            status = (
+                "active"
+                if mapped["is_active"]
+                else "inactive"
+            )
+
+            if existing_customer:
+                customer_id = (
+                    existing_customer["id"]
+                )
+
+                cursor.execute(
                     """
-                    SELECT id
-                    FROM customers
-                    WHERE quickbooks_environment = ?
-                      AND quickbooks_realm_id = ?
-                      AND quickbooks_customer_id = ?
+                    UPDATE customers
+                    SET
+                        customer_type = ?,
+                        commercial_name = ?,
+                        display_name = ?,
+                        address_line_1 = ?,
+                        address_line_2 = ?,
+                        city = ?,
+                        state = ?,
+                        postal_code = ?,
+                        quickbooks_environment = ?,
+                        quickbooks_realm_id = ?,
+                        quickbooks_parent_customer_id = ?,
+                        quickbooks_fully_qualified_name = ?,
+                        quickbooks_sync_token = ?,
+                        quickbooks_last_synced_at = ?,
+                        needs_review = ?,
+                        review_notes = ?,
+                        status = ?,
+                        updated_at = ?
+                    WHERE id = ?
                     """,
                     (
+                        customer_type,
+                        commercial_name,
+                        display_name,
+                        mapped[
+                            "address_line_1"
+                        ] or None,
+                        mapped[
+                            "address_line_2"
+                        ] or None,
+                        mapped["city"] or None,
+                        mapped["state"] or None,
+                        mapped[
+                            "postal_code"
+                        ] or None,
+                        QUICKBOOKS_ENVIRONMENT,
+                        connection_data[
+                            "realm_id"
+                        ],
+                        mapped[
+                            "quickbooks_parent_customer_id"
+                        ] or None,
+                        mapped[
+                            "quickbooks_fully_qualified_name"
+                        ] or None,
+                        mapped[
+                            "quickbooks_sync_token"
+                        ] or None,
+                        now,
+                        (
+                            1
+                            if mapped["needs_review"]
+                            else 0
+                        ),
+                        review_notes,
+                        status,
+                        now,
+                        customer_id,
+                    ),
+                )
+
+                updated_count += 1
+
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO customers (
+                        customer_type,
+                        commercial_name,
+                        display_name,
+                        is_general_contractor,
+                        address_line_1,
+                        address_line_2,
+                        city,
+                        state,
+                        postal_code,
+                        default_salesperson_id,
+                        uses_third_party_billing,
+                        default_billing_customer_id,
+                        quickbooks_environment,
+                        quickbooks_realm_id,
+                        quickbooks_customer_id,
+                        quickbooks_parent_customer_id,
+                        quickbooks_fully_qualified_name,
+                        quickbooks_sync_token,
+                        quickbooks_last_synced_at,
+                        parent_customer_id,
+                        needs_review,
+                        review_notes,
+                        status,
+                        notes,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (
+                        ?, ?, ?, 0,
+                        ?, ?, ?, ?, ?,
+                        NULL,
+                        0,
+                        NULL,
+                        ?, ?, ?, ?, ?, ?, ?,
+                        NULL,
+                        ?, ?,
+                        ?,
+                        NULL,
+                        ?, ?
+                    )
+                    """,
+                    (
+                        customer_type,
+                        commercial_name,
+                        display_name,
+                        mapped[
+                            "address_line_1"
+                        ] or None,
+                        mapped[
+                            "address_line_2"
+                        ] or None,
+                        mapped["city"] or None,
+                        mapped["state"] or None,
+                        mapped[
+                            "postal_code"
+                        ] or None,
                         QUICKBOOKS_ENVIRONMENT,
                         connection_data[
                             "realm_id"
                         ],
                         quickbooks_customer_id,
-                    ),
-                ).fetchone()
-
-                customer_type = mapped[
-                    "proposed_customer_type"
-                ]
-
-                if customer_type not in {
-                    "residential",
-                    "commercial",
-                }:
-                    customer_type = None
-
-                commercial_name = None
-
-                if customer_type == "commercial":
-                    commercial_name = (
-                        mapped["company_name"]
-                        or mapped["display_name"]
-                        or None
-                    )
-
-                display_name = (
-                    mapped["display_name"]
-                    or mapped["company_name"]
-                    or (
+                        mapped[
+                            "quickbooks_parent_customer_id"
+                        ] or None,
+                        mapped[
+                            "quickbooks_fully_qualified_name"
+                        ] or None,
+                        mapped[
+                            "quickbooks_sync_token"
+                        ] or None,
+                        now,
                         (
-                            f"{mapped['first_name']} "
-                            f"{mapped['last_name']}"
-                        ).strip()
-                    )
-                    or None
+                            1
+                            if mapped["needs_review"]
+                            else 0
+                        ),
+                        review_notes,
+                        status,
+                        now,
+                        now,
+                    ),
                 )
 
-                review_notes = None
-
-                if mapped["missing_fields"]:
-                    review_notes = (
-                        "Profile may need updating. "
-                        "Missing: "
-                        + ", ".join(
-                            mapped["missing_fields"]
-                        )
-                        + "."
-                    )
-
-                status = (
-                    "active"
-                    if mapped["is_active"]
-                    else "inactive"
+                customer_id = (
+                    cursor.lastrowid
                 )
 
-                if existing_customer:
-                    customer_id = (
-                        existing_customer["id"]
-                    )
+                imported_count += 1
 
+            if mapped["needs_review"]:
+                review_count += 1
+
+            has_contact_data = any(
+                [
+                    mapped["first_name"],
+                    mapped["last_name"],
+                    mapped["phone"],
+                    mapped["email"],
+                ]
+            )
+
+            if has_contact_data:
+                existing_contact = (
                     cursor.execute(
                         """
-                        UPDATE customers
+                        SELECT *
+                        FROM customer_contacts
+                        WHERE customer_id = ?
+                          AND is_primary = 1
+                        LIMIT 1
+                        """,
+                        (customer_id,),
+                    ).fetchone()
+                )
+
+                if existing_contact:
+                    cursor.execute(
+                        """
+                        UPDATE customer_contacts
                         SET
-                            customer_type = ?,
-                            commercial_name = ?,
-                            display_name = ?,
-                            address_line_1 = ?,
-                            address_line_2 = ?,
-                            city = ?,
-                            state = ?,
-                            postal_code = ?,
-                            quickbooks_environment = ?,
-                            quickbooks_realm_id = ?,
-                            quickbooks_parent_customer_id = ?,
-                            quickbooks_fully_qualified_name = ?,
-                            quickbooks_sync_token = ?,
-                            quickbooks_last_synced_at = ?,
-                            needs_review = ?,
-                            review_notes = ?,
-                            status = ?,
+                            first_name = ?,
+                            last_name = ?,
+                            phone = ?,
+                            email = ?,
                             updated_at = ?
                         WHERE id = ?
                         """,
                         (
-                            customer_type,
-                            commercial_name,
-                            display_name,
-                            mapped[
-                                "address_line_1"
-                            ] or None,
-                            mapped[
-                                "address_line_2"
-                            ] or None,
-                            mapped["city"] or None,
-                            mapped["state"] or None,
-                            mapped[
-                                "postal_code"
-                            ] or None,
-                            QUICKBOOKS_ENVIRONMENT,
-                            connection_data[
-                                "realm_id"
-                            ],
-                            mapped[
-                                "quickbooks_parent_customer_id"
-                            ] or None,
-                            mapped[
-                                "quickbooks_fully_qualified_name"
-                            ] or None,
-                            mapped[
-                                "quickbooks_sync_token"
-                            ] or None,
-                            now,
                             (
-                                1
-                                if mapped["needs_review"]
-                                else 0
+                                mapped["first_name"]
+                                or existing_contact[
+                                    "first_name"
+                                ]
                             ),
-                            review_notes,
-                            status,
+                            (
+                                mapped["last_name"]
+                                or existing_contact[
+                                    "last_name"
+                                ]
+                            ),
+                            (
+                                mapped["phone"]
+                                or existing_contact[
+                                    "phone"
+                                ]
+                            ),
+                            (
+                                mapped["email"]
+                                or existing_contact[
+                                    "email"
+                                ]
+                            ),
                             now,
-                            customer_id,
+                            existing_contact["id"],
                         ),
                     )
-
-                    updated_count += 1
 
                 else:
                     cursor.execute(
                         """
-                        INSERT INTO customers (
-                            customer_type,
-                            commercial_name,
-                            display_name,
-                            is_general_contractor,
-                            address_line_1,
-                            address_line_2,
-                            city,
-                            state,
-                            postal_code,
-                            default_salesperson_id,
-                            uses_third_party_billing,
-                            default_billing_customer_id,
-                            quickbooks_environment,
-                            quickbooks_realm_id,
-                            quickbooks_customer_id,
-                            quickbooks_parent_customer_id,
-                            quickbooks_fully_qualified_name,
-                            quickbooks_sync_token,
-                            quickbooks_last_synced_at,
-                            parent_customer_id,
-                            needs_review,
-                            review_notes,
-                            status,
+                        INSERT INTO customer_contacts (
+                            customer_id,
+                            first_name,
+                            last_name,
+                            job_title,
+                            phone,
+                            phone_type,
+                            email,
+                            is_primary,
+                            is_billing_contact,
+                            is_active,
                             notes,
                             created_at,
                             updated_at
                         )
                         VALUES (
-                            ?, ?, ?, 0,
-                            ?, ?, ?, ?, ?,
-                            NULL,
-                            0,
-                            NULL,
-                            ?, ?, ?, ?, ?, ?, ?,
-                            NULL,
-                            ?, ?,
-                            ?,
-                            NULL,
-                            ?, ?
+                            ?, ?, ?, NULL,
+                            ?, NULL, ?,
+                            1, 0, 1,
+                            NULL, ?, ?
                         )
                         """,
                         (
-                            customer_type,
-                            commercial_name,
-                            display_name,
+                            customer_id,
                             mapped[
-                                "address_line_1"
+                                "first_name"
                             ] or None,
                             mapped[
-                                "address_line_2"
-                            ] or None,
-                            mapped["city"] or None,
-                            mapped["state"] or None,
-                            mapped[
-                                "postal_code"
-                            ] or None,
-                            QUICKBOOKS_ENVIRONMENT,
-                            connection_data[
-                                "realm_id"
-                            ],
-                            quickbooks_customer_id,
-                            mapped[
-                                "quickbooks_parent_customer_id"
+                                "last_name"
                             ] or None,
                             mapped[
-                                "quickbooks_fully_qualified_name"
+                                "phone"
                             ] or None,
                             mapped[
-                                "quickbooks_sync_token"
+                                "email"
                             ] or None,
-                            now,
-                            (
-                                1
-                                if mapped["needs_review"]
-                                else 0
-                            ),
-                            review_notes,
-                            status,
                             now,
                             now,
                         ),
                     )
 
-                    customer_id = (
-                        cursor.lastrowid
-                    )
+        batch_count = len(
+            quickbooks_customers
+        )
 
-                    imported_count += 1
+        next_start_position = (
+            start_position
+            + batch_count
+        )
 
-                quickbooks_to_testa_ids[
-                    quickbooks_customer_id
-                ] = customer_id
-
-                if mapped["needs_review"]:
-                    review_count += 1
-
-                # -----------------------------------------
-                # PRIMARY CONTACT
-                # -----------------------------------------
-
-                has_contact_data = any(
-                    [
-                        mapped["first_name"],
-                        mapped["last_name"],
-                        mapped["phone"],
-                        mapped["email"],
-                    ]
-                )
-
-                if has_contact_data:
-                    existing_contact = (
-                        cursor.execute(
-                            """
-                            SELECT *
-                            FROM customer_contacts
-                            WHERE customer_id = ?
-                              AND is_primary = 1
-                            LIMIT 1
-                            """,
-                            (customer_id,),
-                        ).fetchone()
-                    )
-
-                    if existing_contact:
-                        cursor.execute(
-                            """
-                            UPDATE customer_contacts
-                            SET
-                                first_name = ?,
-                                last_name = ?,
-                                phone = ?,
-                                email = ?,
-                                updated_at = ?
-                            WHERE id = ?
-                            """,
-                            (
-                                (
-                                    mapped["first_name"]
-                                    or existing_contact[
-                                        "first_name"
-                                    ]
-                                ),
-                                (
-                                    mapped["last_name"]
-                                    or existing_contact[
-                                        "last_name"
-                                    ]
-                                ),
-                                (
-                                    mapped["phone"]
-                                    or existing_contact[
-                                        "phone"
-                                    ]
-                                ),
-                                (
-                                    mapped["email"]
-                                    or existing_contact[
-                                        "email"
-                                    ]
-                                ),
-                                now,
-                                existing_contact["id"],
-                            ),
-                        )
-
-                    else:
-                        cursor.execute(
-                            """
-                            INSERT INTO customer_contacts (
-                                customer_id,
-                                first_name,
-                                last_name,
-                                job_title,
-                                phone,
-                                phone_type,
-                                email,
-                                is_primary,
-                                is_billing_contact,
-                                is_active,
-                                notes,
-                                created_at,
-                                updated_at
-                            )
-                            VALUES (
-                                ?, ?, ?, NULL,
-                                ?, NULL, ?,
-                                1, 0, 1,
-                                NULL, ?, ?
-                            )
-                            """,
-                            (
-                                customer_id,
-                                mapped[
-                                    "first_name"
-                                ] or None,
-                                mapped[
-                                    "last_name"
-                                ] or None,
-                                mapped[
-                                    "phone"
-                                ] or None,
-                                mapped[
-                                    "email"
-                                ] or None,
-                                now,
-                                now,
-                            ),
-                        )
-
-            connection.commit()
-
-        # -------------------------------------------------
-        # PASS 2
-        # Resolve parent relationships after all batches.
-        # -------------------------------------------------
-
-        imported_customers = cursor.execute(
-            """
-            SELECT
-                id,
-                quickbooks_customer_id,
-                quickbooks_parent_customer_id
-            FROM customers
-            WHERE quickbooks_environment = ?
-              AND quickbooks_realm_id = ?
-              AND quickbooks_customer_id IS NOT NULL
-            """,
-            (
-                QUICKBOOKS_ENVIRONMENT,
-                connection_data[
-                    "realm_id"
-                ],
-            ),
-        ).fetchall()
-
-        quickbooks_to_testa_ids = {
-            row["quickbooks_customer_id"]: row["id"]
-            for row in imported_customers
-        }
-
-        for imported_customer in imported_customers:
-            parent_testa_id = None
-
-            parent_qbo_id = imported_customer[
-                "quickbooks_parent_customer_id"
-            ]
-
-            if parent_qbo_id:
-                parent_testa_id = (
-                    quickbooks_to_testa_ids.get(
-                        parent_qbo_id
-                    )
-                )
-
-            cursor.execute(
-                """
-                UPDATE customers
-                SET
-                    parent_customer_id = ?,
-                    updated_at = ?
-                WHERE id = ?
-                """,
-                (
-                    parent_testa_id,
-                    now,
-                    imported_customer["id"],
-                ),
-            )
+        import_is_complete = (
+            batch_count < batch_size
+        )
 
         connection.commit()
-
-    except Exception:
-        connection.rollback()
-        raise
-
-    finally:
         connection.close()
 
+        update_quickbooks_customer_import_job_progress(
+            job_id=job_id,
+            batch_count=batch_count,
+            imported_count=imported_count,
+            updated_count=updated_count,
+            needs_review_count=review_count,
+            next_start_position=(
+                next_start_position
+            ),
+        )
+
+        if import_is_complete:
+            complete_quickbooks_customer_import_job(
+                job_id
+            )
+
+    except Exception as exc:
+        connection.rollback()
+        connection.close()
+
+        fail_quickbooks_customer_import_job(
+            job_id,
+            str(exc),
+        )
+
+        raise
+
     return {
-        "total": total_count,
+        "job_id": job_id,
+        "batch_count": batch_count,
         "imported": imported_count,
         "updated": updated_count,
         "needs_review": review_count,
+        "completed": import_is_complete,
     }
+
+def get_quickbooks_customer_import_job(
+    job_id,
+):
+    connection = get_db_connection()
+
+    job = connection.execute(
+        """
+        SELECT *
+        FROM quickbooks_customer_import_jobs
+        WHERE id = ?
+        """,
+        (job_id,),
+    ).fetchone()
+
+    connection.close()
+
+    return job
+
+
+def get_latest_quickbooks_customer_import_job():
+    connection = get_db_connection()
+
+    job = connection.execute(
+        """
+        SELECT *
+        FROM quickbooks_customer_import_jobs
+        ORDER BY id DESC
+        LIMIT 1
+        """
+    ).fetchone()
+
+    connection.close()
+
+    return job
+
+def get_latest_connected_quickbooks_customer_import_job():
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        return None
+
+    connection = get_db_connection()
+
+    job = connection.execute(
+        """
+        SELECT *
+        FROM quickbooks_customer_import_jobs
+        WHERE environment = ?
+          AND quickbooks_realm_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            QUICKBOOKS_ENVIRONMENT,
+            connection_data["realm_id"],
+        ),
+    ).fetchone()
+
+    connection.close()
+
+    return job
+
+def get_active_quickbooks_customer_import_job():
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        return None
+
+    connection = get_db_connection()
+
+    job = connection.execute(
+        """
+        SELECT *
+        FROM quickbooks_customer_import_jobs
+        WHERE environment = ?
+          AND quickbooks_realm_id = ?
+          AND status IN (
+              'pending',
+              'running'
+          )
+        ORDER BY id DESC
+        LIMIT 1
+        """,
+        (
+            QUICKBOOKS_ENVIRONMENT,
+            connection_data["realm_id"],
+        ),
+    ).fetchone()
+
+    connection.close()
+
+    return job
+
+
+def create_quickbooks_customer_import_job():
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        raise QuickBooksOAuthError(
+            "QuickBooks is not connected."
+        )
+
+    existing_job = (
+        get_active_quickbooks_customer_import_job()
+    )
+
+    if existing_job is not None:
+        return existing_job["id"]
+
+    admin_user = get_current_admin_user()
+
+    now = current_timestamp()
+
+    connection = get_db_connection()
+
+    cursor = connection.execute(
+        """
+        INSERT INTO quickbooks_customer_import_jobs (
+            environment,
+            quickbooks_realm_id,
+            status,
+            next_start_position,
+            batch_size,
+            processed_count,
+            imported_count,
+            updated_count,
+            needs_review_count,
+            total_customer_count,
+            last_batch_count,
+            error_message,
+            started_at,
+            completed_at,
+            failed_at,
+            created_at,
+            updated_at,
+            started_by
+        )
+        VALUES (
+            ?, ?,
+            'pending',
+            1,
+            ?,
+            0,
+            0,
+            0,
+            0,
+            NULL,
+            0,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            ?,
+            ?,
+            ?
+        )
+        """,
+        (
+            QUICKBOOKS_ENVIRONMENT,
+            connection_data["realm_id"],
+            QUICKBOOKS_CUSTOMER_IMPORT_BATCH_SIZE,
+            now,
+            now,
+            (
+                admin_user["id"]
+                if admin_user
+                else None
+            ),
+        ),
+    )
+
+    job_id = cursor.lastrowid
+
+    connection.commit()
+    connection.close()
+
+    return job_id
+
+
+def mark_quickbooks_customer_import_job_running(
+    job_id,
+):
+    now = current_timestamp()
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE quickbooks_customer_import_jobs
+        SET
+            status = 'running',
+            started_at = COALESCE(
+                started_at,
+                ?
+            ),
+            failed_at = NULL,
+            error_message = NULL,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            now,
+            job_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def update_quickbooks_customer_import_job_progress(
+    job_id,
+    batch_count,
+    imported_count,
+    updated_count,
+    needs_review_count,
+    next_start_position,
+    total_customer_count=None,
+):
+    now = current_timestamp()
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE quickbooks_customer_import_jobs
+        SET
+            status = 'running',
+            next_start_position = ?,
+            processed_count =
+                processed_count + ?,
+            imported_count =
+                imported_count + ?,
+            updated_count =
+                updated_count + ?,
+            needs_review_count =
+                needs_review_count + ?,
+            total_customer_count =
+                COALESCE(
+                    ?,
+                    total_customer_count
+                ),
+            last_batch_count = ?,
+            error_message = NULL,
+            failed_at = NULL,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            next_start_position,
+            batch_count,
+            imported_count,
+            updated_count,
+            needs_review_count,
+            total_customer_count,
+            batch_count,
+            now,
+            job_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def complete_quickbooks_customer_import_job(
+    job_id,
+):
+    now = current_timestamp()
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE quickbooks_customer_import_jobs
+        SET
+            status = 'completed',
+            total_customer_count =
+                processed_count,
+            completed_at = ?,
+            failed_at = NULL,
+            error_message = NULL,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            now,
+            job_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+def fail_quickbooks_customer_import_job(
+    job_id,
+    error_message,
+):
+    now = current_timestamp()
+
+    safe_error_message = (
+        str(error_message or "")
+        .strip()[:1000]
+    )
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE quickbooks_customer_import_jobs
+        SET
+            status = 'failed',
+            failed_at = ?,
+            error_message = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            now,
+            safe_error_message or None,
+            now,
+            job_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def resume_quickbooks_customer_import_job(
+    job_id,
+):
+    now = current_timestamp()
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE quickbooks_customer_import_jobs
+        SET
+            status = 'pending',
+            failed_at = NULL,
+            error_message = NULL,
+            updated_at = ?
+        WHERE id = ?
+          AND status = 'failed'
+        """,
+        (
+            now,
+            job_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
 
 # =========================================================
 # DATABASE HELPERS
@@ -2532,6 +2935,101 @@ def ensure_database_schema():
             FOREIGN KEY (admin_user_id)
                 REFERENCES admin_users (id)
                 ON DELETE SET NULL
+        )
+        """
+    )
+
+    # ---------------------------------------------------------
+    # QUICKBOOKS CUSTOMER IMPORT JOBS
+    # ---------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS
+            quickbooks_customer_import_jobs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                environment TEXT NOT NULL,
+                quickbooks_realm_id TEXT NOT NULL,
+
+                status TEXT NOT NULL DEFAULT 'pending',
+
+                next_start_position INTEGER
+                    NOT NULL DEFAULT 1,
+
+                batch_size INTEGER
+                    NOT NULL DEFAULT 100,
+
+                processed_count INTEGER
+                    NOT NULL DEFAULT 0,
+
+                imported_count INTEGER
+                    NOT NULL DEFAULT 0,
+
+                updated_count INTEGER
+                    NOT NULL DEFAULT 0,
+
+                needs_review_count INTEGER
+                    NOT NULL DEFAULT 0,
+
+                total_customer_count INTEGER,
+
+                last_batch_count INTEGER
+                    NOT NULL DEFAULT 0,
+
+                error_message TEXT,
+
+                started_at TEXT,
+                completed_at TEXT,
+                failed_at TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                started_by INTEGER,
+
+                FOREIGN KEY (started_by)
+                    REFERENCES admin_users (id)
+                    ON DELETE SET NULL,
+
+                CHECK (
+                    environment IN (
+                        'sandbox',
+                        'production'
+                    )
+                ),
+
+                CHECK (
+                    status IN (
+                        'pending',
+                        'running',
+                        'completed',
+                        'failed'
+                    )
+                )
+            )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+            idx_quickbooks_customer_import_jobs_status
+        ON quickbooks_customer_import_jobs (
+            status,
+            created_at
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+            idx_quickbooks_customer_import_jobs_environment
+        ON quickbooks_customer_import_jobs (
+            environment,
+            quickbooks_realm_id,
+            created_at
         )
         """
     )
@@ -7804,15 +8302,15 @@ def admin_quickbooks_customers_import():
     validate_csrf_token()
 
     try:
-        import_results = (
-            import_quickbooks_customers()
+        job_id = (
+            create_quickbooks_customer_import_job()
         )
 
     except QuickBooksOAuthError:
         app.logger.exception(
             (
                 "QuickBooks customer import "
-                "could not be completed."
+                "could not be started."
             )
         )
 
@@ -7834,14 +8332,14 @@ def admin_quickbooks_customers_import():
         app.logger.exception(
             (
                 "Unexpected QuickBooks customer "
-                "import failure."
+                "import start failure."
             )
         )
 
         flash(
             (
                 "The QuickBooks customer import "
-                "could not be completed."
+                "could not be started."
             ),
             "error",
         )
@@ -7852,33 +8350,179 @@ def admin_quickbooks_customers_import():
             )
         )
 
-    write_audit_log(
-        action="quickbooks_customers_imported",
-        category="quickbooks",
-        description=(
-            "QuickBooks customer synchronization "
-            f"completed. "
-            f"{import_results['imported']} added, "
-            f"{import_results['updated']} updated, "
-            f"{import_results['needs_review']} "
-            "marked for review."
-        ),
-    )
-
-    flash(
-        (
-            "QuickBooks customer synchronization "
-            "completed: "
-            f"{import_results['imported']} added, "
-            f"{import_results['updated']} updated, "
-            f"{import_results['needs_review']} "
-            "need review."
-        ),
-        "success",
-    )
-
     return redirect(
-        url_for("admin_customers")
+        url_for(
+            "admin_quickbooks_customer_import_status",
+            job_id=job_id,
+        )
+    )
+
+@app.route(
+    "/admin/quickbooks/customers/import/<int:job_id>"
+)
+@admin_required
+def admin_quickbooks_customer_import_status(
+    job_id,
+):
+    job = get_quickbooks_customer_import_job(
+        job_id
+    )
+
+    if job is None:
+        abort(404)
+
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if (
+        connection_data is None
+        or job["environment"]
+            != QUICKBOOKS_ENVIRONMENT
+        or job["quickbooks_realm_id"]
+            != connection_data["realm_id"]
+    ):
+        abort(404)
+
+    return render_template(
+        "admin_quickbooks_customer_import_status.html",
+        import_job=job,
+    )
+
+@app.route(
+    "/admin/quickbooks/customers/import/"
+    "<int:job_id>/process",
+    methods=["POST"],
+)
+@admin_required
+def admin_quickbooks_customer_import_process(
+    job_id,
+):
+    validate_csrf_token()
+
+    job = get_quickbooks_customer_import_job(
+        job_id
+    )
+
+    if job is None:
+        return jsonify(
+            {
+                "success": False,
+                "message": (
+                    "Import job could not be found."
+                ),
+            }
+        ), 404
+
+    if job["status"] == "completed":
+        return jsonify(
+            {
+                "success": True,
+                "completed": True,
+                "processed_count": (
+                    job["processed_count"]
+                ),
+                "imported_count": (
+                    job["imported_count"]
+                ),
+                "updated_count": (
+                    job["updated_count"]
+                ),
+                "needs_review_count": (
+                    job["needs_review_count"]
+                ),
+            }
+        )
+
+    if job["status"] == "failed":
+        resume_quickbooks_customer_import_job(
+            job_id
+        )
+
+    try:
+        batch_results = (
+            process_quickbooks_customer_import_batch(
+                job_id
+            )
+        )
+
+    except Exception as exc:
+        app.logger.exception(
+            (
+                "QuickBooks customer import "
+                "batch failed for job %s."
+            ),
+            job_id,
+        )
+
+        failed_job = (
+            get_quickbooks_customer_import_job(
+                job_id
+            )
+        )
+
+        return jsonify(
+            {
+                "success": False,
+                "completed": False,
+                "message": (
+                    "QuickBooks could not complete "
+                    "this customer batch."
+                ),
+                "error_message": (
+                    failed_job["error_message"]
+                    if failed_job
+                    else str(exc)
+                ),
+            }
+        ), 500
+
+    job = get_quickbooks_customer_import_job(
+        job_id
+    )
+
+    if batch_results["completed"]:
+        write_audit_log(
+            action=(
+                "quickbooks_customers_imported"
+            ),
+            category="quickbooks",
+            description=(
+                "QuickBooks customer "
+                "synchronization completed. "
+                f"{job['processed_count']} processed, "
+                f"{job['imported_count']} added, "
+                f"{job['updated_count']} updated, "
+                f"{job['needs_review_count']} "
+                "marked for review."
+            ),
+        )
+
+    return jsonify(
+        {
+            "success": True,
+            "completed": (
+                batch_results["completed"]
+            ),
+            "batch_count": (
+                batch_results["batch_count"]
+            ),
+            "processed_count": (
+                job["processed_count"]
+            ),
+            "imported_count": (
+                job["imported_count"]
+            ),
+            "updated_count": (
+                job["updated_count"]
+            ),
+            "needs_review_count": (
+                job["needs_review_count"]
+            ),
+            "next_start_position": (
+                job["next_start_position"]
+            ),
+        }
     )
 
 @app.route("/admin/customers")
@@ -8211,6 +8855,10 @@ def admin_customers():
 
     connection.close()
 
+    latest_quickbooks_import_job = (
+        get_latest_connected_quickbooks_customer_import_job()
+    )
+
     return render_template(
         "admin_customers.html",
         customers=customer_rows,
@@ -8234,6 +8882,10 @@ def admin_customers():
         needs_review_count=(
             stats["needs_review_count"]
             or 0
+        ),
+
+        quickbooks_import_job=(
+            latest_quickbooks_import_job
         ),
 
         search_query=search_query,

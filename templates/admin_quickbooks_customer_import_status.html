@@ -1,0 +1,356 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    QuickBooks Import Status | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            QuickBooks
+        </span>
+
+        <h2>
+            QuickBooks Customer Import
+        </h2>
+
+        <p>
+            QuickBooks customers are being imported
+            into the Testa Roofing operational database
+            in manageable batches.
+        </p>
+
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for('admin_customers') }}"
+            class="admin-secondary-button"
+        >
+            Back to Customers
+        </a>
+
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+
+            <span>
+                Processed
+            </span>
+
+            <strong id="processed-count">
+                {{ import_job["processed_count"] }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Added
+            </span>
+
+            <strong id="imported-count">
+                {{ import_job["imported_count"] }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Updated
+            </span>
+
+            <strong id="updated-count">
+                {{ import_job["updated_count"] }}
+            </strong>
+
+        </div>
+
+
+        <div class="admin-stat-card">
+
+            <span>
+                Needs Review
+            </span>
+
+            <strong id="review-count">
+                {{ import_job["needs_review_count"] }}
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3 id="import-status-heading">
+
+                {% if import_job["status"] == "completed" %}
+                    Import Complete
+                {% elif import_job["status"] == "failed" %}
+                    Import Interrupted
+                {% else %}
+                    Import in Progress
+                {% endif %}
+
+            </h3>
+
+            <p id="import-status-message">
+
+                {% if import_job["status"] == "completed" %}
+
+                    The QuickBooks customer import
+                    has been completed.
+
+                {% elif import_job["status"] == "failed" %}
+
+                    The import was interrupted.
+                    This page will attempt to resume
+                    from the last completed batch.
+
+                {% else %}
+
+                    Keep this page open while the
+                    customer import continues.
+
+                {% endif %}
+
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div id="import-error-message">
+
+        {% if import_job["error_message"] %}
+
+            <p>
+                {{ import_job["error_message"] }}
+            </p>
+
+        {% endif %}
+
+    </div>
+
+
+    <div
+        id="import-complete-actions"
+        {% if import_job["status"] != "completed" %}
+            hidden
+        {% endif %}
+    >
+
+        <a
+            href="{{ url_for('admin_customers') }}"
+            class="admin-primary-button"
+        >
+            View Customers
+        </a>
+
+    </div>
+
+</section>
+
+
+{% if import_job["status"] != "completed" %}
+
+<script>
+document.addEventListener(
+    "DOMContentLoaded",
+    function () {
+
+        const processUrl = {{ url_for(
+            'admin_quickbooks_customer_import_process',
+            job_id=import_job["id"]
+        )|tojson }};
+
+        const csrfToken = {{ csrf_token()|tojson }};
+
+        let requestInProgress = false;
+        let importFinished = false;
+
+        function updateCount(
+            elementId,
+            value
+        ) {
+            const element = document.getElementById(
+                elementId
+            );
+
+            if (element) {
+                element.textContent = value;
+            }
+        }
+
+
+        async function processNextBatch() {
+
+            if (
+                requestInProgress
+                || importFinished
+            ) {
+                return;
+            }
+
+            requestInProgress = true;
+
+            const formData = new FormData();
+
+            formData.append(
+                "csrf_token",
+                csrfToken
+            );
+
+            try {
+
+                const response = await fetch(
+                    processUrl,
+                    {
+                        method: "POST",
+                        body: formData,
+                        credentials: "same-origin"
+                    }
+                );
+
+                const data = await response.json();
+
+                if (
+                    !response.ok
+                    || !data.success
+                ) {
+                    throw new Error(
+                        data.error_message
+                        || data.message
+                        || "The import was interrupted."
+                    );
+                }
+
+                updateCount(
+                    "processed-count",
+                    data.processed_count
+                );
+
+                updateCount(
+                    "imported-count",
+                    data.imported_count
+                );
+
+                updateCount(
+                    "updated-count",
+                    data.updated_count
+                );
+
+                updateCount(
+                    "review-count",
+                    data.needs_review_count
+                );
+
+                if (data.completed) {
+
+                    importFinished = true;
+
+                    document.getElementById(
+                        "import-status-heading"
+                    ).textContent = (
+                        "Import Complete"
+                    );
+
+                    document.getElementById(
+                        "import-status-message"
+                    ).textContent = (
+                        "The QuickBooks customer "
+                        + "import has been completed."
+                    );
+
+                    document.getElementById(
+                        "import-error-message"
+                    ).textContent = "";
+
+                    document.getElementById(
+                        "import-complete-actions"
+                    ).hidden = false;
+
+                    return;
+                }
+
+                document.getElementById(
+                    "import-status-message"
+                ).textContent = (
+                    data.processed_count
+                    + " QuickBooks customers have "
+                    + "been processed. Continuing "
+                    + "with the next batch..."
+                );
+
+                requestInProgress = false;
+
+                window.setTimeout(
+                    processNextBatch,
+                    500
+                );
+
+            } catch (error) {
+
+                requestInProgress = false;
+
+                document.getElementById(
+                    "import-status-heading"
+                ).textContent = (
+                    "Import Interrupted"
+                );
+
+                document.getElementById(
+                    "import-status-message"
+                ).textContent = (
+                    "The completed batches were "
+                    + "saved. Reload this page to "
+                    + "resume from the last saved "
+                    + "position."
+                );
+
+                document.getElementById(
+                    "import-error-message"
+                ).textContent = (
+                    error.message
+                );
+            }
+        }
+
+
+        processNextBatch();
+
+    }
+);
+</script>
+
+{% endif %}
+
+{% endblock %}

@@ -320,23 +320,71 @@
         </a>
 
 
-        <div class="admin-section-card admin-section-card-disabled">
+        {% if quickbooks_import_job %}
 
-            <strong>
-                Sync Status
-            </strong>
+            <a
+                href="{{ url_for(
+                    'admin_quickbooks_customer_import_status',
+                    job_id=quickbooks_import_job['id']
+                ) }}"
+                class="admin-section-card"
+            >
 
-            <span>
-                Review which customers are connected to
-                QuickBooks and identify records needing
-                attention.
-            </span>
+                <strong>
+                    Sync Status
+                </strong>
 
-            <small>
-                Requires QuickBooks connection
-            </small>
+                <span>
 
-        </div>
+                    {% if quickbooks_import_job["status"] == "completed" %}
+
+                        Last QuickBooks customer import
+                        completed successfully.
+
+                    {% elif quickbooks_import_job["status"] == "failed" %}
+
+                        The QuickBooks customer import
+                        was interrupted and can be resumed.
+
+                    {% else %}
+
+                        QuickBooks customer import is
+                        currently in progress.
+
+                    {% endif %}
+
+                </span>
+
+                <small>
+                    {{ quickbooks_import_job["processed_count"] }}
+                    customers processed
+                </small>
+
+            </a>
+
+        {% else %}
+
+            <div
+                class="admin-section-card
+                       admin-section-card-disabled"
+            >
+
+                <strong>
+                    Sync Status
+                </strong>
+
+                <span>
+                    No QuickBooks customer import
+                    has been started yet.
+                </span>
+
+                <small>
+                    Import customers to begin
+                </small>
+
+            </div>
+
+        {% endif %}
 
     </div>
 
