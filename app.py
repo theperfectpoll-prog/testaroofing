@@ -789,11 +789,10 @@ def query_quickbooks_customers(
 
     return customers
 
-def query_all_quickbooks_customers():
-    all_customers = []
-
+def iter_quickbooks_customer_batches(
+    batch_size=100,
+):
     start_position = 1
-    batch_size = 100
 
     while True:
         customer_batch = (
@@ -806,25 +805,12 @@ def query_all_quickbooks_customers():
         if not customer_batch:
             break
 
-        all_customers.extend(
-            customer_batch
-        )
+        yield customer_batch
 
         if len(customer_batch) < batch_size:
             break
 
         start_position += batch_size
-
-    all_customers.sort(
-        key=lambda customer: (
-            customer.get(
-                "DisplayName",
-                "",
-            ).casefold()
-        )
-    )
-
-    return all_customers
 
 def map_quickbooks_customer_for_testa(
     quickbooks_customer,
@@ -1075,10 +1061,6 @@ def import_quickbooks_customers():
             "QuickBooks is not connected."
         )
 
-    quickbooks_customers = (
-        query_all_quickbooks_customers()
-    )
-
     now = current_timestamp()
 
     connection = get_db_connection()
@@ -1087,407 +1069,422 @@ def import_quickbooks_customers():
     imported_count = 0
     updated_count = 0
     review_count = 0
+    total_count = 0
 
     quickbooks_to_testa_ids = {}
 
     try:
-        # -------------------------------------------------
-        # PASS 1
-        # Create or update each QuickBooks customer.
-        # -------------------------------------------------
-
-        for quickbooks_customer in quickbooks_customers:
-            mapped = (
-                map_quickbooks_customer_for_testa(
-                    quickbooks_customer
-                )
+        for quickbooks_customers in (
+            iter_quickbooks_customer_batches()
+        ):
+            total_count += len(
+                quickbooks_customers
             )
 
-            quickbooks_customer_id = mapped[
-                "quickbooks_customer_id"
-            ]
+            # ---------------------------------------------
+            # PASS 1
+            # Create or update this QuickBooks batch.
+            # ---------------------------------------------
 
-            existing_customer = cursor.execute(
-                """
-                SELECT id
-                FROM customers
-                WHERE quickbooks_environment = ?
-                  AND quickbooks_realm_id = ?
-                  AND quickbooks_customer_id = ?
-                """,
-                (
-                    QUICKBOOKS_ENVIRONMENT,
-                    connection_data[
-                        "realm_id"
-                    ],
-                    quickbooks_customer_id,
-                ),
-            ).fetchone()
+            for quickbooks_customer in quickbooks_customers:
+                mapped = (
+                    map_quickbooks_customer_for_testa(
+                        quickbooks_customer
+                    )
+                )
 
-            customer_type = mapped[
-                "proposed_customer_type"
-            ]
+                quickbooks_customer_id = mapped[
+                    "quickbooks_customer_id"
+                ]
 
-            if customer_type not in {
-                "residential",
-                "commercial",
-            }:
-                customer_type = None
+                existing_customer = cursor.execute(
+                    """
+                    SELECT id
+                    FROM customers
+                    WHERE quickbooks_environment = ?
+                      AND quickbooks_realm_id = ?
+                      AND quickbooks_customer_id = ?
+                    """,
+                    (
+                        QUICKBOOKS_ENVIRONMENT,
+                        connection_data[
+                            "realm_id"
+                        ],
+                        quickbooks_customer_id,
+                    ),
+                ).fetchone()
 
-            commercial_name = None
+                customer_type = mapped[
+                    "proposed_customer_type"
+                ]
 
-            if customer_type == "commercial":
-                commercial_name = (
-                    mapped["company_name"]
-                    or mapped["display_name"]
+                if customer_type not in {
+                    "residential",
+                    "commercial",
+                }:
+                    customer_type = None
+
+                commercial_name = None
+
+                if customer_type == "commercial":
+                    commercial_name = (
+                        mapped["company_name"]
+                        or mapped["display_name"]
+                        or None
+                    )
+
+                display_name = (
+                    mapped["display_name"]
+                    or mapped["company_name"]
+                    or (
+                        (
+                            f"{mapped['first_name']} "
+                            f"{mapped['last_name']}"
+                        ).strip()
+                    )
                     or None
                 )
 
-            display_name = (
-                mapped["display_name"]
-                or mapped["company_name"]
-                or (
-                    (
-                        f"{mapped['first_name']} "
-                        f"{mapped['last_name']}"
-                    ).strip()
-                )
-                or None
-            )
+                review_notes = None
 
-            review_notes = None
-
-            if mapped["missing_fields"]:
-                review_notes = (
-                    "Profile may need updating. "
-                    "Missing: "
-                    + ", ".join(
-                        mapped["missing_fields"]
+                if mapped["missing_fields"]:
+                    review_notes = (
+                        "Profile may need updating. "
+                        "Missing: "
+                        + ", ".join(
+                            mapped["missing_fields"]
+                        )
+                        + "."
                     )
-                    + "."
+
+                status = (
+                    "active"
+                    if mapped["is_active"]
+                    else "inactive"
                 )
 
-            status = (
-                "active"
-                if mapped["is_active"]
-                else "inactive"
-            )
-
-            if existing_customer:
-                customer_id = (
-                    existing_customer["id"]
-                )
-
-                cursor.execute(
-                    """
-                    UPDATE customers
-                    SET
-                        customer_type = ?,
-                        commercial_name = ?,
-                        display_name = ?,
-                        address_line_1 = ?,
-                        address_line_2 = ?,
-                        city = ?,
-                        state = ?,
-                        postal_code = ?,
-                        quickbooks_environment = ?,
-                        quickbooks_realm_id = ?,
-                        quickbooks_parent_customer_id = ?,
-                        quickbooks_fully_qualified_name = ?,
-                        quickbooks_sync_token = ?,
-                        quickbooks_last_synced_at = ?,
-                        needs_review = ?,
-                        review_notes = ?,
-                        status = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        customer_type,
-                        commercial_name,
-                        display_name,
-                        mapped[
-                            "address_line_1"
-                        ] or None,
-                        mapped[
-                            "address_line_2"
-                        ] or None,
-                        mapped["city"] or None,
-                        mapped["state"] or None,
-                        mapped[
-                            "postal_code"
-                        ] or None,
-                        QUICKBOOKS_ENVIRONMENT,
-                        connection_data[
-                            "realm_id"
-                        ],
-                        mapped[
-                            "quickbooks_parent_customer_id"
-                        ] or None,
-                        mapped[
-                            "quickbooks_fully_qualified_name"
-                        ] or None,
-                        mapped[
-                            "quickbooks_sync_token"
-                        ] or None,
-                        now,
-                        (
-                            1
-                            if mapped["needs_review"]
-                            else 0
-                        ),
-                        review_notes,
-                        status,
-                        now,
-                        customer_id,
-                    ),
-                )
-
-                updated_count += 1
-
-            else:
-                cursor.execute(
-                    """
-                    INSERT INTO customers (
-                        customer_type,
-                        commercial_name,
-                        display_name,
-                        is_general_contractor,
-                        address_line_1,
-                        address_line_2,
-                        city,
-                        state,
-                        postal_code,
-                        default_salesperson_id,
-                        uses_third_party_billing,
-                        default_billing_customer_id,
-                        quickbooks_environment,
-                        quickbooks_realm_id,
-                        quickbooks_customer_id,
-                        quickbooks_parent_customer_id,
-                        quickbooks_fully_qualified_name,
-                        quickbooks_sync_token,
-                        quickbooks_last_synced_at,
-                        parent_customer_id,
-                        needs_review,
-                        review_notes,
-                        status,
-                        notes,
-                        created_at,
-                        updated_at
+                if existing_customer:
+                    customer_id = (
+                        existing_customer["id"]
                     )
-                    VALUES (
-                        ?, ?, ?, 0,
-                        ?, ?, ?, ?, ?,
-                        NULL,
-                        0,
-                        NULL,
-                        ?, ?, ?, ?, ?, ?, ?,
-                        NULL,
-                        ?, ?,
-                        ?,
-                        NULL,
-                        ?, ?
-                    )
-                    """,
-                    (
-                        customer_type,
-                        commercial_name,
-                        display_name,
-                        mapped[
-                            "address_line_1"
-                        ] or None,
-                        mapped[
-                            "address_line_2"
-                        ] or None,
-                        mapped["city"] or None,
-                        mapped["state"] or None,
-                        mapped[
-                            "postal_code"
-                        ] or None,
-                        QUICKBOOKS_ENVIRONMENT,
-                        connection_data[
-                            "realm_id"
-                        ],
-                        quickbooks_customer_id,
-                        mapped[
-                            "quickbooks_parent_customer_id"
-                        ] or None,
-                        mapped[
-                            "quickbooks_fully_qualified_name"
-                        ] or None,
-                        mapped[
-                            "quickbooks_sync_token"
-                        ] or None,
-                        now,
-                        (
-                            1
-                            if mapped["needs_review"]
-                            else 0
-                        ),
-                        review_notes,
-                        status,
-                        now,
-                        now,
-                    ),
-                )
 
-                customer_id = (
-                    cursor.lastrowid
-                )
-
-                imported_count += 1
-
-            quickbooks_to_testa_ids[
-                quickbooks_customer_id
-            ] = customer_id
-
-            if mapped["needs_review"]:
-                review_count += 1
-
-
-            # ---------------------------------------------
-            # PRIMARY CONTACT
-            # ---------------------------------------------
-
-            has_contact_data = any(
-                [
-                    mapped["first_name"],
-                    mapped["last_name"],
-                    mapped["phone"],
-                    mapped["email"],
-                ]
-            )
-
-            if has_contact_data:
-                existing_contact = (
                     cursor.execute(
                         """
-                        SELECT *
-                        FROM customer_contacts
-                        WHERE customer_id = ?
-                          AND is_primary = 1
-                        LIMIT 1
-                        """,
-                        (customer_id,),
-                    ).fetchone()
-                )
-
-                if existing_contact:
-                    cursor.execute(
-                        """
-                        UPDATE customer_contacts
+                        UPDATE customers
                         SET
-                            first_name = ?,
-                            last_name = ?,
-                            phone = ?,
-                            email = ?,
+                            customer_type = ?,
+                            commercial_name = ?,
+                            display_name = ?,
+                            address_line_1 = ?,
+                            address_line_2 = ?,
+                            city = ?,
+                            state = ?,
+                            postal_code = ?,
+                            quickbooks_environment = ?,
+                            quickbooks_realm_id = ?,
+                            quickbooks_parent_customer_id = ?,
+                            quickbooks_fully_qualified_name = ?,
+                            quickbooks_sync_token = ?,
+                            quickbooks_last_synced_at = ?,
+                            needs_review = ?,
+                            review_notes = ?,
+                            status = ?,
                             updated_at = ?
                         WHERE id = ?
                         """,
                         (
-                            (
-                                mapped["first_name"]
-                                or existing_contact[
-                                    "first_name"
-                                ]
-                            ),
-                            (
-                                mapped["last_name"]
-                                or existing_contact[
-                                    "last_name"
-                                ]
-                            ),
-                            (
-                                mapped["phone"]
-                                or existing_contact[
-                                    "phone"
-                                ]
-                            ),
-                            (
-                                mapped["email"]
-                                or existing_contact[
-                                    "email"
-                                ]
-                            ),
+                            customer_type,
+                            commercial_name,
+                            display_name,
+                            mapped[
+                                "address_line_1"
+                            ] or None,
+                            mapped[
+                                "address_line_2"
+                            ] or None,
+                            mapped["city"] or None,
+                            mapped["state"] or None,
+                            mapped[
+                                "postal_code"
+                            ] or None,
+                            QUICKBOOKS_ENVIRONMENT,
+                            connection_data[
+                                "realm_id"
+                            ],
+                            mapped[
+                                "quickbooks_parent_customer_id"
+                            ] or None,
+                            mapped[
+                                "quickbooks_fully_qualified_name"
+                            ] or None,
+                            mapped[
+                                "quickbooks_sync_token"
+                            ] or None,
                             now,
-                            existing_contact["id"],
+                            (
+                                1
+                                if mapped["needs_review"]
+                                else 0
+                            ),
+                            review_notes,
+                            status,
+                            now,
+                            customer_id,
                         ),
                     )
+
+                    updated_count += 1
 
                 else:
                     cursor.execute(
                         """
-                        INSERT INTO customer_contacts (
-                            customer_id,
-                            first_name,
-                            last_name,
-                            job_title,
-                            phone,
-                            phone_type,
-                            email,
-                            is_primary,
-                            is_billing_contact,
-                            is_active,
+                        INSERT INTO customers (
+                            customer_type,
+                            commercial_name,
+                            display_name,
+                            is_general_contractor,
+                            address_line_1,
+                            address_line_2,
+                            city,
+                            state,
+                            postal_code,
+                            default_salesperson_id,
+                            uses_third_party_billing,
+                            default_billing_customer_id,
+                            quickbooks_environment,
+                            quickbooks_realm_id,
+                            quickbooks_customer_id,
+                            quickbooks_parent_customer_id,
+                            quickbooks_fully_qualified_name,
+                            quickbooks_sync_token,
+                            quickbooks_last_synced_at,
+                            parent_customer_id,
+                            needs_review,
+                            review_notes,
+                            status,
                             notes,
                             created_at,
                             updated_at
                         )
                         VALUES (
-                            ?, ?, ?, NULL,
-                            ?, NULL, ?,
-                            1, 0, 1,
-                            NULL, ?, ?
+                            ?, ?, ?, 0,
+                            ?, ?, ?, ?, ?,
+                            NULL,
+                            0,
+                            NULL,
+                            ?, ?, ?, ?, ?, ?, ?,
+                            NULL,
+                            ?, ?,
+                            ?,
+                            NULL,
+                            ?, ?
                         )
                         """,
                         (
-                            customer_id,
+                            customer_type,
+                            commercial_name,
+                            display_name,
                             mapped[
-                                "first_name"
+                                "address_line_1"
                             ] or None,
                             mapped[
-                                "last_name"
+                                "address_line_2"
+                            ] or None,
+                            mapped["city"] or None,
+                            mapped["state"] or None,
+                            mapped[
+                                "postal_code"
+                            ] or None,
+                            QUICKBOOKS_ENVIRONMENT,
+                            connection_data[
+                                "realm_id"
+                            ],
+                            quickbooks_customer_id,
+                            mapped[
+                                "quickbooks_parent_customer_id"
                             ] or None,
                             mapped[
-                                "phone"
+                                "quickbooks_fully_qualified_name"
                             ] or None,
                             mapped[
-                                "email"
+                                "quickbooks_sync_token"
                             ] or None,
+                            now,
+                            (
+                                1
+                                if mapped["needs_review"]
+                                else 0
+                            ),
+                            review_notes,
+                            status,
                             now,
                             now,
                         ),
                     )
 
+                    customer_id = (
+                        cursor.lastrowid
+                    )
+
+                    imported_count += 1
+
+                quickbooks_to_testa_ids[
+                    quickbooks_customer_id
+                ] = customer_id
+
+                if mapped["needs_review"]:
+                    review_count += 1
+
+                # -----------------------------------------
+                # PRIMARY CONTACT
+                # -----------------------------------------
+
+                has_contact_data = any(
+                    [
+                        mapped["first_name"],
+                        mapped["last_name"],
+                        mapped["phone"],
+                        mapped["email"],
+                    ]
+                )
+
+                if has_contact_data:
+                    existing_contact = (
+                        cursor.execute(
+                            """
+                            SELECT *
+                            FROM customer_contacts
+                            WHERE customer_id = ?
+                              AND is_primary = 1
+                            LIMIT 1
+                            """,
+                            (customer_id,),
+                        ).fetchone()
+                    )
+
+                    if existing_contact:
+                        cursor.execute(
+                            """
+                            UPDATE customer_contacts
+                            SET
+                                first_name = ?,
+                                last_name = ?,
+                                phone = ?,
+                                email = ?,
+                                updated_at = ?
+                            WHERE id = ?
+                            """,
+                            (
+                                (
+                                    mapped["first_name"]
+                                    or existing_contact[
+                                        "first_name"
+                                    ]
+                                ),
+                                (
+                                    mapped["last_name"]
+                                    or existing_contact[
+                                        "last_name"
+                                    ]
+                                ),
+                                (
+                                    mapped["phone"]
+                                    or existing_contact[
+                                        "phone"
+                                    ]
+                                ),
+                                (
+                                    mapped["email"]
+                                    or existing_contact[
+                                        "email"
+                                    ]
+                                ),
+                                now,
+                                existing_contact["id"],
+                            ),
+                        )
+
+                    else:
+                        cursor.execute(
+                            """
+                            INSERT INTO customer_contacts (
+                                customer_id,
+                                first_name,
+                                last_name,
+                                job_title,
+                                phone,
+                                phone_type,
+                                email,
+                                is_primary,
+                                is_billing_contact,
+                                is_active,
+                                notes,
+                                created_at,
+                                updated_at
+                            )
+                            VALUES (
+                                ?, ?, ?, NULL,
+                                ?, NULL, ?,
+                                1, 0, 1,
+                                NULL, ?, ?
+                            )
+                            """,
+                            (
+                                customer_id,
+                                mapped[
+                                    "first_name"
+                                ] or None,
+                                mapped[
+                                    "last_name"
+                                ] or None,
+                                mapped[
+                                    "phone"
+                                ] or None,
+                                mapped[
+                                    "email"
+                                ] or None,
+                                now,
+                                now,
+                            ),
+                        )
+
+            connection.commit()
 
         # -------------------------------------------------
         # PASS 2
-        # Convert QuickBooks ParentRef values into actual
-        # Testa customer relationships.
+        # Resolve parent relationships after all batches.
         # -------------------------------------------------
 
-        for quickbooks_customer in quickbooks_customers:
-            mapped = (
-                map_quickbooks_customer_for_testa(
-                    quickbooks_customer
-                )
-            )
+        imported_customers = cursor.execute(
+            """
+            SELECT
+                id,
+                quickbooks_customer_id,
+                quickbooks_parent_customer_id
+            FROM customers
+            WHERE quickbooks_environment = ?
+              AND quickbooks_realm_id = ?
+              AND quickbooks_customer_id IS NOT NULL
+            """,
+            (
+                QUICKBOOKS_ENVIRONMENT,
+                connection_data[
+                    "realm_id"
+                ],
+            ),
+        ).fetchall()
 
-            child_qbo_id = mapped[
-                "quickbooks_customer_id"
-            ]
+        quickbooks_to_testa_ids = {
+            row["quickbooks_customer_id"]: row["id"]
+            for row in imported_customers
+        }
 
-            parent_qbo_id = mapped[
+        for imported_customer in imported_customers:
+            parent_testa_id = None
+
+            parent_qbo_id = imported_customer[
                 "quickbooks_parent_customer_id"
             ]
-
-            child_testa_id = (
-                quickbooks_to_testa_ids.get(
-                    child_qbo_id
-                )
-            )
-
-            parent_testa_id = None
 
             if parent_qbo_id:
                 parent_testa_id = (
@@ -1496,44 +1493,20 @@ def import_quickbooks_customers():
                     )
                 )
 
-                if parent_testa_id is None:
-                    parent_record = cursor.execute(
-                        """
-                        SELECT id
-                        FROM customers
-                        WHERE quickbooks_environment = ?
-                          AND quickbooks_realm_id = ?
-                          AND quickbooks_customer_id = ?
-                        """,
-                        (
-                            QUICKBOOKS_ENVIRONMENT,
-                            connection_data[
-                                "realm_id"
-                            ],
-                            parent_qbo_id,
-                        ),
-                    ).fetchone()
-
-                    if parent_record:
-                        parent_testa_id = (
-                            parent_record["id"]
-                        )
-
-            if child_testa_id:
-                cursor.execute(
-                    """
-                    UPDATE customers
-                    SET
-                        parent_customer_id = ?,
-                        updated_at = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        parent_testa_id,
-                        now,
-                        child_testa_id,
-                    ),
-                )
+            cursor.execute(
+                """
+                UPDATE customers
+                SET
+                    parent_customer_id = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    parent_testa_id,
+                    now,
+                    imported_customer["id"],
+                ),
+            )
 
         connection.commit()
 
@@ -1545,9 +1518,7 @@ def import_quickbooks_customers():
         connection.close()
 
     return {
-        "total": len(
-            quickbooks_customers
-        ),
+        "total": total_count,
         "imported": imported_count,
         "updated": updated_count,
         "needs_review": review_count,
