@@ -8908,7 +8908,7 @@ def admin_customers():
     }:
         customer_type_filter = "all"
 
-    page_size = 25
+    page_size = 50
 
     connection = get_db_connection()
 

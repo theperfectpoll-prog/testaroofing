@@ -8,6 +8,252 @@
 
 {% block admin_content %}
 
+<style>
+
+    .customer-directory-toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: end;
+        margin-bottom: 18px;
+        gap: 12px;
+    }
+
+    .customer-directory-search {
+        flex: 1 1 360px;
+    }
+
+    .customer-directory-filter {
+        flex: 0 1 190px;
+    }
+
+    .customer-directory-toolbar label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 0.76rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .customer-directory-toolbar input,
+    .customer-directory-toolbar select {
+        width: 100%;
+        min-height: 40px;
+        padding: 8px 10px;
+        font: inherit;
+        font-size: 0.88rem;
+        background: #fff;
+        border: 1px solid #ccd4dd;
+        border-radius: 6px;
+    }
+
+    .customer-directory-toolbar-actions {
+        display: flex;
+        gap: 8px;
+    }
+
+    .customer-directory-results {
+        margin: 0 0 12px;
+        color: #66717f;
+        font-size: 0.8rem;
+    }
+
+    .customer-directory-table th {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        font-size: 0.73rem;
+    }
+
+    .customer-directory-table td {
+        padding-top: 10px;
+        padding-bottom: 10px;
+        vertical-align: middle;
+        font-size: 0.84rem;
+        line-height: 1.3;
+    }
+
+    .customer-directory-table td > strong {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 0.9rem;
+        line-height: 1.25;
+    }
+
+    .customer-directory-table td > small {
+        display: block;
+        margin-top: 2px;
+        font-size: 0.75rem;
+        line-height: 1.3;
+    }
+
+    .customer-directory-table .admin-status {
+        padding: 3px 7px;
+        font-size: 0.7rem;
+    }
+
+    .customer-directory-muted {
+        color: #7a8694;
+        font-size: 0.78rem;
+    }
+
+    .customer-directory-pagination {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 16px;
+        gap: 12px;
+    }
+
+    .customer-directory-pagination-links {
+        display: flex;
+        gap: 8px;
+    }
+
+    .customer-directory-pagination span {
+        color: #66717f;
+        font-size: 0.8rem;
+    }
+
+    /* -----------------------------------------------------
+       CUSTOMER DIRECTORY SCROLL AREA
+       ----------------------------------------------------- */
+
+    .customer-directory-results + .admin-table-wrapper {
+        max-height: 600px;
+        overflow-y: auto;
+        overflow-x: auto;
+        border: 1px solid #d9e0e7;
+        border-radius: 8px;
+    }
+
+    .customer-directory-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #ffffff;
+    }
+
+
+    /* -----------------------------------------------------
+       MOBILE CUSTOMER DIRECTORY
+       ----------------------------------------------------- */
+
+    @media (max-width: 760px) {
+
+        .customer-directory-toolbar {
+            display: block;
+        }
+
+        .customer-directory-search,
+        .customer-directory-filter {
+            width: 100%;
+            margin-bottom: 12px;
+        }
+
+        .customer-directory-toolbar-actions {
+            width: 100%;
+            margin-bottom: 4px;
+        }
+
+        .customer-directory-toolbar-actions
+        .admin-primary-button,
+        .customer-directory-toolbar-actions
+        .admin-secondary-button {
+            flex: 1;
+            text-align: center;
+        }
+
+        .customer-directory-results
+        + .admin-table-wrapper {
+            max-height: 520px;
+            overflow-x: hidden;
+        }
+
+        .customer-directory-table {
+            display: block;
+            width: 100%;
+        }
+
+        .customer-directory-table thead {
+            display: none;
+        }
+
+        .customer-directory-table tbody {
+            display: block;
+            width: 100%;
+        }
+
+        .customer-directory-table tr {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            border-bottom: 1px solid #e2e7ec;
+        }
+
+        .customer-directory-table tr:last-child {
+            border-bottom: 0;
+        }
+
+        .customer-directory-table td {
+            display: block;
+            width: 100%;
+            padding: 0;
+            border: 0;
+        }
+
+        .customer-directory-table td:nth-child(3),
+        .customer-directory-table td:nth-child(4),
+        .customer-directory-table td:nth-child(5),
+        .customer-directory-table td:nth-child(6) {
+            display: none;
+        }
+
+        .customer-directory-table td:first-child {
+            margin-bottom: 6px;
+        }
+
+        .customer-directory-table
+        td:first-child > strong {
+            margin-bottom: 2px;
+            font-size: 0.95rem;
+        }
+
+        .customer-directory-table
+        td:first-child > small {
+            font-size: 0.72rem;
+        }
+
+        .customer-directory-table
+        td:nth-child(2) > strong {
+            margin-bottom: 2px;
+            font-size: 0.82rem;
+        }
+
+        .customer-directory-table
+        td:nth-child(2) > small {
+            margin-top: 1px;
+            font-size: 0.76rem;
+        }
+
+        .customer-directory-pagination {
+            align-items: stretch;
+        }
+
+        .customer-directory-pagination-links {
+            width: 100%;
+        }
+
+        .customer-directory-pagination-links
+        .admin-secondary-button {
+            flex: 1;
+            text-align: center;
+        }
+
+    }
+
+</style>
+
 <header class="admin-page-header">
 
     <div>
@@ -61,11 +307,155 @@
     </div>
 
 
+    <form
+        method="get"
+        action="{{ url_for('admin_customers') }}"
+        class="customer-directory-toolbar"
+    >
+
+        <div class="customer-directory-search">
+
+            <label for="customer-search">
+                Search Customers
+            </label>
+
+            <input
+                type="search"
+                id="customer-search"
+                name="q"
+                value="{{ search_query }}"
+                placeholder="Name, contact, phone, email, address..."
+            >
+
+        </div>
+
+
+        <div class="customer-directory-filter">
+
+            <label for="customer-type-filter">
+                Customer Type
+            </label>
+
+            <select
+                id="customer-type-filter"
+                name="type"
+            >
+
+                <option
+                    value="all"
+                    {% if customer_type_filter == "all" %}
+                        selected
+                    {% endif %}
+                >
+                    All Types
+                </option>
+
+                <option
+                    value="commercial"
+                    {% if customer_type_filter == "commercial" %}
+                        selected
+                    {% endif %}
+                >
+                    Commercial
+                </option>
+
+                <option
+                    value="residential"
+                    {% if customer_type_filter == "residential" %}
+                        selected
+                    {% endif %}
+                >
+                    Residential
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <div class="customer-directory-filter">
+
+            <label for="customer-status-filter">
+                Status
+            </label>
+
+            <select
+                id="customer-status-filter"
+                name="status"
+            >
+
+                <option
+                    value="active"
+                    {% if status_filter == "active" %}
+                        selected
+                    {% endif %}
+                >
+                    Active
+                </option>
+
+                <option
+                    value="inactive"
+                    {% if status_filter == "inactive" %}
+                        selected
+                    {% endif %}
+                >
+                    Inactive
+                </option>
+
+                <option
+                    value="all"
+                    {% if status_filter == "all" %}
+                        selected
+                    {% endif %}
+                >
+                    All Statuses
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <div class="customer-directory-toolbar-actions">
+
+            <button
+                type="submit"
+                class="admin-primary-button"
+            >
+                Search
+            </button>
+
+            {% if
+                search_query
+                or customer_type_filter != "all"
+                or status_filter != "active"
+            %}
+
+                <a
+                    href="{{ url_for('admin_customers') }}"
+                    class="admin-secondary-button"
+                >
+                    Clear
+                </a>
+
+            {% endif %}
+
+        </div>
+
+    </form>
+
+
     {% if customers %}
+
+        <p class="customer-directory-results">
+            Showing {{ customers|length }}
+            of {{ filtered_count }}
+            matching customers.
+        </p>
 
         <div class="admin-table-wrapper">
 
-            <table class="admin-project-table">
+            <table class="admin-project-table customer-directory-table">
 
                 <thead>
 
@@ -91,8 +481,6 @@
 
                                 <strong>
 
-                                <strong>
-
                                     {% if customer["display_name"] %}
 
                                         {{ customer["display_name"] }}
@@ -101,10 +489,28 @@
 
                                         {{ customer["commercial_name"] }}
 
+                                    {% elif
+                                        customer["primary_first_name"]
+                                        or customer["primary_last_name"]
+                                    %}
+
+                                        {{
+                                            (
+                                                (
+                                                    customer["primary_first_name"]
+                                                    or ""
+                                                )
+                                                ~ " "
+                                                ~ (
+                                                    customer["primary_last_name"]
+                                                    or ""
+                                                )
+                                            )|trim
+                                        }}
+
                                     {% else %}
 
-                                        {{ customer["primary_first_name"] }}
-                                        {{ customer["primary_last_name"] }}
+                                        Unnamed Customer
 
                                     {% endif %}
 
@@ -113,9 +519,17 @@
                                 <small>
 
                                     {% if customer["customer_type"] == "commercial" %}
+
                                         Commercial
-                                    {% else %}
+
+                                    {% elif customer["customer_type"] == "residential" %}
+
                                         Residential
+
+                                    {% else %}
+
+                                        Type Needs Review
+
                                     {% endif %}
 
                                     {% if customer["is_general_contractor"] %}
@@ -129,34 +543,120 @@
 
                             <td>
 
-                                <strong>
-                                    {{ customer["primary_first_name"] }}
-                                    {{ customer["primary_last_name"] }}
-                                </strong>
+                                {% if
+                                    customer["primary_first_name"]
+                                    or customer["primary_last_name"]
+                                %}
 
-                                <small>
-                                    {{ customer["primary_phone"] }}
-                                    ·
-                                    {{ customer["primary_phone_type"]|title }}
-                                </small>
+                                    <strong>
+                                        {{
+                                            (
+                                                (
+                                                    customer["primary_first_name"]
+                                                    or ""
+                                                )
+                                                ~ " "
+                                                ~ (
+                                                    customer["primary_last_name"]
+                                                    or ""
+                                                )
+                                            )|trim
+                                        }}
+                                    </strong>
 
-                                <small>
-                                    {{ customer["primary_email"] }}
-                                </small>
+                                {% else %}
+
+                                    <span class="customer-directory-muted">
+                                        No contact name
+                                    </span>
+
+                                {% endif %}
+
+
+                                {% if customer["primary_phone"] %}
+
+                                    <small>
+
+                                        {{ customer["primary_phone"] }}
+
+                                        {% if customer["primary_phone_type"] %}
+                                            · {{ customer["primary_phone_type"]|title }}
+                                        {% endif %}
+
+                                    </small>
+
+                                {% endif %}
+
+
+                                {% if customer["primary_email"] %}
+
+                                    <small>
+                                        {{ customer["primary_email"] }}
+                                    </small>
+
+                                {% endif %}
+
+
+                                {% if
+                                    not customer["primary_phone"]
+                                    and not customer["primary_email"]
+                                %}
+
+                                    <small class="customer-directory-muted">
+                                        No phone or email
+                                    </small>
+
+                                {% endif %}
 
                             </td>
 
 
                             <td>
 
-                                <strong>
-                                    {{ customer["city"] }},
-                                    {{ customer["state"] }}
-                                </strong>
+                                {% if
+                                    customer["city"]
+                                    or customer["state"]
+                                %}
 
-                                <small>
-                                    {{ customer["address_line_1"] }}
-                                </small>
+                                    <strong>
+
+                                        {% if customer["city"] %}
+                                            {{ customer["city"] }}
+                                        {% endif %}
+
+                                        {% if
+                                            customer["city"]
+                                            and customer["state"]
+                                        %},{% endif %}
+
+                                        {% if customer["state"] %}
+                                            {{ customer["state"] }}
+                                        {% endif %}
+
+                                    </strong>
+
+                                {% else %}
+
+                                    <span class="customer-directory-muted">
+                                        No city/state
+                                    </span>
+
+                                {% endif %}
+
+
+                                {% if customer["address_line_1"] %}
+
+                                    <small>
+                                        {{ customer["address_line_1"] }}
+                                    </small>
+
+                                {% else %}
+
+                                    <small class="customer-directory-muted">
+                                        No street address
+                                    </small>
+
+                                {% endif %}
 
                             </td>
 
@@ -172,7 +672,7 @@
 
                                 {% else %}
 
-                                    <span class="admin-muted-text">
+                                    <span class="customer-directory-muted">
                                         Not Assigned
                                     </span>
 
@@ -228,25 +728,99 @@
 
         </div>
 
+
+        {% if total_pages > 1 %}
+
+            <nav
+                class="customer-directory-pagination"
+                aria-label="Customer directory pages"
+            >
+
+                <span>
+                    Page {{ page }} of {{ total_pages }}
+                </span>
+
+
+                <div class="customer-directory-pagination-links">
+
+                    {% if has_previous_page %}
+
+                        <a
+                            href="{{ url_for(
+                                'admin_customers',
+                                q=search_query,
+                                type=customer_type_filter,
+                                status=status_filter,
+                                page=page - 1
+                            ) }}"
+                            class="admin-secondary-button"
+                        >
+                            Previous
+                        </a>
+
+                    {% endif %}
+
+
+                    {% if has_next_page %}
+
+                        <a
+                            href="{{ url_for(
+                                'admin_customers',
+                                q=search_query,
+                                type=customer_type_filter,
+                                status=status_filter,
+                                page=page + 1
+                            ) }}"
+                            class="admin-secondary-button"
+                        >
+                            Next
+                        </a>
+
+                    {% endif %}
+
+                </div>
+
+            </nav>
+
+        {% endif %}
+
     {% else %}
 
         <div class="admin-empty-state admin-empty-state-large">
 
-            <h3>No Customers Yet</h3>
+            {% if customer_count > 0 %}
 
-            <p>
-                The Testa Roofing customer database is ready.
-                Existing customers will eventually be imported
-                from QuickBooks, or you can create a customer
-                manually now.
-            </p>
+                <h3>No Customers Matched</h3>
 
-            <a
-                href="{{ url_for('admin_customer_new') }}"
-                class="admin-primary-button"
-            >
-                Add First Customer
-            </a>
+                <p>
+                    No customers matched the current
+                    search and filter settings.
+                </p>
+
+                <a
+                    href="{{ url_for('admin_customers') }}"
+                    class="admin-secondary-button"
+                >
+                    Clear Search & Filters
+                </a>
+
+            {% else %}
+
+                <h3>No Customers Yet</h3>
+
+                <p>
+                    Add a customer manually or import
+                    customers from QuickBooks Online.
+                </p>
+
+                <a
+                    href="{{ url_for('admin_customer_new') }}"
+                    class="admin-primary-button"
+                >
+                    Add First Customer
+                </a>
+
+            {% endif %}
 
         </div>
 
