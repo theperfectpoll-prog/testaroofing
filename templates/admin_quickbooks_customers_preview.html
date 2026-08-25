@@ -1,0 +1,396 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    QuickBooks Customer Preview | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            QuickBooks
+        </span>
+
+        <h2>
+            QuickBooks Customer Preview
+        </h2>
+
+        <p>
+            Review customer data returned by the
+            connected QuickBooks sandbox before
+            importing anything into Testa Roofing.
+        </p>
+
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <form
+            method="post"
+            action="{{ url_for(
+                'admin_quickbooks_customers_import'
+            ) }}"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+            <button
+                type="submit"
+                class="admin-primary-button"
+            >
+                Import Sandbox Customers
+            </button>
+
+        </form>
+
+        <a
+            href="{{ url_for('admin_customers') }}"
+            class="admin-secondary-button"
+        >
+            Back to Customers
+        </a>
+
+    </div>
+
+</header>
+
+<section class="admin-panel">
+
+    <div class="admin-stat-grid">
+
+        <div class="admin-stat-card">
+
+            <span>
+                Previewed
+            </span>
+
+            <strong>
+                {{ mapped_customers|length }}
+            </strong>
+
+        </div>
+
+        <div class="admin-stat-card">
+
+            <span>
+                Ready to Import
+            </span>
+
+            <strong>
+                {{ ready_count }}
+            </strong>
+
+        </div>
+
+        <div class="admin-stat-card">
+
+            <span>
+                Needs Review
+            </span>
+
+            <strong>
+                {{ review_count }}
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+<section class="admin-panel">
+
+    {% if quickbooks_customers %}
+
+        <div class="admin-table-wrapper">
+
+            <table class="admin-project-table">
+
+                <thead>
+
+                    <tr>
+                        <th>Display Name</th>
+                        <th>Company</th>
+                        <th>Parent / Sub-Customer</th>
+                        <th>Testa Mapping</th>
+                        <th>Contact</th>
+                        <th>Phone</th>
+                        <th>Email</th>
+                        <th>Billing Address</th>
+                        <th>Active</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for customer in quickbooks_customers %}
+
+                        <tr>
+
+                            <td>
+                                <strong>
+                                    {{ customer.get(
+                                        "DisplayName",
+                                        ""
+                                    ) }}
+                                </strong>
+
+                                <small>
+                                    QBO ID:
+                                    {{ customer.get(
+                                        "Id",
+                                        ""
+                                    ) }}
+                                </small>
+                            </td>
+
+
+                            <td>
+                                {{ customer.get(
+                                    "CompanyName",
+                                    ""
+                                ) }}
+                            </td>
+
+
+                            <td>
+
+                                {% if customer.get("ParentRef") %}
+
+                                    <strong>
+                                        Parent:
+                                        {{ customer["ParentRef"].get(
+                                            "name",
+                                            ""
+                                        ) }}
+                                    </strong>
+
+                                    <small>
+                                        Parent QBO ID:
+                                        {{ customer["ParentRef"].get(
+                                            "value",
+                                            ""
+                                        ) }}
+                                    </small>
+
+                                {% elif customer.get("Job") %}
+
+                                    <strong>
+                                        Sub-Customer / Job
+                                    </strong>
+
+                                {% else %}
+
+                                    <span class="admin-muted-text">
+                                        Standalone
+                                    </span>
+
+                                {% endif %}
+
+                                {% if customer.get("FullyQualifiedName") %}
+
+                                    <small>
+                                        {{ customer.get(
+                                            "FullyQualifiedName",
+                                            ""
+                                        ) }}
+                                    </small>
+
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+
+                                {% set mapped = mapped_customers[
+                                    loop.index0
+                                ] %}
+
+                                {% if mapped["proposed_customer_type"] == "commercial" %}
+
+                                    <strong>
+                                        Commercial
+                                    </strong>
+
+                                {% elif mapped["proposed_customer_type"] == "residential" %}
+
+                                    <strong>
+                                        Residential
+                                    </strong>
+
+                                {% else %}
+
+                                    <strong>
+                                        Needs Classification
+                                    </strong>
+
+                                {% endif %}
+
+                                {% if mapped["ready_without_review"] %}
+
+                                    <small>
+                                        Ready to Import
+                                    </small>
+
+                                {% else %}
+
+                                    <small>
+                                        Missing:
+                                        {{ mapped[
+                                            "missing_fields"
+                                        ]|join(", ") }}
+                                    </small>
+
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+                                {{ customer.get(
+                                    "GivenName",
+                                    ""
+                                ) }}
+
+                                {{ customer.get(
+                                    "FamilyName",
+                                    ""
+                                ) }}
+                            </td>
+
+
+                            <td>
+
+                                {% if customer.get(
+                                    "PrimaryPhone"
+                                ) %}
+
+                                    {{ customer[
+                                        "PrimaryPhone"
+                                    ].get(
+                                        "FreeFormNumber",
+                                        ""
+                                    ) }}
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if customer.get(
+                                    "PrimaryEmailAddr"
+                                ) %}
+
+                                    {{ customer[
+                                        "PrimaryEmailAddr"
+                                    ].get(
+                                        "Address",
+                                        ""
+                                    ) }}
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if customer.get(
+                                    "BillAddr"
+                                ) %}
+
+                                    {{ customer[
+                                        "BillAddr"
+                                    ].get(
+                                        "Line1",
+                                        ""
+                                    ) }}
+
+                                    <small>
+                                        {{ customer[
+                                            "BillAddr"
+                                        ].get(
+                                            "City",
+                                            ""
+                                        ) }}
+
+                                        {{ customer[
+                                            "BillAddr"
+                                        ].get(
+                                            "CountrySubDivisionCode",
+                                            ""
+                                        ) }}
+
+                                        {{ customer[
+                                            "BillAddr"
+                                        ].get(
+                                            "PostalCode",
+                                            ""
+                                        ) }}
+                                    </small>
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                {% if customer.get(
+                                    "Active",
+                                    True
+                                ) %}
+
+                                    Yes
+
+                                {% else %}
+
+                                    No
+
+                                {% endif %}
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <div class="admin-empty-state">
+
+            <h3>
+                No QuickBooks Customers Found
+            </h3>
+
+            <p>
+                The connected QuickBooks company did
+                not return any Customer records.
+            </p>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

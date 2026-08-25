@@ -91,7 +91,13 @@
 
                                 <strong>
 
-                                    {% if customer["customer_type"] == "commercial" %}
+                                <strong>
+
+                                    {% if customer["display_name"] %}
+
+                                        {{ customer["display_name"] }}
+
+                                    {% elif customer["commercial_name"] %}
 
                                         {{ customer["commercial_name"] }}
 
@@ -270,7 +276,10 @@
 
     <div class="admin-section-card-grid">
 
-        <div class="admin-section-card admin-section-card-disabled">
+        <a
+            href="{{ url_for('admin_quickbooks_connect') }}"
+            class="admin-section-card"
+        >
 
             <strong>
                 Connect QuickBooks
@@ -282,29 +291,33 @@
             </span>
 
             <small>
-                Integration setup coming next
+                Development sandbox connection
             </small>
 
-        </div>
+        </a>
 
-
-        <div class="admin-section-card admin-section-card-disabled">
+        <a
+            href="{{ url_for(
+                'admin_quickbooks_customers_preview'
+            ) }}"
+            class="admin-section-card"
+        >
 
             <strong>
-                Import Customers
+                Preview QuickBooks Customers
             </strong>
 
             <span>
-                Pull the existing QuickBooks customer list
-                into Testa Roofing without re-entering
-                customer information.
+                Review customer information returned
+                from QuickBooks before importing it
+                into Testa Roofing.
             </span>
 
             <small>
-                Requires QuickBooks connection
+                No Testa records will be changed
             </small>
 
-        </div>
+        </a>
 
 
         <div class="admin-section-card admin-section-card-disabled">

@@ -8,12 +8,14 @@ import base64
 import io
 import pyotp
 import qrcode
+import requests
 from cryptography.fernet import Fernet, InvalidToken
 
 import click
 from datetime import UTC, datetime, timedelta
 from functools import wraps
 from hmac import compare_digest
+from urllib.parse import urlencode
 
 from flask import (
     Flask,
@@ -68,6 +70,59 @@ app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
 ).lower() == "production"
 app.config["MAX_CONTENT_LENGTH"] = 25 * 1024 * 1024
 
+# =========================================================
+# QUICKBOOKS ONLINE CONFIGURATION
+# =========================================================
+
+QUICKBOOKS_CLIENT_ID = os.environ.get(
+    "QUICKBOOKS_CLIENT_ID",
+    "",
+).strip()
+
+QUICKBOOKS_CLIENT_SECRET = os.environ.get(
+    "QUICKBOOKS_CLIENT_SECRET",
+    "",
+).strip()
+
+QUICKBOOKS_REDIRECT_URI = os.environ.get(
+    "QUICKBOOKS_REDIRECT_URI",
+    "",
+).strip()
+
+QUICKBOOKS_ENVIRONMENT = os.environ.get(
+    "QUICKBOOKS_ENVIRONMENT",
+    "sandbox",
+).strip().lower()
+
+QUICKBOOKS_TOKEN_ENCRYPTION_KEY = os.environ.get(
+    "QUICKBOOKS_TOKEN_ENCRYPTION_KEY",
+    "",
+).strip()
+
+QUICKBOOKS_ACCOUNTING_SCOPE = (
+    "com.intuit.quickbooks.accounting"
+)
+
+QUICKBOOKS_DISCOVERY_URLS = {
+    "sandbox": (
+        "https://developer.api.intuit.com/"
+        ".well-known/openid_sandbox_configuration/"
+    ),
+    "production": (
+        "https://developer.api.intuit.com/"
+        ".well-known/openid_configuration/"
+    ),
+}
+
+QUICKBOOKS_API_BASE_URLS = {
+    "sandbox": (
+        "https://sandbox-quickbooks.api.intuit.com"
+    ),
+    "production": (
+        "https://quickbooks.api.intuit.com"
+    ),
+}
+
 PROJECT_UPLOAD_ROOT = os.path.join(
     BASE_DIR,
     "static",
@@ -89,6 +144,1414 @@ LEARNING_UPLOAD_ROOT = os.path.join(
     "learning_center",
 )
 
+# =========================================================
+# QUICKBOOKS ONLINE HELPERS
+# =========================================================
+
+
+class QuickBooksConfigurationError(RuntimeError):
+    """Raised when QuickBooks configuration is incomplete."""
+
+
+class QuickBooksOAuthError(RuntimeError):
+    """Raised when a QuickBooks OAuth operation fails."""
+
+
+def validate_quickbooks_configuration():
+    missing_settings = []
+
+    if not QUICKBOOKS_CLIENT_ID:
+        missing_settings.append(
+            "QUICKBOOKS_CLIENT_ID"
+        )
+
+    if not QUICKBOOKS_CLIENT_SECRET:
+        missing_settings.append(
+            "QUICKBOOKS_CLIENT_SECRET"
+        )
+
+    if not QUICKBOOKS_REDIRECT_URI:
+        missing_settings.append(
+            "QUICKBOOKS_REDIRECT_URI"
+        )
+
+    if not QUICKBOOKS_TOKEN_ENCRYPTION_KEY:
+        missing_settings.append(
+            "QUICKBOOKS_TOKEN_ENCRYPTION_KEY"
+        )
+
+    if missing_settings:
+        raise QuickBooksConfigurationError(
+            (
+                "Missing QuickBooks configuration: "
+                + ", ".join(missing_settings)
+            )
+        )
+
+    if (
+        QUICKBOOKS_ENVIRONMENT
+        not in QUICKBOOKS_DISCOVERY_URLS
+    ):
+        raise QuickBooksConfigurationError(
+            (
+                "QUICKBOOKS_ENVIRONMENT must be "
+                "'sandbox' or 'production'."
+            )
+        )
+
+    try:
+        Fernet(
+            QUICKBOOKS_TOKEN_ENCRYPTION_KEY.encode(
+                "utf-8"
+            )
+        )
+
+    except (ValueError, TypeError) as exc:
+        raise QuickBooksConfigurationError(
+            (
+                "QUICKBOOKS_TOKEN_ENCRYPTION_KEY "
+                "is not a valid Fernet key."
+            )
+        ) from exc
+
+
+def get_quickbooks_token_cipher():
+    validate_quickbooks_configuration()
+
+    return Fernet(
+        QUICKBOOKS_TOKEN_ENCRYPTION_KEY.encode(
+            "utf-8"
+        )
+    )
+
+
+def encrypt_quickbooks_value(value):
+    if not value:
+        return None
+
+    encrypted_value = (
+        get_quickbooks_token_cipher()
+        .encrypt(
+            value.encode("utf-8")
+        )
+        .decode("utf-8")
+    )
+
+    return encrypted_value
+
+
+def decrypt_quickbooks_value(value):
+    if not value:
+        return None
+
+    try:
+        decrypted_value = (
+            get_quickbooks_token_cipher()
+            .decrypt(
+                value.encode("utf-8")
+            )
+            .decode("utf-8")
+        )
+
+    except InvalidToken as exc:
+        raise QuickBooksOAuthError(
+            (
+                "Stored QuickBooks authorization "
+                "information could not be decrypted."
+            )
+        ) from exc
+
+    return decrypted_value
+
+
+def get_quickbooks_discovery_document():
+    validate_quickbooks_configuration()
+
+    discovery_url = (
+        QUICKBOOKS_DISCOVERY_URLS[
+            QUICKBOOKS_ENVIRONMENT
+        ]
+    )
+
+    try:
+        response = requests.get(
+            discovery_url,
+            headers={
+                "Accept": "application/json",
+            },
+            timeout=10,
+        )
+
+        response.raise_for_status()
+
+        discovery_document = response.json()
+
+    except (
+        requests.RequestException,
+        ValueError,
+    ) as exc:
+        raise QuickBooksOAuthError(
+            (
+                "Unable to retrieve the Intuit "
+                "OAuth discovery document."
+            )
+        ) from exc
+
+    required_fields = (
+        "authorization_endpoint",
+        "token_endpoint",
+        "revocation_endpoint",
+    )
+
+    missing_fields = [
+        field
+        for field in required_fields
+        if not discovery_document.get(field)
+    ]
+
+    if missing_fields:
+        raise QuickBooksOAuthError(
+            (
+                "The Intuit OAuth discovery document "
+                "did not contain all required endpoints."
+            )
+        )
+
+    return discovery_document
+
+def save_quickbooks_connection(
+    realm_id,
+    access_token,
+    refresh_token,
+    access_token_expires_in,
+    refresh_token_expires_in=None,
+):
+    admin_user = get_current_admin_user()
+
+    now_datetime = datetime.now(UTC)
+
+    access_token_expires_at = (
+        now_datetime
+        + timedelta(
+            seconds=int(
+                access_token_expires_in
+            )
+        )
+    )
+
+    refresh_token_expires_at = None
+
+    if refresh_token_expires_in:
+        refresh_token_expires_at = (
+            now_datetime
+            + timedelta(
+                seconds=int(
+                    refresh_token_expires_in
+                )
+            )
+        )
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        INSERT INTO quickbooks_connection (
+            id,
+            environment,
+            realm_id_encrypted,
+            access_token_encrypted,
+            refresh_token_encrypted,
+            access_token_expires_at,
+            refresh_token_expires_at,
+            connected_at,
+            updated_at,
+            connected_by
+        )
+        VALUES (
+            1, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+
+        ON CONFLICT(id) DO UPDATE SET
+            environment =
+                excluded.environment,
+            realm_id_encrypted =
+                excluded.realm_id_encrypted,
+            access_token_encrypted =
+                excluded.access_token_encrypted,
+            refresh_token_encrypted =
+                excluded.refresh_token_encrypted,
+            access_token_expires_at =
+                excluded.access_token_expires_at,
+            refresh_token_expires_at =
+                excluded.refresh_token_expires_at,
+            connected_at =
+                excluded.connected_at,
+            updated_at =
+                excluded.updated_at,
+            connected_by =
+                excluded.connected_by
+        """,
+        (
+            QUICKBOOKS_ENVIRONMENT,
+            encrypt_quickbooks_value(
+                str(realm_id)
+            ),
+            encrypt_quickbooks_value(
+                access_token
+            ),
+            encrypt_quickbooks_value(
+                refresh_token
+            ),
+            access_token_expires_at.isoformat(
+                timespec="seconds"
+            ),
+            (
+                refresh_token_expires_at.isoformat(
+                    timespec="seconds"
+                )
+                if refresh_token_expires_at
+                else None
+            ),
+            now_datetime.isoformat(
+                timespec="seconds"
+            ),
+            now_datetime.isoformat(
+                timespec="seconds"
+            ),
+            (
+                admin_user["id"]
+                if admin_user
+                else None
+            ),
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def get_quickbooks_connection():
+    connection = get_db_connection()
+
+    connection_record = connection.execute(
+        """
+        SELECT *
+        FROM quickbooks_connection
+        WHERE id = 1
+        """
+    ).fetchone()
+
+    connection.close()
+
+    if connection_record is None:
+        return None
+
+    return {
+        "environment": (
+            connection_record[
+                "environment"
+            ]
+        ),
+        "realm_id": decrypt_quickbooks_value(
+            connection_record[
+                "realm_id_encrypted"
+            ]
+        ),
+        "access_token": decrypt_quickbooks_value(
+            connection_record[
+                "access_token_encrypted"
+            ]
+        ),
+        "refresh_token": decrypt_quickbooks_value(
+            connection_record[
+                "refresh_token_encrypted"
+            ]
+        ),
+        "access_token_expires_at": (
+            connection_record[
+                "access_token_expires_at"
+            ]
+        ),
+        "refresh_token_expires_at": (
+            connection_record[
+                "refresh_token_expires_at"
+            ]
+        ),
+        "connected_at": (
+            connection_record[
+                "connected_at"
+            ]
+        ),
+        "updated_at": (
+            connection_record[
+                "updated_at"
+            ]
+        ),
+    }
+
+def update_quickbooks_tokens(
+    access_token,
+    refresh_token,
+    access_token_expires_in,
+    refresh_token_expires_in=None,
+):
+    now_datetime = datetime.now(UTC)
+
+    access_token_expires_at = (
+        now_datetime
+        + timedelta(
+            seconds=int(
+                access_token_expires_in
+            )
+        )
+    )
+
+    refresh_token_expires_at = None
+
+    if refresh_token_expires_in:
+        refresh_token_expires_at = (
+            now_datetime
+            + timedelta(
+                seconds=int(
+                    refresh_token_expires_in
+                )
+            )
+        )
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE quickbooks_connection
+        SET
+            access_token_encrypted = ?,
+            refresh_token_encrypted = ?,
+            access_token_expires_at = ?,
+            refresh_token_expires_at = ?,
+            updated_at = ?
+        WHERE id = 1
+        """,
+        (
+            encrypt_quickbooks_value(
+                access_token
+            ),
+            encrypt_quickbooks_value(
+                refresh_token
+            ),
+            access_token_expires_at.isoformat(
+                timespec="seconds"
+            ),
+            (
+                refresh_token_expires_at.isoformat(
+                    timespec="seconds"
+                )
+                if refresh_token_expires_at
+                else None
+            ),
+            now_datetime.isoformat(
+                timespec="seconds"
+            ),
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+
+def refresh_quickbooks_access_token(
+    connection_data,
+):
+    discovery_document = (
+        get_quickbooks_discovery_document()
+    )
+
+    response = requests.post(
+        discovery_document[
+            "token_endpoint"
+        ],
+        auth=(
+            QUICKBOOKS_CLIENT_ID,
+            QUICKBOOKS_CLIENT_SECRET,
+        ),
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": (
+                connection_data[
+                    "refresh_token"
+                ]
+            ),
+        },
+        headers={
+            "Accept": "application/json",
+            "Content-Type": (
+                "application/"
+                "x-www-form-urlencoded"
+            ),
+        },
+        timeout=15,
+    )
+
+    intuit_tid = response.headers.get(
+        "intuit_tid"
+    )
+
+    try:
+        response.raise_for_status()
+        token_data = response.json()
+
+    except (
+        requests.RequestException,
+        ValueError,
+    ) as exc:
+        app.logger.error(
+            (
+                "QuickBooks token refresh failed. "
+                "status=%s intuit_tid=%s"
+            ),
+            response.status_code,
+            intuit_tid,
+        )
+
+        raise QuickBooksOAuthError(
+            (
+                "QuickBooks authorization "
+                "could not be refreshed."
+            )
+        ) from exc
+
+    access_token = token_data.get(
+        "access_token"
+    )
+
+    refresh_token = token_data.get(
+        "refresh_token"
+    )
+
+    access_expires_in = token_data.get(
+        "expires_in"
+    )
+
+    refresh_expires_in = token_data.get(
+        "x_refresh_token_expires_in"
+    )
+
+    if (
+        not access_token
+        or not refresh_token
+        or not access_expires_in
+    ):
+        raise QuickBooksOAuthError(
+            (
+                "Intuit did not return all "
+                "required refreshed tokens."
+            )
+        )
+
+    update_quickbooks_tokens(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        access_token_expires_in=(
+            access_expires_in
+        ),
+        refresh_token_expires_in=(
+            refresh_expires_in
+        ),
+    )
+
+    return access_token
+
+
+def get_valid_quickbooks_access_token():
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        raise QuickBooksOAuthError(
+            "QuickBooks is not connected."
+        )
+
+    expires_at = datetime.fromisoformat(
+        connection_data[
+            "access_token_expires_at"
+        ]
+    )
+
+    refresh_threshold = (
+        datetime.now(UTC)
+        + timedelta(
+            minutes=5
+        )
+    )
+
+    if expires_at <= refresh_threshold:
+        return refresh_quickbooks_access_token(
+            connection_data
+        )
+
+    return connection_data[
+        "access_token"
+    ]
+
+
+def query_quickbooks_customers(
+    start_position=1,
+    max_results=25,
+):
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        raise QuickBooksOAuthError(
+            "QuickBooks is not connected."
+        )
+
+    access_token = (
+        get_valid_quickbooks_access_token()
+    )
+
+    base_url = QUICKBOOKS_API_BASE_URLS[
+        QUICKBOOKS_ENVIRONMENT
+    ]
+
+    query = (
+        "SELECT * FROM Customer "
+        f"STARTPOSITION {int(start_position)} "
+        f"MAXRESULTS {int(max_results)}"
+    )
+
+    response = requests.get(
+        (
+            f"{base_url}/v3/company/"
+            f"{connection_data['realm_id']}/query"
+        ),
+        params={
+            "query": query,
+        },
+        headers={
+            "Authorization": (
+                f"Bearer {access_token}"
+            ),
+            "Accept": "application/json",
+        },
+        timeout=15,
+    )
+
+    intuit_tid = response.headers.get(
+        "intuit_tid"
+    )
+
+    try:
+        response.raise_for_status()
+        response_data = response.json()
+
+    except (
+        requests.RequestException,
+        ValueError,
+    ) as exc:
+        app.logger.error(
+            (
+                "QuickBooks customer query failed. "
+                "status=%s intuit_tid=%s"
+            ),
+            response.status_code,
+            intuit_tid,
+        )
+
+        raise QuickBooksOAuthError(
+            (
+                "QuickBooks customer data "
+                "could not be retrieved."
+            )
+        ) from exc
+
+    customers = (
+        response_data
+        .get(
+            "QueryResponse",
+            {},
+        )
+        .get(
+            "Customer",
+            [],
+        )
+    )
+
+    customers.sort(
+        key=lambda customer: (
+            customer.get(
+                "DisplayName",
+                "",
+            ).casefold()
+        )
+    )
+
+    return customers
+
+def query_all_quickbooks_customers():
+    all_customers = []
+
+    start_position = 1
+    batch_size = 100
+
+    while True:
+        customer_batch = (
+            query_quickbooks_customers(
+                start_position=start_position,
+                max_results=batch_size,
+            )
+        )
+
+        if not customer_batch:
+            break
+
+        all_customers.extend(
+            customer_batch
+        )
+
+        if len(customer_batch) < batch_size:
+            break
+
+        start_position += batch_size
+
+    all_customers.sort(
+        key=lambda customer: (
+            customer.get(
+                "DisplayName",
+                "",
+            ).casefold()
+        )
+    )
+
+    return all_customers
+
+def map_quickbooks_customer_for_testa(
+    quickbooks_customer,
+):
+    company_name = (
+        quickbooks_customer
+        .get(
+            "CompanyName",
+            "",
+        )
+        .strip()
+    )
+
+    display_name = (
+        quickbooks_customer
+        .get(
+            "DisplayName",
+            "",
+        )
+        .strip()
+    )
+
+    first_name = (
+        quickbooks_customer
+        .get(
+            "GivenName",
+            "",
+        )
+        .strip()
+    )
+
+    last_name = (
+        quickbooks_customer
+        .get(
+            "FamilyName",
+            "",
+        )
+        .strip()
+    )
+
+    billing_address = (
+        quickbooks_customer.get(
+            "BillAddr"
+        )
+        or {}
+    )
+
+    phone_data = (
+        quickbooks_customer.get(
+            "PrimaryPhone"
+        )
+        or {}
+    )
+
+    email_data = (
+        quickbooks_customer.get(
+            "PrimaryEmailAddr"
+        )
+        or {}
+    )
+
+    parent_reference = (
+        quickbooks_customer.get(
+            "ParentRef"
+        )
+        or {}
+    )
+
+    if company_name:
+        proposed_customer_type = (
+            "commercial"
+        )
+
+    elif first_name or last_name:
+        proposed_customer_type = (
+            "residential"
+        )
+
+    else:
+        proposed_customer_type = (
+            "needs_review"
+        )
+
+    missing_fields = []
+
+    if not billing_address.get("Line1"):
+        missing_fields.append(
+            "address"
+        )
+
+    if not billing_address.get("City"):
+        missing_fields.append(
+            "city"
+        )
+
+    if not billing_address.get(
+        "CountrySubDivisionCode"
+    ):
+        missing_fields.append(
+            "state"
+        )
+
+    if not billing_address.get(
+        "PostalCode"
+    ):
+        missing_fields.append(
+            "ZIP"
+        )
+
+    if not first_name:
+        missing_fields.append(
+            "contact first name"
+        )
+
+    if not last_name:
+        missing_fields.append(
+            "contact last name"
+        )
+
+    if not phone_data.get(
+        "FreeFormNumber"
+    ):
+        missing_fields.append(
+            "phone"
+        )
+
+    if not email_data.get(
+        "Address"
+    ):
+        missing_fields.append(
+            "email"
+        )
+
+    if (
+        proposed_customer_type
+        == "needs_review"
+    ):
+        missing_fields.append(
+            "customer type"
+        )
+
+    return {
+        "quickbooks_customer_id": (
+            str(
+                quickbooks_customer.get(
+                    "Id",
+                    "",
+                )
+            )
+        ),
+        "display_name": display_name,
+        "company_name": company_name,
+        "proposed_customer_type": (
+            proposed_customer_type
+        ),
+        "first_name": first_name,
+        "last_name": last_name,
+        "phone": phone_data.get(
+            "FreeFormNumber",
+            "",
+        ),
+        "email": email_data.get(
+            "Address",
+            "",
+        ),
+        "address_line_1": (
+            billing_address.get(
+                "Line1",
+                "",
+            )
+        ),
+        "address_line_2": (
+            billing_address.get(
+                "Line2",
+                "",
+            )
+        ),
+        "city": billing_address.get(
+            "City",
+            "",
+        ),
+        "state": billing_address.get(
+            "CountrySubDivisionCode",
+            "",
+        ),
+        "postal_code": (
+            billing_address.get(
+                "PostalCode",
+                "",
+            )
+        ),
+        "quickbooks_parent_customer_id": (
+            str(
+                parent_reference.get(
+                    "value",
+                    "",
+                )
+            )
+            if parent_reference
+            else ""
+        ),
+        "quickbooks_parent_name": (
+            parent_reference.get(
+                "name",
+                "",
+            )
+            if parent_reference
+            else ""
+        ),
+        "quickbooks_fully_qualified_name": (
+            quickbooks_customer.get(
+                "FullyQualifiedName",
+                "",
+            )
+        ),
+        "quickbooks_sync_token": (
+            quickbooks_customer.get(
+                "SyncToken",
+                "",
+            )
+        ),
+        "is_active": (
+            bool(
+                quickbooks_customer.get(
+                    "Active",
+                    True,
+                )
+            )
+        ),
+        "missing_fields": (
+            missing_fields
+        ),
+        "needs_review": (
+            len(missing_fields) > 0
+        ),
+        "ready_without_review": (
+            len(missing_fields) == 0
+        ),
+    }
+
+def import_quickbooks_customers():
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        raise QuickBooksOAuthError(
+            "QuickBooks is not connected."
+        )
+
+    quickbooks_customers = (
+        query_all_quickbooks_customers()
+    )
+
+    now = current_timestamp()
+
+    connection = get_db_connection()
+    cursor = connection.cursor()
+
+    imported_count = 0
+    updated_count = 0
+    review_count = 0
+
+    quickbooks_to_testa_ids = {}
+
+    try:
+        # -------------------------------------------------
+        # PASS 1
+        # Create or update each QuickBooks customer.
+        # -------------------------------------------------
+
+        for quickbooks_customer in quickbooks_customers:
+            mapped = (
+                map_quickbooks_customer_for_testa(
+                    quickbooks_customer
+                )
+            )
+
+            quickbooks_customer_id = mapped[
+                "quickbooks_customer_id"
+            ]
+
+            existing_customer = cursor.execute(
+                """
+                SELECT id
+                FROM customers
+                WHERE quickbooks_environment = ?
+                  AND quickbooks_realm_id = ?
+                  AND quickbooks_customer_id = ?
+                """,
+                (
+                    QUICKBOOKS_ENVIRONMENT,
+                    connection_data[
+                        "realm_id"
+                    ],
+                    quickbooks_customer_id,
+                ),
+            ).fetchone()
+
+            customer_type = mapped[
+                "proposed_customer_type"
+            ]
+
+            if customer_type not in {
+                "residential",
+                "commercial",
+            }:
+                customer_type = None
+
+            commercial_name = None
+
+            if customer_type == "commercial":
+                commercial_name = (
+                    mapped["company_name"]
+                    or mapped["display_name"]
+                    or None
+                )
+
+            display_name = (
+                mapped["display_name"]
+                or mapped["company_name"]
+                or (
+                    (
+                        f"{mapped['first_name']} "
+                        f"{mapped['last_name']}"
+                    ).strip()
+                )
+                or None
+            )
+
+            review_notes = None
+
+            if mapped["missing_fields"]:
+                review_notes = (
+                    "Profile may need updating. "
+                    "Missing: "
+                    + ", ".join(
+                        mapped["missing_fields"]
+                    )
+                    + "."
+                )
+
+            status = (
+                "active"
+                if mapped["is_active"]
+                else "inactive"
+            )
+
+            if existing_customer:
+                customer_id = (
+                    existing_customer["id"]
+                )
+
+                cursor.execute(
+                    """
+                    UPDATE customers
+                    SET
+                        customer_type = ?,
+                        commercial_name = ?,
+                        display_name = ?,
+                        address_line_1 = ?,
+                        address_line_2 = ?,
+                        city = ?,
+                        state = ?,
+                        postal_code = ?,
+                        quickbooks_environment = ?,
+                        quickbooks_realm_id = ?,
+                        quickbooks_parent_customer_id = ?,
+                        quickbooks_fully_qualified_name = ?,
+                        quickbooks_sync_token = ?,
+                        quickbooks_last_synced_at = ?,
+                        needs_review = ?,
+                        review_notes = ?,
+                        status = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        customer_type,
+                        commercial_name,
+                        display_name,
+                        mapped[
+                            "address_line_1"
+                        ] or None,
+                        mapped[
+                            "address_line_2"
+                        ] or None,
+                        mapped["city"] or None,
+                        mapped["state"] or None,
+                        mapped[
+                            "postal_code"
+                        ] or None,
+                        QUICKBOOKS_ENVIRONMENT,
+                        connection_data[
+                            "realm_id"
+                        ],
+                        mapped[
+                            "quickbooks_parent_customer_id"
+                        ] or None,
+                        mapped[
+                            "quickbooks_fully_qualified_name"
+                        ] or None,
+                        mapped[
+                            "quickbooks_sync_token"
+                        ] or None,
+                        now,
+                        (
+                            1
+                            if mapped["needs_review"]
+                            else 0
+                        ),
+                        review_notes,
+                        status,
+                        now,
+                        customer_id,
+                    ),
+                )
+
+                updated_count += 1
+
+            else:
+                cursor.execute(
+                    """
+                    INSERT INTO customers (
+                        customer_type,
+                        commercial_name,
+                        display_name,
+                        is_general_contractor,
+                        address_line_1,
+                        address_line_2,
+                        city,
+                        state,
+                        postal_code,
+                        default_salesperson_id,
+                        uses_third_party_billing,
+                        default_billing_customer_id,
+                        quickbooks_environment,
+                        quickbooks_realm_id,
+                        quickbooks_customer_id,
+                        quickbooks_parent_customer_id,
+                        quickbooks_fully_qualified_name,
+                        quickbooks_sync_token,
+                        quickbooks_last_synced_at,
+                        parent_customer_id,
+                        needs_review,
+                        review_notes,
+                        status,
+                        notes,
+                        created_at,
+                        updated_at
+                    )
+                    VALUES (
+                        ?, ?, ?, 0,
+                        ?, ?, ?, ?, ?,
+                        NULL,
+                        0,
+                        NULL,
+                        ?, ?, ?, ?, ?, ?, ?,
+                        NULL,
+                        ?, ?,
+                        ?,
+                        NULL,
+                        ?, ?
+                    )
+                    """,
+                    (
+                        customer_type,
+                        commercial_name,
+                        display_name,
+                        mapped[
+                            "address_line_1"
+                        ] or None,
+                        mapped[
+                            "address_line_2"
+                        ] or None,
+                        mapped["city"] or None,
+                        mapped["state"] or None,
+                        mapped[
+                            "postal_code"
+                        ] or None,
+                        QUICKBOOKS_ENVIRONMENT,
+                        connection_data[
+                            "realm_id"
+                        ],
+                        quickbooks_customer_id,
+                        mapped[
+                            "quickbooks_parent_customer_id"
+                        ] or None,
+                        mapped[
+                            "quickbooks_fully_qualified_name"
+                        ] or None,
+                        mapped[
+                            "quickbooks_sync_token"
+                        ] or None,
+                        now,
+                        (
+                            1
+                            if mapped["needs_review"]
+                            else 0
+                        ),
+                        review_notes,
+                        status,
+                        now,
+                        now,
+                    ),
+                )
+
+                customer_id = (
+                    cursor.lastrowid
+                )
+
+                imported_count += 1
+
+            quickbooks_to_testa_ids[
+                quickbooks_customer_id
+            ] = customer_id
+
+            if mapped["needs_review"]:
+                review_count += 1
+
+
+            # ---------------------------------------------
+            # PRIMARY CONTACT
+            # ---------------------------------------------
+
+            has_contact_data = any(
+                [
+                    mapped["first_name"],
+                    mapped["last_name"],
+                    mapped["phone"],
+                    mapped["email"],
+                ]
+            )
+
+            if has_contact_data:
+                existing_contact = (
+                    cursor.execute(
+                        """
+                        SELECT *
+                        FROM customer_contacts
+                        WHERE customer_id = ?
+                          AND is_primary = 1
+                        LIMIT 1
+                        """,
+                        (customer_id,),
+                    ).fetchone()
+                )
+
+                if existing_contact:
+                    cursor.execute(
+                        """
+                        UPDATE customer_contacts
+                        SET
+                            first_name = ?,
+                            last_name = ?,
+                            phone = ?,
+                            email = ?,
+                            updated_at = ?
+                        WHERE id = ?
+                        """,
+                        (
+                            (
+                                mapped["first_name"]
+                                or existing_contact[
+                                    "first_name"
+                                ]
+                            ),
+                            (
+                                mapped["last_name"]
+                                or existing_contact[
+                                    "last_name"
+                                ]
+                            ),
+                            (
+                                mapped["phone"]
+                                or existing_contact[
+                                    "phone"
+                                ]
+                            ),
+                            (
+                                mapped["email"]
+                                or existing_contact[
+                                    "email"
+                                ]
+                            ),
+                            now,
+                            existing_contact["id"],
+                        ),
+                    )
+
+                else:
+                    cursor.execute(
+                        """
+                        INSERT INTO customer_contacts (
+                            customer_id,
+                            first_name,
+                            last_name,
+                            job_title,
+                            phone,
+                            phone_type,
+                            email,
+                            is_primary,
+                            is_billing_contact,
+                            is_active,
+                            notes,
+                            created_at,
+                            updated_at
+                        )
+                        VALUES (
+                            ?, ?, ?, NULL,
+                            ?, NULL, ?,
+                            1, 0, 1,
+                            NULL, ?, ?
+                        )
+                        """,
+                        (
+                            customer_id,
+                            mapped[
+                                "first_name"
+                            ] or None,
+                            mapped[
+                                "last_name"
+                            ] or None,
+                            mapped[
+                                "phone"
+                            ] or None,
+                            mapped[
+                                "email"
+                            ] or None,
+                            now,
+                            now,
+                        ),
+                    )
+
+
+        # -------------------------------------------------
+        # PASS 2
+        # Convert QuickBooks ParentRef values into actual
+        # Testa customer relationships.
+        # -------------------------------------------------
+
+        for quickbooks_customer in quickbooks_customers:
+            mapped = (
+                map_quickbooks_customer_for_testa(
+                    quickbooks_customer
+                )
+            )
+
+            child_qbo_id = mapped[
+                "quickbooks_customer_id"
+            ]
+
+            parent_qbo_id = mapped[
+                "quickbooks_parent_customer_id"
+            ]
+
+            child_testa_id = (
+                quickbooks_to_testa_ids.get(
+                    child_qbo_id
+                )
+            )
+
+            parent_testa_id = None
+
+            if parent_qbo_id:
+                parent_testa_id = (
+                    quickbooks_to_testa_ids.get(
+                        parent_qbo_id
+                    )
+                )
+
+                if parent_testa_id is None:
+                    parent_record = cursor.execute(
+                        """
+                        SELECT id
+                        FROM customers
+                        WHERE quickbooks_environment = ?
+                          AND quickbooks_realm_id = ?
+                          AND quickbooks_customer_id = ?
+                        """,
+                        (
+                            QUICKBOOKS_ENVIRONMENT,
+                            connection_data[
+                                "realm_id"
+                            ],
+                            parent_qbo_id,
+                        ),
+                    ).fetchone()
+
+                    if parent_record:
+                        parent_testa_id = (
+                            parent_record["id"]
+                        )
+
+            if child_testa_id:
+                cursor.execute(
+                    """
+                    UPDATE customers
+                    SET
+                        parent_customer_id = ?,
+                        updated_at = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        parent_testa_id,
+                        now,
+                        child_testa_id,
+                    ),
+                )
+
+        connection.commit()
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        connection.close()
+
+    return {
+        "total": len(
+            quickbooks_customers
+        ),
+        "imported": imported_count,
+        "updated": updated_count,
+        "needs_review": review_count,
+    }
 
 # =========================================================
 # DATABASE HELPERS
@@ -720,18 +2183,18 @@ def ensure_database_schema():
         CREATE TABLE IF NOT EXISTS customers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
 
-            customer_type TEXT NOT NULL,
+            customer_type TEXT,
 
             commercial_name TEXT,
 
             is_general_contractor INTEGER
                 NOT NULL DEFAULT 0,
 
-            address_line_1 TEXT NOT NULL,
+            address_line_1 TEXT,
             address_line_2 TEXT,
-            city TEXT NOT NULL,
-            state TEXT NOT NULL,
-            postal_code TEXT NOT NULL,
+            city TEXT,
+            state TEXT,
+            postal_code TEXT,
 
             default_salesperson_id INTEGER,
 
@@ -740,7 +2203,22 @@ def ensure_database_schema():
 
             default_billing_customer_id INTEGER,
 
+            display_name TEXT,
+
+            quickbooks_environment TEXT,
+            quickbooks_realm_id TEXT,
             quickbooks_customer_id TEXT,
+            quickbooks_parent_customer_id TEXT,
+            quickbooks_fully_qualified_name TEXT,
+            quickbooks_sync_token TEXT,
+            quickbooks_last_synced_at TEXT,
+
+            parent_customer_id INTEGER,
+
+            needs_review INTEGER
+                NOT NULL DEFAULT 0,
+
+            review_notes TEXT,
 
             status TEXT NOT NULL DEFAULT 'active',
 
@@ -754,6 +2232,10 @@ def ensure_database_schema():
                 ON DELETE SET NULL,
 
             FOREIGN KEY (default_billing_customer_id)
+                REFERENCES customers (id)
+                ON DELETE SET NULL,
+
+            FOREIGN KEY (parent_customer_id)
                 REFERENCES customers (id)
                 ON DELETE SET NULL,
 
@@ -781,6 +2263,96 @@ def ensure_database_schema():
         )
         """
     )
+
+    customer_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(customers)"
+        ).fetchall()
+    }
+
+    if "display_name" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN display_name TEXT
+            """
+        )
+
+    if "quickbooks_environment" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN quickbooks_environment TEXT
+            """
+        )
+
+    if "quickbooks_realm_id" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN quickbooks_realm_id TEXT
+            """
+        )
+
+    if "quickbooks_parent_customer_id" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN quickbooks_parent_customer_id TEXT
+            """
+        )
+
+    if "quickbooks_fully_qualified_name" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN quickbooks_fully_qualified_name TEXT
+            """
+        )
+
+    if "quickbooks_sync_token" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN quickbooks_sync_token TEXT
+            """
+        )
+
+    if "quickbooks_last_synced_at" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN quickbooks_last_synced_at TEXT
+            """
+        )
+
+    if "parent_customer_id" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN parent_customer_id INTEGER
+            REFERENCES customers(id)
+            ON DELETE SET NULL
+            """
+        )
+
+    if "needs_review" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN needs_review INTEGER
+            NOT NULL DEFAULT 0
+            """
+        )
+
+    if "review_notes" not in customer_columns:
+        cursor.execute(
+            """
+            ALTER TABLE customers
+            ADD COLUMN review_notes TEXT
+            """
+        )
 
     cursor.execute(
         """
@@ -827,6 +2399,40 @@ def ensure_database_schema():
         """
     )
 
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_display_name
+        ON customers (display_name)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_customers_quickbooks_identity
+        ON customers (
+            quickbooks_environment,
+            quickbooks_realm_id,
+            quickbooks_customer_id
+        )
+        WHERE quickbooks_customer_id IS NOT NULL
+          AND quickbooks_customer_id != ''
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_parent
+        ON customers (parent_customer_id)
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_customers_quickbooks_parent
+        ON customers (quickbooks_parent_customer_id)
+        """
+    )
 
     # ---------------------------------------------------------
     # CUSTOMER CONTACTS
@@ -839,15 +2445,15 @@ def ensure_database_schema():
 
             customer_id INTEGER NOT NULL,
 
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
 
             job_title TEXT,
 
-            phone TEXT NOT NULL,
-            phone_type TEXT NOT NULL,
+            phone TEXT,
+            phone_type TEXT,
 
-            email TEXT NOT NULL,
+            email TEXT,
 
             is_primary INTEGER NOT NULL DEFAULT 0,
             is_billing_contact INTEGER NOT NULL DEFAULT 0,
@@ -898,6 +2504,42 @@ def ensure_database_schema():
         ON customer_contacts (
             customer_id,
             is_billing_contact
+        )
+        """
+    )
+
+    # ---------------------------------------------------------
+    # QUICKBOOKS ONLINE CONNECTION
+    # ---------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS quickbooks_connection (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+
+            environment TEXT NOT NULL,
+
+            realm_id_encrypted TEXT NOT NULL,
+            access_token_encrypted TEXT NOT NULL,
+            refresh_token_encrypted TEXT NOT NULL,
+
+            access_token_expires_at TEXT NOT NULL,
+            refresh_token_expires_at TEXT,
+
+            connected_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            connected_by INTEGER,
+
+            FOREIGN KEY (connected_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+
+            CHECK (
+                environment IN (
+                    'sandbox',
+                    'production'
+                )
+            )
         )
         """
     )
@@ -5822,26 +7464,700 @@ def admin_personnel_edit(personnel_id):
         person=person,
     )
 
+@app.route("/admin/quickbooks/connect")
+@admin_required
+def admin_quickbooks_connect():
+    try:
+        validate_quickbooks_configuration()
+
+        discovery_document = (
+            get_quickbooks_discovery_document()
+        )
+
+    except (
+        QuickBooksConfigurationError,
+        QuickBooksOAuthError,
+    ):
+        app.logger.exception(
+            (
+                "Unable to initialize "
+                "QuickBooks authorization."
+            )
+        )
+
+        flash(
+            (
+                "QuickBooks authorization could "
+                "not be started."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    oauth_state = secrets.token_urlsafe(32)
+
+    session[
+        "quickbooks_oauth_state"
+    ] = oauth_state
+
+    session[
+        "quickbooks_oauth_started_at"
+    ] = datetime.now(
+        UTC
+    ).isoformat(
+        timespec="seconds"
+    )
+
+    authorization_parameters = {
+        "client_id": QUICKBOOKS_CLIENT_ID,
+        "response_type": "code",
+        "scope": QUICKBOOKS_ACCOUNTING_SCOPE,
+        "redirect_uri": QUICKBOOKS_REDIRECT_URI,
+        "state": oauth_state,
+    }
+
+    authorization_url = (
+        discovery_document[
+            "authorization_endpoint"
+        ]
+        + "?"
+        + urlencode(
+            authorization_parameters
+        )
+    )
+
+    return redirect(
+        authorization_url
+    )
+
+@app.route("/admin/quickbooks/callback")
+@admin_required
+def admin_quickbooks_callback():
+    expected_state = session.pop(
+        "quickbooks_oauth_state",
+        None,
+    )
+
+    session.pop(
+        "quickbooks_oauth_started_at",
+        None,
+    )
+
+    returned_state = request.args.get(
+        "state",
+        "",
+    )
+
+    authorization_code = request.args.get(
+        "code",
+        "",
+    )
+
+    realm_id = request.args.get(
+        "realmId",
+        "",
+    )
+
+    oauth_error = request.args.get(
+        "error",
+        "",
+    )
+
+    if (
+        not expected_state
+        or not returned_state
+        or not compare_digest(
+            expected_state,
+            returned_state,
+        )
+    ):
+        write_audit_log(
+            action="quickbooks_oauth_failed",
+            category="quickbooks",
+            description=(
+                "QuickBooks authorization failed "
+                "CSRF state validation."
+            ),
+        )
+
+        flash(
+            (
+                "QuickBooks authorization could "
+                "not be verified."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    if oauth_error:
+        write_audit_log(
+            action="quickbooks_oauth_cancelled",
+            category="quickbooks",
+            description=(
+                "QuickBooks authorization was "
+                "cancelled or rejected."
+            ),
+        )
+
+        flash(
+            (
+                "QuickBooks was not connected."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    if (
+        not authorization_code
+        or not realm_id
+    ):
+        flash(
+            (
+                "QuickBooks did not return all "
+                "required authorization information."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    try:
+        discovery_document = (
+            get_quickbooks_discovery_document()
+        )
+
+        token_response = requests.post(
+            discovery_document[
+                "token_endpoint"
+            ],
+            auth=(
+                QUICKBOOKS_CLIENT_ID,
+                QUICKBOOKS_CLIENT_SECRET,
+            ),
+            data={
+                "grant_type": (
+                    "authorization_code"
+                ),
+                "code": authorization_code,
+                "redirect_uri": (
+                    QUICKBOOKS_REDIRECT_URI
+                ),
+            },
+            headers={
+                "Accept": "application/json",
+                "Content-Type": (
+                    "application/"
+                    "x-www-form-urlencoded"
+                ),
+            },
+            timeout=15,
+        )
+
+        intuit_tid = token_response.headers.get(
+            "intuit_tid"
+        )
+
+        token_response.raise_for_status()
+
+        token_data = token_response.json()
+
+        access_token = token_data.get(
+            "access_token"
+        )
+
+        refresh_token = token_data.get(
+            "refresh_token"
+        )
+
+        access_expires_in = token_data.get(
+            "expires_in"
+        )
+
+        refresh_expires_in = token_data.get(
+            "x_refresh_token_expires_in"
+        )
+
+        if (
+            not access_token
+            or not refresh_token
+            or not access_expires_in
+        ):
+            raise QuickBooksOAuthError(
+                (
+                    "Intuit did not return all "
+                    "required OAuth tokens."
+                )
+            )
+
+        save_quickbooks_connection(
+            realm_id=realm_id,
+            access_token=access_token,
+            refresh_token=refresh_token,
+            access_token_expires_in=(
+                access_expires_in
+            ),
+            refresh_token_expires_in=(
+                refresh_expires_in
+            ),
+        )
+
+    except (
+        requests.RequestException,
+        ValueError,
+        QuickBooksConfigurationError,
+        QuickBooksOAuthError,
+    ):
+        app.logger.exception(
+            (
+                "QuickBooks OAuth token exchange "
+                "failed. intuit_tid=%s"
+            ),
+            intuit_tid
+            if "intuit_tid" in locals()
+            else None,
+        )
+
+        flash(
+            (
+                "QuickBooks authorization could "
+                "not be completed."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    write_audit_log(
+        action="quickbooks_connected",
+        category="quickbooks",
+        description=(
+            "QuickBooks Online was connected."
+        ),
+    )
+
+    flash(
+        (
+            "QuickBooks Online was connected "
+            "successfully."
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_customers")
+    )
+
+@app.route(
+    "/admin/quickbooks/customers/preview"
+)
+@admin_required
+def admin_quickbooks_customers_preview():
+    try:
+        quickbooks_customers = (
+            query_quickbooks_customers(
+                start_position=1,
+                max_results=25,
+            )
+        )
+
+    except QuickBooksOAuthError:
+        app.logger.exception(
+            (
+                "Unable to preview "
+                "QuickBooks customers."
+            )
+        )
+
+        flash(
+            (
+                "QuickBooks customer data "
+                "could not be retrieved."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for("admin_customers")
+        )
+
+    mapped_customers = [
+        map_quickbooks_customer_for_testa(
+            customer
+        )
+        for customer in quickbooks_customers
+    ]
+
+    ready_count = sum(
+        1
+        for customer in mapped_customers
+        if customer["ready_without_review"]
+    )
+
+    review_count = sum(
+        1
+        for customer in mapped_customers
+        if customer["needs_review"]
+    )
+
+    return render_template(
+        "admin_quickbooks_customers_preview.html",
+        quickbooks_customers=(
+            quickbooks_customers
+        ),
+        mapped_customers=(
+            mapped_customers
+        ),
+        ready_count=ready_count,
+        review_count=review_count,
+    )
+
+@app.route(
+    "/admin/quickbooks/customers/import",
+    methods=["POST"],
+)
+@admin_required
+def admin_quickbooks_customers_import():
+    validate_csrf_token()
+
+    try:
+        import_results = (
+            import_quickbooks_customers()
+        )
+
+    except QuickBooksOAuthError:
+        app.logger.exception(
+            (
+                "QuickBooks customer import "
+                "could not be completed."
+            )
+        )
+
+        flash(
+            (
+                "QuickBooks customers could not "
+                "be imported."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_quickbooks_customers_preview"
+            )
+        )
+
+    except Exception:
+        app.logger.exception(
+            (
+                "Unexpected QuickBooks customer "
+                "import failure."
+            )
+        )
+
+        flash(
+            (
+                "The QuickBooks customer import "
+                "could not be completed."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_quickbooks_customers_preview"
+            )
+        )
+
+    write_audit_log(
+        action="quickbooks_customers_imported",
+        category="quickbooks",
+        description=(
+            "QuickBooks customer synchronization "
+            f"completed. "
+            f"{import_results['imported']} added, "
+            f"{import_results['updated']} updated, "
+            f"{import_results['needs_review']} "
+            "marked for review."
+        ),
+    )
+
+    flash(
+        (
+            "QuickBooks customer synchronization "
+            "completed: "
+            f"{import_results['imported']} added, "
+            f"{import_results['updated']} updated, "
+            f"{import_results['needs_review']} "
+            "need review."
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for("admin_customers")
+    )
+
 @app.route("/admin/customers")
 @admin_required
 def admin_customers():
+    search_query = request.args.get(
+        "q",
+        "",
+    ).strip()
+
+    status_filter = request.args.get(
+        "status",
+        "active",
+    ).strip().lower()
+
+    customer_type_filter = request.args.get(
+        "type",
+        "all",
+    ).strip().lower()
+
+    try:
+        page = int(
+            request.args.get(
+                "page",
+                1,
+            )
+        )
+
+    except ValueError:
+        page = 1
+
+    if page < 1:
+        page = 1
+
+    if status_filter not in {
+        "active",
+        "inactive",
+        "all",
+    }:
+        status_filter = "active"
+
+    if customer_type_filter not in {
+        "residential",
+        "commercial",
+        "all",
+    }:
+        customer_type_filter = "all"
+
+    page_size = 25
+
     connection = get_db_connection()
 
-    customer_rows = connection.execute(
+    stats = connection.execute(
         """
+        SELECT
+            COUNT(*) AS customer_count,
+
+            SUM(
+                CASE
+                    WHEN status = 'active'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS active_customer_count,
+
+            SUM(
+                CASE
+                    WHEN customer_type = 'commercial'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS commercial_customer_count,
+
+            SUM(
+                CASE
+                    WHEN customer_type = 'residential'
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS residential_customer_count,
+
+            SUM(
+                CASE
+                    WHEN needs_review = 1
+                    THEN 1
+                    ELSE 0
+                END
+            ) AS needs_review_count
+
+        FROM customers
+        """
+    ).fetchone()
+
+    where_clauses = []
+    query_parameters = []
+
+    if status_filter != "all":
+        where_clauses.append(
+            "customers.status = ?"
+        )
+
+        query_parameters.append(
+            status_filter
+        )
+
+    if customer_type_filter != "all":
+        where_clauses.append(
+            "customers.customer_type = ?"
+        )
+
+        query_parameters.append(
+            customer_type_filter
+        )
+
+    if search_query:
+        search_value = (
+            f"%{search_query}%"
+        )
+
+        where_clauses.append(
+            """
+            (
+                customers.display_name
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.commercial_name
+                    LIKE ? COLLATE NOCASE
+
+                OR primary_contact.first_name
+                    LIKE ? COLLATE NOCASE
+
+                OR primary_contact.last_name
+                    LIKE ? COLLATE NOCASE
+
+                OR (
+                    COALESCE(
+                        primary_contact.first_name,
+                        ''
+                    )
+                    || ' '
+                    || COALESCE(
+                        primary_contact.last_name,
+                        ''
+                    )
+                ) LIKE ? COLLATE NOCASE
+
+                OR primary_contact.phone
+                    LIKE ? COLLATE NOCASE
+
+                OR primary_contact.email
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.address_line_1
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.address_line_2
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.city
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.state
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.postal_code
+                    LIKE ? COLLATE NOCASE
+
+                OR customers.quickbooks_customer_id
+                    LIKE ? COLLATE NOCASE
+            )
+            """
+        )
+
+        query_parameters.extend(
+            [search_value] * 13
+        )
+
+    where_sql = ""
+
+    if where_clauses:
+        where_sql = (
+            "WHERE "
+            + " AND ".join(
+                where_clauses
+            )
+        )
+
+    filtered_count = connection.execute(
+        f"""
+        SELECT
+            COUNT(*) AS total
+
+        FROM customers
+
+        LEFT JOIN customer_contacts
+            AS primary_contact
+            ON primary_contact.customer_id
+                = customers.id
+           AND primary_contact.is_primary = 1
+
+        {where_sql}
+        """,
+        query_parameters,
+    ).fetchone()["total"]
+
+    total_pages = max(
+        1,
+        (
+            filtered_count
+            + page_size
+            - 1
+        )
+        // page_size,
+    )
+
+    if page > total_pages:
+        page = total_pages
+
+    offset = (
+        page - 1
+    ) * page_size
+
+    customer_rows = connection.execute(
+        f"""
         SELECT
             customers.id,
             customers.customer_type,
             customers.commercial_name,
+            customers.display_name,
             customers.is_general_contractor,
+
             customers.address_line_1,
             customers.address_line_2,
             customers.city,
             customers.state,
             customers.postal_code,
+
+            customers.quickbooks_environment,
             customers.quickbooks_customer_id,
+            customers.quickbooks_parent_customer_id,
+            customers.quickbooks_fully_qualified_name,
+            customers.quickbooks_last_synced_at,
+
+            customers.parent_customer_id,
+            customers.needs_review,
+            customers.review_notes,
+
             customers.status,
             customers.created_at,
+            customers.updated_at,
 
             primary_contact.first_name
                 AS primary_first_name,
@@ -5857,66 +8173,115 @@ def admin_customers():
             salesperson.first_name
                 AS salesperson_first_name,
             salesperson.last_name
-                AS salesperson_last_name
+                AS salesperson_last_name,
+
+            parent_customer.display_name
+                AS parent_display_name,
+            parent_customer.commercial_name
+                AS parent_commercial_name
 
         FROM customers
 
-        LEFT JOIN customer_contacts AS primary_contact
-            ON primary_contact.customer_id = customers.id
+        LEFT JOIN customer_contacts
+            AS primary_contact
+            ON primary_contact.customer_id
+                = customers.id
            AND primary_contact.is_primary = 1
 
-        LEFT JOIN company_personnel AS salesperson
-            ON salesperson.id =
-               customers.default_salesperson_id
+        LEFT JOIN company_personnel
+            AS salesperson
+            ON salesperson.id
+                = customers.default_salesperson_id
+
+        LEFT JOIN customers
+            AS parent_customer
+            ON parent_customer.id
+                = customers.parent_customer_id
+
+        {where_sql}
 
         ORDER BY
-            CASE
-                WHEN customers.customer_type = 'commercial'
-                    THEN COALESCE(
-                        customers.commercial_name,
-                        ''
-                    )
-                ELSE COALESCE(
-                    primary_contact.last_name,
-                    ''
-                )
-            END COLLATE NOCASE,
             COALESCE(
-                primary_contact.first_name,
-                ''
-            ) COLLATE NOCASE
-        """
+                NULLIF(
+                    customers.display_name,
+                    ''
+                ),
+                NULLIF(
+                    customers.commercial_name,
+                    ''
+                ),
+                NULLIF(
+                    TRIM(
+                        COALESCE(
+                            primary_contact.first_name,
+                            ''
+                        )
+                        || ' '
+                        || COALESCE(
+                            primary_contact.last_name,
+                            ''
+                        )
+                    ),
+                    ''
+                ),
+                'Unnamed Customer'
+            ) COLLATE NOCASE,
+            customers.id
+
+        LIMIT ?
+        OFFSET ?
+        """,
+        (
+            *query_parameters,
+            page_size,
+            offset,
+        ),
     ).fetchall()
-
-    active_customer_count = sum(
-        1
-        for customer in customer_rows
-        if customer["status"] == "active"
-    )
-
-    commercial_customer_count = sum(
-        1
-        for customer in customer_rows
-        if customer["customer_type"] == "commercial"
-    )
-
-    residential_customer_count = sum(
-        1
-        for customer in customer_rows
-        if customer["customer_type"] == "residential"
-    )
 
     connection.close()
 
     return render_template(
         "admin_customers.html",
         customers=customer_rows,
-        customer_count=len(customer_rows),
-        active_customer_count=active_customer_count,
-        commercial_customer_count=commercial_customer_count,
-        residential_customer_count=residential_customer_count,
-    )
 
+        customer_count=(
+            stats["customer_count"]
+            or 0
+        ),
+        active_customer_count=(
+            stats["active_customer_count"]
+            or 0
+        ),
+        commercial_customer_count=(
+            stats["commercial_customer_count"]
+            or 0
+        ),
+        residential_customer_count=(
+            stats["residential_customer_count"]
+            or 0
+        ),
+        needs_review_count=(
+            stats["needs_review_count"]
+            or 0
+        ),
+
+        search_query=search_query,
+        status_filter=status_filter,
+        customer_type_filter=(
+            customer_type_filter
+        ),
+
+        filtered_count=filtered_count,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+        has_previous_page=(
+            page > 1
+        ),
+        has_next_page=(
+            page < total_pages
+        ),
+    )
 
 @app.route(
     "/admin/customers/new",
