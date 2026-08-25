@@ -1,0 +1,640 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    {{ customer_name }} | Customers | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<style>
+
+    .customer-profile-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    .customer-profile-grid {
+        display: grid;
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .customer-profile-card {
+        padding: 18px;
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+        background: #ffffff;
+    }
+
+    .customer-profile-card h4 {
+        margin: 0 0 14px;
+    }
+
+    .customer-profile-list {
+        display: grid;
+        gap: 11px;
+        margin: 0;
+    }
+
+    .customer-profile-item {
+        display: grid;
+        gap: 2px;
+    }
+
+    .customer-profile-item span {
+        color: #6d7885;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .customer-profile-item strong {
+        font-size: 0.92rem;
+    }
+
+    .customer-review-panel {
+        border-left: 4px solid #d38b18;
+    }
+
+    .customer-review-list {
+        margin: 10px 0 0;
+        padding-left: 20px;
+    }
+
+    .customer-profile-placeholder {
+        opacity: 0.55;
+        cursor: not-allowed;
+    }
+
+    @media (max-width: 760px) {
+
+        .customer-profile-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .customer-profile-actions {
+            width: 100%;
+        }
+
+        .customer-profile-actions a,
+        .customer-profile-actions span {
+            flex: 1 1 100%;
+            text-align: center;
+        }
+
+    }
+
+</style>
+
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            Customer
+        </span>
+
+        <h2>
+            {{ customer_name }}
+        </h2>
+
+        <p>
+
+            {% if customer["customer_type"] == "commercial" %}
+                Commercial customer
+            {% elif customer["customer_type"] == "residential" %}
+                Residential customer
+            {% else %}
+                Customer type needs review
+            {% endif %}
+
+            {% if customer["is_general_contractor"] %}
+                · General Contractor
+            {% endif %}
+
+        </p>
+
+    </div>
+
+
+    <div class="customer-profile-actions">
+
+        <a
+            href="{{ url_for(
+                'admin_customer_edit',
+                customer_id=customer['id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Edit Customer
+        </a>
+
+        <span
+            class="admin-primary-button
+                   customer-profile-placeholder"
+            title="Work order creation will be connected next."
+        >
+            Create Work Order
+        </span>
+
+        <span
+            class="admin-secondary-button
+                   customer-profile-placeholder"
+            title="Estimate creation will be connected next."
+        >
+            Create Estimate
+        </span>
+
+        <a
+            href="{{ url_for('admin_customers') }}"
+            class="admin-secondary-button"
+        >
+            Back to Customers
+        </a>
+
+    </div>
+
+</header>
+
+
+{% if review_issues %}
+
+<section class="admin-panel customer-review-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Customer Needs Review
+            </h3>
+
+            <p>
+                This customer was imported or saved with
+                information that should be completed before
+                it is considered fully reviewed.
+            </p>
+
+        </div>
+
+    </div>
+
+    <ul class="customer-review-list">
+
+        {% for issue in review_issues %}
+
+            <li>
+                {{ issue }}
+            </li>
+
+        {% endfor %}
+
+    </ul>
+
+</section>
+
+{% endif %}
+
+
+<section class="admin-panel">
+
+    <div class="customer-profile-grid">
+
+
+        <div class="customer-profile-card">
+
+            <h4>
+                Customer Information
+            </h4>
+
+            <div class="customer-profile-list">
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Customer Type
+                    </span>
+
+                    <strong>
+
+                        {% if customer["customer_type"] %}
+                            {{ customer["customer_type"]|title }}
+                        {% else %}
+                            Not Set
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+
+                {% if customer["commercial_name"] %}
+
+                    <div class="customer-profile-item">
+
+                        <span>
+                            Commercial Name
+                        </span>
+
+                        <strong>
+                            {{ customer["commercial_name"] }}
+                        </strong>
+
+                    </div>
+
+                {% endif %}
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Status
+                    </span>
+
+                    <strong>
+                        {{ customer["status"]|title }}
+                    </strong>
+
+                </div>
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Default Salesperson
+                    </span>
+
+                    <strong>
+
+                        {% if customer["salesperson_first_name"] %}
+
+                            {{ customer["salesperson_first_name"] }}
+                            {{ customer["salesperson_last_name"] }}
+
+                        {% else %}
+
+                            Not Assigned
+
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="customer-profile-card">
+
+            <h4>
+                Primary Contact
+            </h4>
+
+            <div class="customer-profile-list">
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Name
+                    </span>
+
+                    <strong>
+
+                        {% if
+                            primary_contact
+                            and (
+                                primary_contact["first_name"]
+                                or primary_contact["last_name"]
+                            )
+                        %}
+
+                            {{ primary_contact["first_name"] or "" }}
+                            {{ primary_contact["last_name"] or "" }}
+
+                        {% else %}
+
+                            Not Available
+
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Title / Role
+                    </span>
+
+                    <strong>
+                        {{
+                            primary_contact["job_title"]
+                            if primary_contact
+                            and primary_contact["job_title"]
+                            else "Not Available"
+                        }}
+                    </strong>
+
+                </div>
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Phone
+                    </span>
+
+                    <strong>
+
+                        {% if
+                            primary_contact
+                            and primary_contact["phone"]
+                        %}
+
+                            {{ primary_contact["phone"] }}
+
+                            {% if primary_contact["phone_type"] %}
+                                · {{ primary_contact["phone_type"]|title }}
+                            {% endif %}
+
+                        {% else %}
+
+                            Not Available
+
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Email
+                    </span>
+
+                    <strong>
+                        {{
+                            primary_contact["email"]
+                            if primary_contact
+                            and primary_contact["email"]
+                            else "Not Available"
+                        }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="customer-profile-card">
+
+            <h4>
+                Address
+            </h4>
+
+            <div class="customer-profile-list">
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Street
+                    </span>
+
+                    <strong>
+
+                        {% if customer["address_line_1"] %}
+
+                            {{ customer["address_line_1"] }}
+
+                            {% if customer["address_line_2"] %}
+                                <br>
+                                {{ customer["address_line_2"] }}
+                            {% endif %}
+
+                        {% else %}
+
+                            Not Available
+
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        City / State / ZIP
+                    </span>
+
+                    <strong>
+
+                        {% if
+                            customer["city"]
+                            or customer["state"]
+                            or customer["postal_code"]
+                        %}
+
+                            {{ customer["city"] or "" }}
+
+                            {% if
+                                customer["city"]
+                                and customer["state"]
+                            %},{% endif %}
+
+                            {{ customer["state"] or "" }}
+                            {{ customer["postal_code"] or "" }}
+
+                        {% else %}
+
+                            Not Available
+
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="customer-profile-card">
+
+            <h4>
+                Billing & Accounting
+            </h4>
+
+            <div class="customer-profile-list">
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        QuickBooks
+                    </span>
+
+                    <strong>
+
+                        {% if customer["quickbooks_customer_id"] %}
+                            Connected
+                        {% else %}
+                            Not Connected
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+
+                {% if customer["quickbooks_customer_id"] %}
+
+                    <div class="customer-profile-item">
+
+                        <span>
+                            QuickBooks Customer ID
+                        </span>
+
+                        <strong>
+                            {{ customer["quickbooks_customer_id"] }}
+                        </strong>
+
+                    </div>
+
+                {% endif %}
+
+
+                <div class="customer-profile-item">
+
+                    <span>
+                        Third-Party Billing
+                    </span>
+
+                    <strong>
+
+                        {% if customer["uses_third_party_billing"] %}
+                            Yes
+                        {% else %}
+                            No
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+
+                {% if customer["uses_third_party_billing"] %}
+
+                    <div class="customer-profile-item">
+
+                        <span>
+                            Default Billing Customer
+                        </span>
+
+                        <strong>
+                            {{
+                                customer["billing_display_name"]
+                                or customer["billing_commercial_name"]
+                                or "Not Assigned"
+                            }}
+                        </strong>
+
+                    </div>
+
+                {% endif %}
+
+
+                {% if
+                    customer["parent_display_name"]
+                    or customer["parent_commercial_name"]
+                %}
+
+                    <div class="customer-profile-item">
+
+                        <span>
+                            Parent Customer
+                        </span>
+
+                        <strong>
+                            {{
+                                customer["parent_display_name"]
+                                or customer["parent_commercial_name"]
+                            }}
+                        </strong>
+
+                    </div>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+{% if customer["notes"] %}
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Customer Notes
+            </h3>
+
+        </div>
+
+    </div>
+
+    <p>
+        {{ customer["notes"] }}
+    </p>
+
+</section>
+
+{% endif %}
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Work Orders & Estimates
+            </h3>
+
+            <p>
+                Customer work orders and estimates will
+                appear here as those operational modules
+                are connected.
+            </p>
+
+        </div>
+
+    </div>
+
+</section>
+
+{% endblock %}

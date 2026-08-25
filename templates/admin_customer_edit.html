@@ -1,0 +1,712 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Edit Customer | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            Customers
+        </span>
+
+        <h2>
+            Edit Customer
+        </h2>
+
+        <p>
+            Update customer, contact, billing,
+            and operational information.
+        </p>
+
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for(
+                'admin_customer_detail',
+                customer_id=customer['id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Back to Customer
+        </a>
+
+    </div>
+
+</header>
+
+
+<form
+    method="post"
+    class="admin-project-form"
+>
+
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+
+                <h3>
+                    Customer Information
+                </h3>
+
+                <p>
+                    Imported QuickBooks customers may be
+                    saved while incomplete and remain
+                    marked as needing review.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+
+                <label for="customer_type">
+                    Customer Type
+                </label>
+
+                <select
+                    id="customer_type"
+                    name="customer_type"
+                >
+
+                    <option value="">
+                        Not Set
+                    </option>
+
+                    <option
+                        value="residential"
+                        {% if
+                            request.form.get(
+                                'customer_type',
+                                customer['customer_type'] or ''
+                            ) == 'residential'
+                        %}
+                            selected
+                        {% endif %}
+                    >
+                        Residential
+                    </option>
+
+                    <option
+                        value="commercial"
+                        {% if
+                            request.form.get(
+                                'customer_type',
+                                customer['customer_type'] or ''
+                            ) == 'commercial'
+                        %}
+                            selected
+                        {% endif %}
+                    >
+                        Commercial
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="commercial_name">
+                    Commercial Customer Name
+                </label>
+
+                <input
+                    type="text"
+                    id="commercial_name"
+                    name="commercial_name"
+                    value="{{ request.form.get(
+                        'commercial_name',
+                        customer['commercial_name'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label class="admin-checkbox">
+
+                    <input
+                        type="checkbox"
+                        name="is_general_contractor"
+                        value="1"
+                        {% if
+                            request.method == 'POST'
+                            and request.form.get(
+                                'is_general_contractor'
+                            )
+                        %}
+                            checked
+                        {% elif
+                            request.method != 'POST'
+                            and customer[
+                                'is_general_contractor'
+                            ]
+                        %}
+                            checked
+                        {% endif %}
+                    >
+
+                    This customer is a General Contractor
+
+                </label>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="address_line_1">
+                    Address
+                </label>
+
+                <input
+                    type="text"
+                    id="address_line_1"
+                    name="address_line_1"
+                    value="{{ request.form.get(
+                        'address_line_1',
+                        customer['address_line_1'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="address_line_2">
+                    Address Line 2
+                </label>
+
+                <input
+                    type="text"
+                    id="address_line_2"
+                    name="address_line_2"
+                    value="{{ request.form.get(
+                        'address_line_2',
+                        customer['address_line_2'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="city">
+                    City
+                </label>
+
+                <input
+                    type="text"
+                    id="city"
+                    name="city"
+                    value="{{ request.form.get(
+                        'city',
+                        customer['city'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="state">
+                    State
+                </label>
+
+                <input
+                    type="text"
+                    id="state"
+                    name="state"
+                    maxlength="2"
+                    value="{{ request.form.get(
+                        'state',
+                        customer['state'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="postal_code">
+                    ZIP / Postal Code
+                </label>
+
+                <input
+                    type="text"
+                    id="postal_code"
+                    name="postal_code"
+                    value="{{ request.form.get(
+                        'postal_code',
+                        customer['postal_code'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="salesperson_id">
+                    Default Salesperson
+                </label>
+
+                {% set selected_salesperson = request.form.get(
+                    'salesperson_id',
+                    customer['default_salesperson_id']|string
+                    if customer['default_salesperson_id']
+                    else ''
+                ) %}
+
+                <select
+                    id="salesperson_id"
+                    name="salesperson_id"
+                >
+
+                    <option value="">
+                        Not Assigned
+                    </option>
+
+                    {% for salesperson in salespeople %}
+
+                        <option
+                            value="{{ salesperson['id'] }}"
+                            {% if
+                                selected_salesperson
+                                == salesperson['id']|string
+                            %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ salesperson["first_name"] }}
+                            {{ salesperson["last_name"] }}
+
+                            {% if salesperson["job_title"] %}
+                                — {{ salesperson["job_title"] }}
+                            {% endif %}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="status">
+                    Status
+                </label>
+
+                {% set selected_status = request.form.get(
+                    'status',
+                    customer['status']
+                ) %}
+
+                <select
+                    id="status"
+                    name="status"
+                >
+
+                    <option
+                        value="active"
+                        {% if selected_status == 'active' %}
+                            selected
+                        {% endif %}
+                    >
+                        Active
+                    </option>
+
+                    <option
+                        value="inactive"
+                        {% if selected_status == 'inactive' %}
+                            selected
+                        {% endif %}
+                    >
+                        Inactive
+                    </option>
+
+                </select>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+
+                <h3>
+                    Primary Contact
+                </h3>
+
+                <p>
+                    Complete as much information as is
+                    currently available.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field">
+
+                <label for="first_name">
+                    First Name
+                </label>
+
+                <input
+                    type="text"
+                    id="first_name"
+                    name="first_name"
+                    value="{{ request.form.get(
+                        'first_name',
+                        primary_contact['first_name']
+                        if primary_contact
+                        and primary_contact['first_name']
+                        else ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="last_name">
+                    Last Name
+                </label>
+
+                <input
+                    type="text"
+                    id="last_name"
+                    name="last_name"
+                    value="{{ request.form.get(
+                        'last_name',
+                        primary_contact['last_name']
+                        if primary_contact
+                        and primary_contact['last_name']
+                        else ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="job_title">
+                    Title / Role
+                </label>
+
+                <input
+                    type="text"
+                    id="job_title"
+                    name="job_title"
+                    value="{{ request.form.get(
+                        'job_title',
+                        primary_contact['job_title']
+                        if primary_contact
+                        and primary_contact['job_title']
+                        else ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="phone">
+                    Phone Number
+                </label>
+
+                <input
+                    type="tel"
+                    id="phone"
+                    name="phone"
+                    value="{{ request.form.get(
+                        'phone',
+                        primary_contact['phone']
+                        if primary_contact
+                        and primary_contact['phone']
+                        else ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="phone_type">
+                    Phone Type
+                </label>
+
+                {% set selected_phone_type = request.form.get(
+                    'phone_type',
+                    primary_contact['phone_type']
+                    if primary_contact
+                    and primary_contact['phone_type']
+                    else ''
+                ) %}
+
+                <select
+                    id="phone_type"
+                    name="phone_type"
+                >
+
+                    <option value="">
+                        Not Set
+                    </option>
+
+                    {% for phone_type in [
+                        'mobile',
+                        'work',
+                        'home'
+                    ] %}
+
+                        <option
+                            value="{{ phone_type }}"
+                            {% if
+                                selected_phone_type
+                                == phone_type
+                            %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ phone_type|title }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="email">
+                    Email Address
+                </label>
+
+                <input
+                    type="email"
+                    id="email"
+                    name="email"
+                    value="{{ request.form.get(
+                        'email',
+                        primary_contact['email']
+                        if primary_contact
+                        and primary_contact['email']
+                        else ''
+                    ) }}"
+                >
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+
+                <h3>
+                    Billing
+                </h3>
+
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+            <div class="admin-field admin-field-full">
+
+                <label class="admin-checkbox">
+
+                    <input
+                        type="checkbox"
+                        name="uses_third_party_billing"
+                        value="1"
+                        {% if
+                            request.method == 'POST'
+                            and request.form.get(
+                                'uses_third_party_billing'
+                            )
+                        %}
+                            checked
+                        {% elif
+                            request.method != 'POST'
+                            and customer[
+                                'uses_third_party_billing'
+                            ]
+                        %}
+                            checked
+                        {% endif %}
+                    >
+
+                    This customer normally uses a
+                    third-party billing customer
+
+                </label>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="default_billing_customer_id">
+                    Default Billing Customer
+                </label>
+
+                {% set selected_billing_customer = request.form.get(
+                    'default_billing_customer_id',
+                    customer[
+                        'default_billing_customer_id'
+                    ]|string
+                    if customer[
+                        'default_billing_customer_id'
+                    ]
+                    else ''
+                ) %}
+
+                <select
+                    id="default_billing_customer_id"
+                    name="default_billing_customer_id"
+                >
+
+                    <option value="">
+                        Select Customer
+                    </option>
+
+                    {% for billing_customer in billing_customers %}
+
+                        <option
+                            value="{{ billing_customer['id'] }}"
+                            {% if
+                                selected_billing_customer
+                                == billing_customer['id']|string
+                            %}
+                                selected
+                            {% endif %}
+                        >
+
+                            {{
+                                billing_customer["display_name"]
+                                or billing_customer["commercial_name"]
+                                or (
+                                    (
+                                        billing_customer["first_name"]
+                                        or ""
+                                    )
+                                    ~ " "
+                                    ~ (
+                                        billing_customer["last_name"]
+                                        or ""
+                                    )
+                                )|trim
+                                or "Unnamed Customer"
+                            }}
+
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label for="notes">
+                    Customer Notes
+                </label>
+
+                <textarea
+                    id="notes"
+                    name="notes"
+                    rows="5"
+                >{{ request.form.get(
+                    'notes',
+                    customer['notes'] or ''
+                ) }}</textarea>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <div class="admin-form-actions">
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Save Changes
+        </button>
+
+        <a
+            href="{{ url_for(
+                'admin_customer_detail',
+                customer_id=customer['id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Cancel
+        </a>
+
+    </div>
+
+</form>
+
+{% endblock %}

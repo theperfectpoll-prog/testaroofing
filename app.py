@@ -8862,6 +8862,109 @@ def admin_quickbooks_customer_import_process(
         }
     )
 
+def get_customer_review_issues(
+    customer,
+    primary_contact,
+):
+    review_issues = []
+
+    if customer["customer_type"] not in {
+        "residential",
+        "commercial",
+    }:
+        review_issues.append(
+            "Customer type"
+        )
+
+    if (
+        customer["customer_type"] == "commercial"
+        and not (
+            customer["commercial_name"]
+            or ""
+        ).strip()
+    ):
+        review_issues.append(
+            "Commercial customer name"
+        )
+
+    if not (
+        customer["address_line_1"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "Address"
+        )
+
+    if not (
+        customer["city"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "City"
+        )
+
+    if not (
+        customer["state"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "State"
+        )
+
+    if not (
+        customer["postal_code"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "ZIP / Postal Code"
+        )
+
+    if primary_contact is None:
+        review_issues.extend(
+            [
+                "Primary contact first name",
+                "Primary contact last name",
+                "Primary contact phone",
+                "Primary contact email",
+            ]
+        )
+
+        return review_issues
+
+    if not (
+        primary_contact["first_name"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "Primary contact first name"
+        )
+
+    if not (
+        primary_contact["last_name"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "Primary contact last name"
+        )
+
+    if not (
+        primary_contact["phone"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "Primary contact phone"
+        )
+
+    if not (
+        primary_contact["email"]
+        or ""
+    ).strip():
+        review_issues.append(
+            "Primary contact email"
+        )
+
+    return review_issues
+
 @app.route("/admin/customers")
 @admin_required
 def admin_customers():
@@ -9653,6 +9756,655 @@ def admin_customer_new():
 
     return render_template(
         "admin_customer_new.html",
+        salespeople=salespeople,
+        billing_customers=billing_customers,
+    )
+
+@app.route(
+    "/admin/customers/<int:customer_id>"
+)
+@admin_required
+def admin_customer_detail(
+    customer_id,
+):
+    connection = get_db_connection()
+
+    customer = connection.execute(
+        """
+        SELECT
+            customers.*,
+
+            salesperson.first_name
+                AS salesperson_first_name,
+            salesperson.last_name
+                AS salesperson_last_name,
+
+            billing_customer.display_name
+                AS billing_display_name,
+            billing_customer.commercial_name
+                AS billing_commercial_name,
+
+            parent_customer.display_name
+                AS parent_display_name,
+            parent_customer.commercial_name
+                AS parent_commercial_name
+
+        FROM customers
+
+        LEFT JOIN company_personnel
+            AS salesperson
+            ON salesperson.id
+                = customers.default_salesperson_id
+
+        LEFT JOIN customers
+            AS billing_customer
+            ON billing_customer.id
+                = customers.default_billing_customer_id
+
+        LEFT JOIN customers
+            AS parent_customer
+            ON parent_customer.id
+                = customers.parent_customer_id
+
+        WHERE customers.id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if customer is None:
+        connection.close()
+        abort(404)
+
+    primary_contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_primary = 1
+        LIMIT 1
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    review_issues = (
+        get_customer_review_issues(
+            customer,
+            primary_contact,
+        )
+    )
+
+    connection.close()
+
+    customer_name = (
+        customer["display_name"]
+        or customer["commercial_name"]
+        or (
+            (
+                f"{primary_contact['first_name'] or ''} "
+                f"{primary_contact['last_name'] or ''}"
+            ).strip()
+            if primary_contact
+            else ""
+        )
+        or "Unnamed Customer"
+    )
+
+    return render_template(
+        "admin_customer_detail.html",
+        customer=customer,
+        primary_contact=primary_contact,
+        customer_name=customer_name,
+        review_issues=review_issues,
+    )
+
+@app.route(
+    "/admin/customers/<int:customer_id>/edit",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_customer_edit(
+    customer_id,
+):
+    connection = get_db_connection()
+
+    customer = connection.execute(
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if customer is None:
+        connection.close()
+        abort(404)
+
+    primary_contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_primary = 1
+        LIMIT 1
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    salespeople = connection.execute(
+        """
+        SELECT
+            id,
+            first_name,
+            last_name,
+            job_title
+        FROM company_personnel
+        WHERE is_active = 1
+          AND is_salesperson = 1
+        ORDER BY
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE
+        """
+    ).fetchall()
+
+    billing_customers = connection.execute(
+        """
+        SELECT
+            customers.id,
+            customers.customer_type,
+            customers.display_name,
+            customers.commercial_name,
+
+            primary_contact.first_name,
+            primary_contact.last_name
+
+        FROM customers
+
+        LEFT JOIN customer_contacts
+            AS primary_contact
+            ON primary_contact.customer_id
+                = customers.id
+           AND primary_contact.is_primary = 1
+
+        WHERE customers.status = 'active'
+          AND customers.id != ?
+
+        ORDER BY
+            COALESCE(
+                customers.display_name,
+                customers.commercial_name,
+                primary_contact.last_name,
+                primary_contact.first_name,
+                ''
+            ) COLLATE NOCASE
+        """,
+        (customer_id,),
+    ).fetchall()
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        customer_type = (
+            request.form.get(
+                "customer_type",
+                ""
+            )
+            .strip()
+            .lower()
+        )
+
+        commercial_name = (
+            request.form.get(
+                "commercial_name",
+                ""
+            ).strip()
+        )
+
+        first_name = (
+            request.form.get(
+                "first_name",
+                ""
+            ).strip()
+        )
+
+        last_name = (
+            request.form.get(
+                "last_name",
+                ""
+            ).strip()
+        )
+
+        address_line_1 = (
+            request.form.get(
+                "address_line_1",
+                ""
+            ).strip()
+        )
+
+        address_line_2 = (
+            request.form.get(
+                "address_line_2",
+                ""
+            ).strip()
+        )
+
+        city = (
+            request.form.get(
+                "city",
+                ""
+            ).strip()
+        )
+
+        state = (
+            request.form.get(
+                "state",
+                ""
+            )
+            .strip()
+            .upper()
+        )
+
+        postal_code = (
+            request.form.get(
+                "postal_code",
+                ""
+            ).strip()
+        )
+
+        salesperson_id = (
+            request.form.get(
+                "salesperson_id",
+                ""
+            ).strip()
+        )
+
+        is_general_contractor = (
+            1
+            if request.form.get(
+                "is_general_contractor"
+            )
+            else 0
+        )
+
+        first_name = (
+            request.form.get(
+                "first_name",
+                ""
+            ).strip()
+        )
+
+        last_name = (
+            request.form.get(
+                "last_name",
+                ""
+            ).strip()
+        )
+
+        job_title = (
+            request.form.get(
+                "job_title",
+                ""
+            ).strip()
+        )
+
+        phone = (
+            request.form.get(
+                "phone",
+                ""
+            ).strip()
+        )
+
+        phone_type = (
+            request.form.get(
+                "phone_type",
+                ""
+            )
+            .strip()
+            .lower()
+        )
+
+        email = normalize_email(
+            request.form.get(
+                "email",
+                ""
+            )
+        )
+
+        uses_third_party_billing = (
+            1
+            if request.form.get(
+                "uses_third_party_billing"
+            )
+            else 0
+        )
+
+        default_billing_customer_id = (
+            request.form.get(
+                "default_billing_customer_id",
+                ""
+            ).strip()
+        )
+
+        notes = (
+            request.form.get(
+                "notes",
+                ""
+            ).strip()
+        )
+
+        status = (
+            request.form.get(
+                "status",
+                "active",
+            )
+            .strip()
+            .lower()
+        )
+
+        errors = []
+
+        if (
+            customer_type
+            and customer_type not in {
+                "residential",
+                "commercial",
+            }
+        ):
+            errors.append(
+                "Select a valid customer type."
+            )
+
+        if (
+            phone_type
+            and phone_type not in {
+                "home",
+                "mobile",
+                "work",
+            }
+        ):
+            errors.append(
+                "Select a valid phone type."
+            )
+
+        if status not in {
+            "active",
+            "inactive",
+        }:
+            errors.append(
+                "Select a valid customer status."
+            )
+
+        if (
+            uses_third_party_billing
+            and not default_billing_customer_id
+        ):
+            errors.append(
+                (
+                    "Select the default "
+                    "third-party billing customer."
+                )
+            )
+
+        if (
+            default_billing_customer_id
+            and int(
+                default_billing_customer_id
+            ) == customer_id
+        ):
+            errors.append(
+                (
+                    "A customer cannot be its own "
+                    "billing customer."
+                )
+            )
+
+        if errors:
+            connection.close()
+
+            for error in errors:
+                flash(
+                    error,
+                    "error",
+                )
+
+            return render_template(
+                "admin_customer_edit.html",
+                customer=customer,
+                primary_contact=primary_contact,
+                salespeople=salespeople,
+                billing_customers=billing_customers,
+            )
+
+        now = current_timestamp()
+
+        display_name = (
+            commercial_name
+            if customer_type == "commercial"
+            and commercial_name
+            else (
+                f"{first_name} {last_name}"
+            ).strip()
+            or customer["display_name"]
+            or None
+        )
+
+        connection.execute(
+            """
+            UPDATE customers
+            SET
+                customer_type = ?,
+                commercial_name = ?,
+                display_name = ?,
+                is_general_contractor = ?,
+                address_line_1 = ?,
+                address_line_2 = ?,
+                city = ?,
+                state = ?,
+                postal_code = ?,
+                default_salesperson_id = ?,
+                uses_third_party_billing = ?,
+                default_billing_customer_id = ?,
+                status = ?,
+                notes = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                customer_type or None,
+                (
+                    commercial_name or None
+                    if customer_type == "commercial"
+                    else None
+                ),
+                display_name,
+                is_general_contractor,
+                address_line_1 or None,
+                address_line_2 or None,
+                city or None,
+                state or None,
+                postal_code or None,
+                (
+                    int(salesperson_id)
+                    if salesperson_id
+                    else None
+                ),
+                uses_third_party_billing,
+                (
+                    int(
+                        default_billing_customer_id
+                    )
+                    if default_billing_customer_id
+                    else None
+                ),
+                status,
+                notes or None,
+                now,
+                customer_id,
+            ),
+        )
+
+        has_contact_data = any(
+            [
+                first_name,
+                last_name,
+                job_title,
+                phone,
+                phone_type,
+                email,
+            ]
+        )
+
+        if primary_contact is not None:
+            connection.execute(
+                """
+                UPDATE customer_contacts
+                SET
+                    first_name = ?,
+                    last_name = ?,
+                    job_title = ?,
+                    phone = ?,
+                    phone_type = ?,
+                    email = ?,
+                    updated_at = ?
+                WHERE id = ?
+                """,
+                (
+                    first_name or None,
+                    last_name or None,
+                    job_title or None,
+                    phone or None,
+                    phone_type or None,
+                    email or None,
+                    now,
+                    primary_contact["id"],
+                ),
+            )
+
+        elif has_contact_data:
+            connection.execute(
+                """
+                INSERT INTO customer_contacts (
+                    customer_id,
+                    first_name,
+                    last_name,
+                    job_title,
+                    phone,
+                    phone_type,
+                    email,
+                    is_primary,
+                    is_billing_contact,
+                    is_active,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?,
+                    1, 0, 1, ?, ?
+                )
+                """,
+                (
+                    customer_id,
+                    first_name or None,
+                    last_name or None,
+                    job_title or None,
+                    phone or None,
+                    phone_type or None,
+                    email or None,
+                    now,
+                    now,
+                ),
+            )
+
+        refreshed_customer = connection.execute(
+            """
+            SELECT *
+            FROM customers
+            WHERE id = ?
+            """,
+            (customer_id,),
+        ).fetchone()
+
+        refreshed_contact = connection.execute(
+            """
+            SELECT *
+            FROM customer_contacts
+            WHERE customer_id = ?
+              AND is_primary = 1
+            LIMIT 1
+            """,
+            (customer_id,),
+        ).fetchone()
+
+        review_issues = (
+            get_customer_review_issues(
+                refreshed_customer,
+                refreshed_contact,
+            )
+        )
+
+        review_notes = None
+
+        if review_issues:
+            review_notes = (
+                "Profile may need updating. "
+                "Missing: "
+                + ", ".join(
+                    review_issues
+                )
+                + "."
+            )
+
+        connection.execute(
+            """
+            UPDATE customers
+            SET
+                needs_review = ?,
+                review_notes = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                1
+                if review_issues
+                else 0,
+                review_notes,
+                now,
+                customer_id,
+            ),
+        )
+
+        connection.commit()
+        connection.close()
+
+        write_audit_log(
+            action="customer_updated",
+            category="customers",
+            description=(
+                f"Customer updated: "
+                f"{display_name or 'Unnamed Customer'}."
+            ),
+            entity_type="customer",
+            entity_id=customer_id,
+        )
+
+        flash(
+            "Customer profile updated.",
+            "success",
+        )
+
+        return redirect(
+            url_for(
+                "admin_customer_detail",
+                customer_id=customer_id,
+            )
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_customer_edit.html",
+        customer=customer,
+        primary_contact=primary_contact,
         salespeople=salespeople,
         billing_customers=billing_customers,
     )

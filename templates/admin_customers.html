@@ -96,6 +96,16 @@
         font-size: 0.78rem;
     }
 
+    .customer-review-dot {
+        display: inline-block;
+        width: 9px;
+        height: 9px;
+        margin-right: 6px;
+        border-radius: 50%;
+        background: #c62828;
+        vertical-align: middle;
+    }
+
     .customer-directory-pagination {
         display: flex;
         flex-wrap: wrap;
@@ -481,38 +491,57 @@
 
                                 <strong>
 
-                                    {% if customer["display_name"] %}
+                                    {% if customer["needs_review"] %}
 
-                                        {{ customer["display_name"] }}
-
-                                    {% elif customer["commercial_name"] %}
-
-                                        {{ customer["commercial_name"] }}
-
-                                    {% elif
-                                        customer["primary_first_name"]
-                                        or customer["primary_last_name"]
-                                    %}
-
-                                        {{
-                                            (
-                                                (
-                                                    customer["primary_first_name"]
-                                                    or ""
-                                                )
-                                                ~ " "
-                                                ~ (
-                                                    customer["primary_last_name"]
-                                                    or ""
-                                                )
-                                            )|trim
-                                        }}
-
-                                    {% else %}
-
-                                        Unnamed Customer
+                                        <span
+                                            class="customer-review-dot"
+                                            title="Customer needs review"
+                                            aria-label="Customer needs review"
+                                        ></span>
 
                                     {% endif %}
+
+                                    <a
+                                        href="{{ url_for(
+                                            'admin_customer_detail',
+                                            customer_id=customer['id']
+                                        ) }}"
+                                    >
+
+                                        {% if customer["display_name"] %}
+
+                                            {{ customer["display_name"] }}
+
+                                        {% elif customer["commercial_name"] %}
+
+                                            {{ customer["commercial_name"] }}
+
+                                        {% elif
+                                            customer["primary_first_name"]
+                                            or customer["primary_last_name"]
+                                        %}
+
+                                            {{
+                                                (
+                                                    (
+                                                        customer["primary_first_name"]
+                                                        or ""
+                                                    )
+                                                    ~ " "
+                                                    ~ (
+                                                        customer["primary_last_name"]
+                                                        or ""
+                                                    )
+                                                )|trim
+                                            }}
+
+                                        {% else %}
+
+                                            Unnamed Customer
+
+                                        {% endif %}
+
+                                    </a>
 
                                 </strong>
 
