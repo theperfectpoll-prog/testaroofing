@@ -2728,6 +2728,221 @@ def ensure_database_schema():
             """
         )
 
+    customer_columns = {
+        row["name"]: row
+        for row in cursor.execute(
+            "PRAGMA table_info(customers)"
+        ).fetchall()
+    }
+
+    customer_nullable_fields = (
+        "customer_type",
+        "commercial_name",
+        "address_line_1",
+        "address_line_2",
+        "city",
+        "state",
+        "postal_code",
+        "default_salesperson_id",
+        "default_billing_customer_id",
+        "display_name",
+        "quickbooks_environment",
+        "quickbooks_realm_id",
+        "quickbooks_customer_id",
+        "quickbooks_parent_customer_id",
+        "quickbooks_fully_qualified_name",
+        "quickbooks_sync_token",
+        "quickbooks_last_synced_at",
+        "parent_customer_id",
+        "review_notes",
+        "notes",
+    )
+
+    customers_need_nullable_migration = any(
+        (
+            field_name in customer_columns
+            and customer_columns[
+                field_name
+            ]["notnull"] == 1
+        )
+        for field_name in customer_nullable_fields
+    )
+
+    if customers_need_nullable_migration:
+        connection.commit()
+
+        connection.execute(
+            "PRAGMA foreign_keys = OFF"
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE customers_rebuilt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                customer_type TEXT,
+
+                commercial_name TEXT,
+
+                is_general_contractor INTEGER
+                    NOT NULL DEFAULT 0,
+
+                address_line_1 TEXT,
+                address_line_2 TEXT,
+                city TEXT,
+                state TEXT,
+                postal_code TEXT,
+
+                default_salesperson_id INTEGER,
+
+                uses_third_party_billing INTEGER
+                    NOT NULL DEFAULT 0,
+
+                default_billing_customer_id INTEGER,
+
+                display_name TEXT,
+
+                quickbooks_environment TEXT,
+                quickbooks_realm_id TEXT,
+                quickbooks_customer_id TEXT,
+                quickbooks_parent_customer_id TEXT,
+                quickbooks_fully_qualified_name TEXT,
+                quickbooks_sync_token TEXT,
+                quickbooks_last_synced_at TEXT,
+
+                parent_customer_id INTEGER,
+
+                needs_review INTEGER
+                    NOT NULL DEFAULT 0,
+
+                review_notes TEXT,
+
+                status TEXT NOT NULL DEFAULT 'active',
+
+                notes TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                FOREIGN KEY (default_salesperson_id)
+                    REFERENCES company_personnel (id)
+                    ON DELETE SET NULL,
+
+                FOREIGN KEY (default_billing_customer_id)
+                    REFERENCES customers_rebuilt (id)
+                    ON DELETE SET NULL,
+
+                FOREIGN KEY (parent_customer_id)
+                    REFERENCES customers_rebuilt (id)
+                    ON DELETE SET NULL,
+
+                CHECK (
+                    customer_type IN (
+                        'residential',
+                        'commercial'
+                    )
+                ),
+
+                CHECK (
+                    status IN (
+                        'active',
+                        'inactive'
+                    )
+                ),
+
+                CHECK (
+                    customer_type != 'commercial'
+                    OR (
+                        commercial_name IS NOT NULL
+                        AND TRIM(commercial_name) != ''
+                    )
+                )
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO customers_rebuilt (
+                id,
+                customer_type,
+                commercial_name,
+                is_general_contractor,
+                address_line_1,
+                address_line_2,
+                city,
+                state,
+                postal_code,
+                default_salesperson_id,
+                uses_third_party_billing,
+                default_billing_customer_id,
+                display_name,
+                quickbooks_environment,
+                quickbooks_realm_id,
+                quickbooks_customer_id,
+                quickbooks_parent_customer_id,
+                quickbooks_fully_qualified_name,
+                quickbooks_sync_token,
+                quickbooks_last_synced_at,
+                parent_customer_id,
+                needs_review,
+                review_notes,
+                status,
+                notes,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                customer_type,
+                commercial_name,
+                is_general_contractor,
+                address_line_1,
+                address_line_2,
+                city,
+                state,
+                postal_code,
+                default_salesperson_id,
+                uses_third_party_billing,
+                default_billing_customer_id,
+                display_name,
+                quickbooks_environment,
+                quickbooks_realm_id,
+                quickbooks_customer_id,
+                quickbooks_parent_customer_id,
+                quickbooks_fully_qualified_name,
+                quickbooks_sync_token,
+                quickbooks_last_synced_at,
+                parent_customer_id,
+                needs_review,
+                review_notes,
+                status,
+                notes,
+                created_at,
+                updated_at
+            FROM customers
+            """
+        )
+
+        cursor.execute(
+            """
+            DROP TABLE customers
+            """
+        )
+
+        cursor.execute(
+            """
+            ALTER TABLE customers_rebuilt
+            RENAME TO customers
+            """
+        )
+
+        connection.commit()
+
+        connection.execute(
+            "PRAGMA foreign_keys = ON"
+        )
+
     cursor.execute(
         """
         CREATE INDEX IF NOT EXISTS idx_customers_type
@@ -2873,8 +3088,11 @@ def ensure_database_schema():
     customer_contact_nullable_fields = (
         "first_name",
         "last_name",
+        "job_title",
         "phone",
+        "phone_type",
         "email",
+        "notes",
     )
 
     customer_contacts_need_nullable_migration = any(
