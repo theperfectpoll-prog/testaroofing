@@ -2863,6 +2863,125 @@ def ensure_database_schema():
         """
     )
 
+    customer_contact_columns = {
+        row["name"]: row
+        for row in cursor.execute(
+            "PRAGMA table_info(customer_contacts)"
+        ).fetchall()
+    }
+
+    customer_contact_nullable_fields = (
+        "first_name",
+        "last_name",
+        "phone",
+        "email",
+    )
+
+    customer_contacts_need_nullable_migration = any(
+        (
+            field_name in customer_contact_columns
+            and customer_contact_columns[
+                field_name
+            ]["notnull"] == 1
+        )
+        for field_name in (
+            customer_contact_nullable_fields
+        )
+    )
+
+    if customer_contacts_need_nullable_migration:
+        cursor.execute(
+            """
+            ALTER TABLE customer_contacts
+            RENAME TO customer_contacts_legacy
+            """
+        )
+
+        cursor.execute(
+            """
+            CREATE TABLE customer_contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                customer_id INTEGER NOT NULL,
+
+                first_name TEXT,
+                last_name TEXT,
+
+                job_title TEXT,
+
+                phone TEXT,
+                phone_type TEXT,
+
+                email TEXT,
+
+                is_primary INTEGER NOT NULL DEFAULT 0,
+                is_billing_contact INTEGER
+                    NOT NULL DEFAULT 0,
+                is_active INTEGER NOT NULL DEFAULT 1,
+
+                notes TEXT,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                FOREIGN KEY (customer_id)
+                    REFERENCES customers (id)
+                    ON DELETE CASCADE,
+
+                CHECK (
+                    phone_type IN (
+                        'home',
+                        'mobile',
+                        'work'
+                    )
+                )
+            )
+            """
+        )
+
+        cursor.execute(
+            """
+            INSERT INTO customer_contacts (
+                id,
+                customer_id,
+                first_name,
+                last_name,
+                job_title,
+                phone,
+                phone_type,
+                email,
+                is_primary,
+                is_billing_contact,
+                is_active,
+                notes,
+                created_at,
+                updated_at
+            )
+            SELECT
+                id,
+                customer_id,
+                first_name,
+                last_name,
+                job_title,
+                phone,
+                phone_type,
+                email,
+                is_primary,
+                is_billing_contact,
+                is_active,
+                notes,
+                created_at,
+                updated_at
+            FROM customer_contacts_legacy
+            """
+        )
+
+        cursor.execute(
+            """
+            DROP TABLE customer_contacts_legacy
+            """
+        )
+
     cursor.execute(
         """
         CREATE UNIQUE INDEX IF NOT EXISTS
