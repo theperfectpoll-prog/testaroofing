@@ -696,6 +696,577 @@ def get_valid_quickbooks_access_token():
         "access_token"
     ]
 
+def get_quickbooks_customer_by_id(
+    quickbooks_customer_id,
+):
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        raise QuickBooksOAuthError(
+            "QuickBooks is not connected."
+        )
+
+    access_token = (
+        get_valid_quickbooks_access_token()
+    )
+
+    base_url = QUICKBOOKS_API_BASE_URLS[
+        QUICKBOOKS_ENVIRONMENT
+    ]
+
+    response = requests.get(
+        (
+            f"{base_url}/v3/company/"
+            f"{connection_data['realm_id']}/"
+            f"customer/{quickbooks_customer_id}"
+        ),
+        headers={
+            "Authorization": (
+                f"Bearer {access_token}"
+            ),
+            "Accept": "application/json",
+        },
+        timeout=15,
+    )
+
+    intuit_tid = response.headers.get(
+        "intuit_tid"
+    )
+
+    try:
+        response.raise_for_status()
+        response_data = response.json()
+
+    except (
+        requests.RequestException,
+        ValueError,
+    ) as exc:
+        app.logger.error(
+            (
+                "QuickBooks customer lookup failed. "
+                "customer_id=%s status=%s "
+                "intuit_tid=%s"
+            ),
+            quickbooks_customer_id,
+            response.status_code,
+            intuit_tid,
+        )
+
+        raise QuickBooksOAuthError(
+            (
+                "The linked QuickBooks customer "
+                "could not be retrieved."
+            )
+        ) from exc
+
+    quickbooks_customer = (
+        response_data.get(
+            "Customer"
+        )
+    )
+
+    if not quickbooks_customer:
+        raise QuickBooksOAuthError(
+            (
+                "QuickBooks did not return the "
+                "linked customer record."
+            )
+        )
+
+    return quickbooks_customer
+
+
+def build_quickbooks_customer_payload(
+    customer,
+    primary_contact,
+):
+    contact_first_name = ""
+
+    contact_last_name = ""
+
+    contact_phone = ""
+
+    contact_email = ""
+
+    if primary_contact is not None:
+        contact_first_name = (
+            primary_contact["first_name"]
+            or ""
+        ).strip()
+
+        contact_last_name = (
+            primary_contact["last_name"]
+            or ""
+        ).strip()
+
+        contact_phone = (
+            primary_contact["phone"]
+            or ""
+        ).strip()
+
+        contact_email = (
+            primary_contact["email"]
+            or ""
+        ).strip()
+
+    contact_name = (
+        f"{contact_first_name} "
+        f"{contact_last_name}"
+    ).strip()
+
+    display_name = (
+        (customer["display_name"] or "").strip()
+        or (
+            customer["commercial_name"]
+            or ""
+        ).strip()
+        or contact_name
+        or f"Testa Customer {customer['id']}"
+    )
+
+    payload = {
+        "DisplayName": display_name,
+        "Active": (
+            customer["status"]
+            == "active"
+        ),
+    }
+
+    if (
+        customer["customer_type"]
+        == "commercial"
+    ):
+        company_name = (
+            (
+                customer["commercial_name"]
+                or ""
+            ).strip()
+            or display_name
+        )
+
+        payload[
+            "CompanyName"
+        ] = company_name
+
+    if contact_first_name:
+        payload[
+            "GivenName"
+        ] = contact_first_name
+
+    if contact_last_name:
+        payload[
+            "FamilyName"
+        ] = contact_last_name
+
+    if contact_phone:
+        payload[
+            "PrimaryPhone"
+        ] = {
+            "FreeFormNumber": (
+                contact_phone
+            )
+        }
+
+    if contact_email:
+        payload[
+            "PrimaryEmailAddr"
+        ] = {
+            "Address": (
+                contact_email
+            )
+        }
+
+    address = {}
+
+    if customer["address_line_1"]:
+        address[
+            "Line1"
+        ] = customer[
+            "address_line_1"
+        ]
+
+    if customer["address_line_2"]:
+        address[
+            "Line2"
+        ] = customer[
+            "address_line_2"
+        ]
+
+    if customer["city"]:
+        address[
+            "City"
+        ] = customer[
+            "city"
+        ]
+
+    if customer["state"]:
+        address[
+            "CountrySubDivisionCode"
+        ] = customer[
+            "state"
+        ]
+
+    if customer["postal_code"]:
+        address[
+            "PostalCode"
+        ] = customer[
+            "postal_code"
+        ]
+
+    if address:
+        payload[
+            "BillAddr"
+        ] = address
+
+    return payload
+
+
+def sync_customer_to_quickbooks(
+    customer_id,
+):
+    connection_data = (
+        get_quickbooks_connection()
+    )
+
+    if connection_data is None:
+        raise QuickBooksOAuthError(
+            "QuickBooks is not connected."
+        )
+
+    connection = get_db_connection()
+
+    customer = connection.execute(
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if customer is None:
+        connection.close()
+
+        raise RuntimeError(
+            "The customer could not be found."
+        )
+
+    primary_contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_primary = 1
+          AND is_active = 1
+        LIMIT 1
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    connection.close()
+
+    payload = (
+        build_quickbooks_customer_payload(
+            customer,
+            primary_contact,
+        )
+    )
+
+    quickbooks_customer_id = (
+        customer[
+            "quickbooks_customer_id"
+        ]
+    )
+
+    is_existing_quickbooks_customer = bool(
+        quickbooks_customer_id
+    )
+
+    if is_existing_quickbooks_customer:
+        if (
+            customer[
+                "quickbooks_environment"
+            ]
+            and customer[
+                "quickbooks_environment"
+            ] != QUICKBOOKS_ENVIRONMENT
+        ):
+            raise QuickBooksOAuthError(
+                (
+                    "This customer is linked to a "
+                    "different QuickBooks environment."
+                )
+            )
+
+        if (
+            customer[
+                "quickbooks_realm_id"
+            ]
+            and customer[
+                "quickbooks_realm_id"
+            ] != connection_data[
+                "realm_id"
+            ]
+        ):
+            raise QuickBooksOAuthError(
+                (
+                    "This customer is linked to a "
+                    "different QuickBooks company."
+                )
+            )
+
+        current_quickbooks_customer = (
+            get_quickbooks_customer_by_id(
+                quickbooks_customer_id
+            )
+        )
+
+        sync_token = (
+            current_quickbooks_customer.get(
+                "SyncToken"
+            )
+        )
+
+        if sync_token is None:
+            raise QuickBooksOAuthError(
+                (
+                    "QuickBooks did not provide a "
+                    "SyncToken for this customer."
+                )
+            )
+
+        payload[
+            "Id"
+        ] = str(
+            quickbooks_customer_id
+        )
+
+        payload[
+            "SyncToken"
+        ] = str(
+            sync_token
+        )
+
+        payload[
+            "sparse"
+        ] = True
+
+    access_token = (
+        get_valid_quickbooks_access_token()
+    )
+
+    base_url = QUICKBOOKS_API_BASE_URLS[
+        QUICKBOOKS_ENVIRONMENT
+    ]
+
+    response = requests.post(
+        (
+            f"{base_url}/v3/company/"
+            f"{connection_data['realm_id']}/"
+            "customer"
+        ),
+        json=payload,
+        headers={
+            "Authorization": (
+                f"Bearer {access_token}"
+            ),
+            "Accept": "application/json",
+            "Content-Type": (
+                "application/json"
+            ),
+        },
+        timeout=15,
+    )
+
+    intuit_tid = response.headers.get(
+        "intuit_tid"
+    )
+
+    try:
+        response.raise_for_status()
+
+        response_data = (
+            response.json()
+        )
+
+    except (
+        requests.RequestException,
+        ValueError,
+    ) as exc:
+        app.logger.error(
+            (
+                "QuickBooks customer sync failed. "
+                "customer_id=%s status=%s "
+                "intuit_tid=%s response=%s"
+            ),
+            customer_id,
+            response.status_code,
+            intuit_tid,
+            response.text[:2000],
+        )
+
+        raise QuickBooksOAuthError(
+            (
+                "QuickBooks could not save "
+                "this customer."
+            )
+        ) from exc
+
+    quickbooks_customer = (
+        response_data.get(
+            "Customer"
+        )
+    )
+
+    if not quickbooks_customer:
+        raise QuickBooksOAuthError(
+            (
+                "QuickBooks did not return the "
+                "saved customer record."
+            )
+        )
+
+    returned_customer_id = str(
+        quickbooks_customer.get(
+            "Id",
+            "",
+        )
+    ).strip()
+
+    returned_sync_token = str(
+        quickbooks_customer.get(
+            "SyncToken",
+            "",
+        )
+    ).strip()
+
+    if not returned_customer_id:
+        raise QuickBooksOAuthError(
+            (
+                "QuickBooks did not return a "
+                "Customer ID."
+            )
+        )
+
+    now = current_timestamp()
+
+    connection = get_db_connection()
+
+    connection.execute(
+        """
+        UPDATE customers
+        SET
+            display_name = COALESCE(
+                NULLIF(
+                    display_name,
+                    ''
+                ),
+                ?
+            ),
+            quickbooks_environment = ?,
+            quickbooks_realm_id = ?,
+            quickbooks_customer_id = ?,
+            quickbooks_fully_qualified_name = ?,
+            quickbooks_sync_token = ?,
+            quickbooks_last_synced_at = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            quickbooks_customer.get(
+                "DisplayName"
+            ),
+            QUICKBOOKS_ENVIRONMENT,
+            connection_data[
+                "realm_id"
+            ],
+            returned_customer_id,
+            quickbooks_customer.get(
+                "FullyQualifiedName"
+            ),
+            returned_sync_token or None,
+            now,
+            now,
+            customer_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    return {
+        "created": (
+            not is_existing_quickbooks_customer
+        ),
+        "quickbooks_customer": (
+            quickbooks_customer
+        ),
+    }
+
+def automatically_sync_customer_to_quickbooks(
+    customer_id,
+):
+    try:
+        connection_data = (
+            get_quickbooks_connection()
+        )
+
+    except (
+        QuickBooksConfigurationError,
+        QuickBooksOAuthError,
+    ):
+        app.logger.exception(
+            (
+                "QuickBooks connection could not "
+                "be checked before automatic "
+                "customer synchronization."
+            )
+        )
+
+        return {
+            "attempted": False,
+            "succeeded": False,
+        }
+
+    if connection_data is None:
+        return {
+            "attempted": False,
+            "succeeded": False,
+        }
+
+    try:
+        result = (
+            sync_customer_to_quickbooks(
+                customer_id
+            )
+        )
+
+    except (
+        QuickBooksConfigurationError,
+        QuickBooksOAuthError,
+        RuntimeError,
+    ):
+        app.logger.exception(
+            (
+                "Automatic QuickBooks customer "
+                "synchronization failed for "
+                "customer %s."
+            ),
+            customer_id,
+        )
+
+        return {
+            "attempted": True,
+            "succeeded": False,
+        }
+
+    return {
+        "attempted": True,
+        "succeeded": True,
+        "created": result["created"],
+    }
 
 def query_quickbooks_customers(
     start_position=1,
@@ -8965,6 +9536,74 @@ def get_customer_review_issues(
 
     return review_issues
 
+def refresh_customer_review_status(
+    connection,
+    customer_id,
+):
+    customer = connection.execute(
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if customer is None:
+        return []
+
+    primary_contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_primary = 1
+          AND is_active = 1
+        LIMIT 1
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    review_issues = (
+        get_customer_review_issues(
+            customer,
+            primary_contact,
+        )
+    )
+
+    review_notes = None
+
+    if review_issues:
+        review_notes = (
+            "Profile may need updating. "
+            "Missing: "
+            + ", ".join(
+                review_issues
+            )
+            + "."
+        )
+
+    connection.execute(
+        """
+        UPDATE customers
+        SET
+            needs_review = ?,
+            review_notes = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            1
+            if review_issues
+            else 0,
+            review_notes,
+            current_timestamp(),
+            customer_id,
+        ),
+    )
+
+    return review_issues
+
 @app.route("/admin/customers")
 @admin_required
 def admin_customers():
@@ -9723,6 +10362,12 @@ def admin_customer_new():
         connection.commit()
         connection.close()
 
+        quickbooks_sync = (
+            automatically_sync_customer_to_quickbooks(
+                customer_id
+            )
+        )
+
         customer_display_name = (
             commercial_name
             if customer_type == "commercial"
@@ -9740,13 +10385,28 @@ def admin_customer_new():
             entity_id=customer_id,
         )
 
-        flash(
-            (
-                f"{customer_display_name} "
-                "was added successfully."
-            ),
-            "success",
-        )
+        if (
+            quickbooks_sync["attempted"]
+            and not quickbooks_sync["succeeded"]
+        ):
+            flash(
+                (
+                    f"{customer_display_name} was added "
+                    "successfully, but QuickBooks could "
+                    "not be updated. The customer can be "
+                    "synchronized again from its profile."
+                ),
+                "error",
+            )
+
+        else:
+            flash(
+                (
+                    f"{customer_display_name} "
+                    "was added successfully."
+                ),
+                "success",
+            )
 
         return redirect(
             url_for("admin_customers")
@@ -9815,16 +10475,32 @@ def admin_customer_detail(
         connection.close()
         abort(404)
 
-    primary_contact = connection.execute(
+    contacts = connection.execute(
         """
         SELECT *
         FROM customer_contacts
         WHERE customer_id = ?
-          AND is_primary = 1
-        LIMIT 1
+        ORDER BY
+            is_primary DESC,
+            is_active DESC,
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE,
+            id
         """,
         (customer_id,),
-    ).fetchone()
+    ).fetchall()
+
+    primary_contact = next(
+        (
+            contact
+            for contact in contacts
+            if (
+                contact["is_primary"]
+                and contact["is_active"]
+            )
+        ),
+        None,
+    )
 
     review_issues = (
         get_customer_review_issues(
@@ -9852,9 +10528,872 @@ def admin_customer_detail(
     return render_template(
         "admin_customer_detail.html",
         customer=customer,
+        contacts=contacts,
         primary_contact=primary_contact,
         customer_name=customer_name,
         review_issues=review_issues,
+    )
+
+@app.route(
+    "/admin/customers/<int:customer_id>/quickbooks/sync",
+    methods=["POST"],
+)
+@admin_required
+def admin_customer_quickbooks_sync(
+    customer_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    customer = connection.execute(
+        """
+        SELECT
+            id,
+            display_name,
+            commercial_name,
+            quickbooks_customer_id
+        FROM customers
+        WHERE id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    connection.close()
+
+    if customer is None:
+        abort(404)
+
+    try:
+        result = (
+            sync_customer_to_quickbooks(
+                customer_id
+            )
+        )
+
+    except (
+        QuickBooksConfigurationError,
+        QuickBooksOAuthError,
+        RuntimeError,
+    ):
+        app.logger.exception(
+            (
+                "Customer %s could not be "
+                "synchronized to QuickBooks."
+            ),
+            customer_id,
+        )
+
+        flash(
+            (
+                "This customer could not be "
+                "saved to QuickBooks."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_customer_detail",
+                customer_id=customer_id,
+            )
+        )
+
+    customer_name = (
+        customer["display_name"]
+        or customer["commercial_name"]
+        or "Customer"
+    )
+
+    if result["created"]:
+        audit_action = (
+            "quickbooks_customer_created"
+        )
+
+        audit_description = (
+            f"{customer_name} was created "
+            "in QuickBooks Online."
+        )
+
+        success_message = (
+            "Customer created in QuickBooks "
+            "successfully."
+        )
+
+    else:
+        audit_action = (
+            "quickbooks_customer_updated"
+        )
+
+        audit_description = (
+            f"{customer_name} was updated "
+            "in QuickBooks Online."
+        )
+
+        success_message = (
+            "Customer synchronized with "
+            "QuickBooks successfully."
+        )
+
+    write_audit_log(
+        action=audit_action,
+        category="quickbooks",
+        description=audit_description,
+        entity_type="customer",
+        entity_id=customer_id,
+    )
+
+    flash(
+        success_message,
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_customer_detail",
+            customer_id=customer_id,
+        )
+    )
+
+@app.route(
+    "/admin/customers/<int:customer_id>/contacts/add",
+    methods=["POST"],
+)
+@admin_required
+def admin_customer_contact_add(
+    customer_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    customer = connection.execute(
+        """
+        SELECT id
+        FROM customers
+        WHERE id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if customer is None:
+        connection.close()
+        abort(404)
+
+    first_name = (
+        request.form.get(
+            "first_name",
+            ""
+        ).strip()
+    )
+
+    last_name = (
+        request.form.get(
+            "last_name",
+            ""
+        ).strip()
+    )
+
+    job_title = (
+        request.form.get(
+            "job_title",
+            ""
+        ).strip()
+    )
+
+    phone = (
+        request.form.get(
+            "phone",
+            ""
+        ).strip()
+    )
+
+    phone_type = (
+        request.form.get(
+            "phone_type",
+            ""
+        )
+        .strip()
+        .lower()
+    )
+
+    email = normalize_email(
+        request.form.get(
+            "email",
+            ""
+        )
+    )
+
+    make_primary = bool(
+        request.form.get(
+            "is_primary"
+        )
+    )
+
+    errors = []
+
+    if not first_name:
+        errors.append(
+            "Contact first name is required."
+        )
+
+    if not last_name:
+        errors.append(
+            "Contact last name is required."
+        )
+
+    if not phone:
+        errors.append(
+            "Contact phone number is required."
+        )
+
+    if (
+        phone_type
+        and phone_type not in {
+            "home",
+            "mobile",
+            "work",
+        }
+    ):
+        errors.append(
+            "Select a valid phone type."
+        )
+
+    if not email:
+        errors.append(
+            "Contact email address is required."
+        )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_customer_detail",
+                customer_id=customer_id,
+            )
+            + "#customer-contacts"
+        )
+
+    existing_primary = connection.execute(
+        """
+        SELECT id
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_primary = 1
+          AND is_active = 1
+        LIMIT 1
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if existing_primary is None:
+        make_primary = True
+
+    now = current_timestamp()
+
+    if make_primary:
+        connection.execute(
+            """
+            UPDATE customer_contacts
+            SET
+                is_primary = 0,
+                updated_at = ?
+            WHERE customer_id = ?
+              AND is_primary = 1
+            """,
+            (
+                now,
+                customer_id,
+            ),
+        )
+
+    cursor = connection.execute(
+        """
+        INSERT INTO customer_contacts (
+            customer_id,
+            first_name,
+            last_name,
+            job_title,
+            phone,
+            phone_type,
+            email,
+            is_primary,
+            is_billing_contact,
+            is_active,
+            notes,
+            created_at,
+            updated_at
+        )
+        VALUES (
+            ?, ?, ?, ?, ?, ?, ?,
+            ?, 0, 1, NULL, ?, ?
+        )
+        """,
+        (
+            customer_id,
+            first_name,
+            last_name,
+            job_title or None,
+            phone,
+            phone_type or None,
+            email,
+            (
+                1
+                if make_primary
+                else 0
+            ),
+            now,
+            now,
+        ),
+    )
+
+    contact_id = cursor.lastrowid
+
+    refresh_customer_review_status(
+        connection,
+        customer_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    quickbooks_sync = {
+        "attempted": False,
+        "succeeded": False,
+    }
+
+    if make_primary:
+        quickbooks_sync = (
+            automatically_sync_customer_to_quickbooks(
+                customer_id
+            )
+        )
+
+
+    write_audit_log(
+        action="customer_contact_created",
+        category="customers",
+        description=(
+            "Customer contact created: "
+            f"{first_name} {last_name}."
+        ),
+        entity_type="customer_contact",
+        entity_id=contact_id,
+    )
+
+    if (
+        quickbooks_sync["attempted"]
+        and not quickbooks_sync["succeeded"]
+    ):
+        flash(
+            (
+                f"{first_name} {last_name} was added "
+                "as a contact, but QuickBooks could "
+                "not be updated with the new "
+                "Primary Contact."
+            ),
+            "error",
+        )
+
+    else:
+        flash(
+            (
+                f"{first_name} {last_name} "
+                "was added as a contact."
+            ),
+            "success",
+        )
+
+    return redirect(
+        url_for(
+            "admin_customer_detail",
+            customer_id=customer_id,
+        )
+        + "#customer-contacts"
+    )
+
+
+@app.route(
+    "/admin/customers/<int:customer_id>/contacts/"
+    "<int:contact_id>/update",
+    methods=["POST"],
+)
+@admin_required
+def admin_customer_contact_update(
+    customer_id,
+    contact_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE id = ?
+          AND customer_id = ?
+        """,
+        (
+            contact_id,
+            customer_id,
+        ),
+    ).fetchone()
+
+    if contact is None:
+        connection.close()
+        abort(404)
+
+    first_name = (
+        request.form.get(
+            "first_name",
+            ""
+        ).strip()
+    )
+
+    last_name = (
+        request.form.get(
+            "last_name",
+            ""
+        ).strip()
+    )
+
+    job_title = (
+        request.form.get(
+            "job_title",
+            ""
+        ).strip()
+    )
+
+    phone = (
+        request.form.get(
+            "phone",
+            ""
+        ).strip()
+    )
+
+    phone_type = (
+        request.form.get(
+            "phone_type",
+            ""
+        )
+        .strip()
+        .lower()
+    )
+
+    email = normalize_email(
+        request.form.get(
+            "email",
+            ""
+        )
+    )
+
+    errors = []
+
+    if (
+        phone_type
+        and phone_type not in {
+            "home",
+            "mobile",
+            "work",
+        }
+    ):
+        errors.append(
+            "Select a valid phone type."
+        )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_customer_detail",
+                customer_id=customer_id,
+            )
+            + "#customer-contacts"
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE customer_contacts
+        SET
+            first_name = ?,
+            last_name = ?,
+            job_title = ?,
+            phone = ?,
+            phone_type = ?,
+            email = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND customer_id = ?
+        """,
+        (
+            first_name or None,
+            last_name or None,
+            job_title or None,
+            phone or None,
+            phone_type or None,
+            email or None,
+            now,
+            contact_id,
+            customer_id,
+        ),
+    )
+
+    refresh_customer_review_status(
+        connection,
+        customer_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    quickbooks_sync = {
+        "attempted": False,
+        "succeeded": False,
+    }
+
+    if contact["is_primary"]:
+        quickbooks_sync = (
+            automatically_sync_customer_to_quickbooks(
+                customer_id
+            )
+        )
+
+
+    write_audit_log(
+        action="customer_contact_updated",
+        category="customers",
+        description=(
+            "Customer contact updated: "
+            f"{first_name} {last_name}."
+        ),
+        entity_type="customer_contact",
+        entity_id=contact_id,
+    )
+
+    if (
+        quickbooks_sync["attempted"]
+        and not quickbooks_sync["succeeded"]
+    ):
+        flash(
+            (
+                "Contact updated in Testa, but the "
+                "Primary Contact could not be updated "
+                "in QuickBooks."
+            ),
+            "error",
+        )
+
+    else:
+        flash(
+            "Contact updated.",
+            "success",
+        )
+
+    return redirect(
+        url_for(
+            "admin_customer_detail",
+            customer_id=customer_id,
+        )
+        + "#customer-contacts"
+    )
+
+
+@app.route(
+    "/admin/customers/<int:customer_id>/contacts/"
+    "<int:contact_id>/primary",
+    methods=["POST"],
+)
+@admin_required
+def admin_customer_contact_primary(
+    customer_id,
+    contact_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE id = ?
+          AND customer_id = ?
+        """,
+        (
+            contact_id,
+            customer_id,
+        ),
+    ).fetchone()
+
+    if contact is None:
+        connection.close()
+        abort(404)
+
+    if not contact["is_active"]:
+        connection.close()
+
+        flash(
+            (
+                "Reactivate the contact before "
+                "making them primary."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_customer_detail",
+                customer_id=customer_id,
+            )
+            + "#customer-contacts"
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE customer_contacts
+        SET
+            is_primary = 0,
+            updated_at = ?
+        WHERE customer_id = ?
+          AND is_primary = 1
+        """,
+        (
+            now,
+            customer_id,
+        ),
+    )
+
+    connection.execute(
+        """
+        UPDATE customer_contacts
+        SET
+            is_primary = 1,
+            updated_at = ?
+        WHERE id = ?
+          AND customer_id = ?
+        """,
+        (
+            now,
+            contact_id,
+            customer_id,
+        ),
+    )
+
+    refresh_customer_review_status(
+        connection,
+        customer_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    quickbooks_sync = (
+        automatically_sync_customer_to_quickbooks(
+            customer_id
+        )
+    )
+
+    contact_name = (
+        (
+            f"{contact['first_name'] or ''} "
+            f"{contact['last_name'] or ''}"
+        ).strip()
+        or "Contact"
+    )
+
+    write_audit_log(
+        action="customer_primary_contact_changed",
+        category="customers",
+        description=(
+            f"{contact_name} was made "
+            "the primary customer contact."
+        ),
+        entity_type="customer_contact",
+        entity_id=contact_id,
+    )
+
+    if (
+        quickbooks_sync["attempted"]
+        and not quickbooks_sync["succeeded"]
+    ):
+        flash(
+            (
+                f"{contact_name} is now the primary "
+                "contact in Testa, but QuickBooks "
+                "could not be updated."
+            ),
+            "error",
+        )
+
+    else:
+        flash(
+            (
+                f"{contact_name} is now "
+                "the primary contact."
+            ),
+            "success",
+        )
+
+    return redirect(
+        url_for(
+            "admin_customer_detail",
+            customer_id=customer_id,
+        )
+        + "#customer-contacts"
+    )
+
+
+@app.route(
+    "/admin/customers/<int:customer_id>/contacts/"
+    "<int:contact_id>/toggle-active",
+    methods=["POST"],
+)
+@admin_required
+def admin_customer_contact_toggle_active(
+    customer_id,
+    contact_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    contact = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE id = ?
+          AND customer_id = ?
+        """,
+        (
+            contact_id,
+            customer_id,
+        ),
+    ).fetchone()
+
+    if contact is None:
+        connection.close()
+        abort(404)
+
+    if (
+        contact["is_active"]
+        and contact["is_primary"]
+    ):
+        connection.close()
+
+        flash(
+            (
+                "The primary contact cannot be "
+                "deactivated. Make another contact "
+                "primary first."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_customer_detail",
+                customer_id=customer_id,
+            )
+            + "#customer-contacts"
+        )
+
+    new_is_active = (
+        0
+        if contact["is_active"]
+        else 1
+    )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE customer_contacts
+        SET
+            is_active = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND customer_id = ?
+        """,
+        (
+            new_is_active,
+            now,
+            contact_id,
+            customer_id,
+        ),
+    )
+
+    refresh_customer_review_status(
+        connection,
+        customer_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    contact_name = (
+        (
+            f"{contact['first_name'] or ''} "
+            f"{contact['last_name'] or ''}"
+        ).strip()
+        or "Contact"
+    )
+
+    write_audit_log(
+        action=(
+            "customer_contact_reactivated"
+            if new_is_active
+            else "customer_contact_deactivated"
+        ),
+        category="customers",
+        description=(
+            f"{contact_name} was "
+            + (
+                "reactivated."
+                if new_is_active
+                else "deactivated."
+            )
+        ),
+        entity_type="customer_contact",
+        entity_id=contact_id,
+    )
+
+    flash(
+        (
+            f"{contact_name} was "
+            + (
+                "reactivated."
+                if new_is_active
+                else "deactivated."
+            )
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_customer_detail",
+            customer_id=customer_id,
+        )
+        + "#customer-contacts"
     )
 
 @app.route(
@@ -9937,6 +11476,59 @@ def admin_customer_edit(
                 primary_contact.first_name,
                 ''
             ) COLLATE NOCASE
+        """,
+        (customer_id,),
+    ).fetchall()
+
+    parent_customers = connection.execute(
+        """
+        SELECT
+            customers.id,
+            customers.customer_type,
+            customers.display_name,
+            customers.commercial_name,
+
+            primary_contact.first_name,
+            primary_contact.last_name
+
+        FROM customers
+
+        LEFT JOIN customer_contacts
+            AS primary_contact
+            ON primary_contact.customer_id
+                = customers.id
+           AND primary_contact.is_primary = 1
+
+        WHERE customers.status = 'active'
+          AND customers.id != ?
+
+        ORDER BY
+            COALESCE(
+                NULLIF(
+                    customers.display_name,
+                    ''
+                ),
+                NULLIF(
+                    customers.commercial_name,
+                    ''
+                ),
+                NULLIF(
+                    TRIM(
+                        COALESCE(
+                            primary_contact.first_name,
+                            ''
+                        )
+                        || ' '
+                        || COALESCE(
+                            primary_contact.last_name,
+                            ''
+                        )
+                    ),
+                    ''
+                ),
+                'Unnamed Customer'
+            ) COLLATE NOCASE,
+            customers.id
         """,
         (customer_id,),
     ).fetchall()
@@ -10085,6 +11677,13 @@ def admin_customer_edit(
             ).strip()
         )
 
+        parent_customer_id = (
+            request.form.get(
+                "parent_customer_id",
+                ""
+            ).strip()
+        )
+
         notes = (
             request.form.get(
                 "notes",
@@ -10158,6 +11757,44 @@ def admin_customer_edit(
                 )
             )
 
+        if (
+            parent_customer_id
+            and int(
+                parent_customer_id
+            ) == customer_id
+        ):
+            errors.append(
+                (
+                    "A customer cannot be its own "
+                    "parent company."
+                )
+            )
+
+        if parent_customer_id:
+            selected_parent = (
+                connection.execute(
+                    """
+                    SELECT id
+                    FROM customers
+                    WHERE id = ?
+                      AND status = 'active'
+                    """,
+                    (
+                        int(
+                            parent_customer_id
+                        ),
+                    ),
+                ).fetchone()
+            )
+
+            if selected_parent is None:
+                errors.append(
+                    (
+                        "Select a valid parent "
+                        "company."
+                    )
+                )
+
         if errors:
             connection.close()
 
@@ -10173,6 +11810,7 @@ def admin_customer_edit(
                 primary_contact=primary_contact,
                 salespeople=salespeople,
                 billing_customers=billing_customers,
+                parent_customers=parent_customers,
             )
 
         now = current_timestamp()
@@ -10204,6 +11842,7 @@ def admin_customer_edit(
                 default_salesperson_id = ?,
                 uses_third_party_billing = ?,
                 default_billing_customer_id = ?,
+                parent_customer_id = ?,
                 status = ?,
                 notes = ?,
                 updated_at = ?
@@ -10234,6 +11873,13 @@ def admin_customer_edit(
                         default_billing_customer_id
                     )
                     if default_billing_customer_id
+                    else None
+                ),
+                (
+                    int(
+                        parent_customer_id
+                    )
+                    if parent_customer_id
                     else None
                 ),
                 status,
@@ -10376,6 +12022,12 @@ def admin_customer_edit(
         connection.commit()
         connection.close()
 
+        quickbooks_sync = (
+            automatically_sync_customer_to_quickbooks(
+                customer_id
+            )
+        )
+
         write_audit_log(
             action="customer_updated",
             category="customers",
@@ -10387,10 +12039,25 @@ def admin_customer_edit(
             entity_id=customer_id,
         )
 
-        flash(
-            "Customer profile updated.",
-            "success",
-        )
+        if (
+            quickbooks_sync["attempted"]
+            and not quickbooks_sync["succeeded"]
+        ):
+            flash(
+                (
+                    "Customer profile updated in Testa, "
+                    "but QuickBooks could not be updated. "
+                    "The customer can be synchronized "
+                    "again from its profile."
+                ),
+                "error",
+            )
+
+        else:
+            flash(
+                "Customer profile updated.",
+                "success",
+            )
 
         return redirect(
             url_for(
@@ -10407,6 +12074,7 @@ def admin_customer_edit(
         primary_contact=primary_contact,
         salespeople=salespeople,
         billing_customers=billing_customers,
+        parent_customers=parent_customers,
     )
 
 @app.route("/admin/website")

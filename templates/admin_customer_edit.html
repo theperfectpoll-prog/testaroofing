@@ -322,6 +322,71 @@
 
             </div>
 
+            <div class="admin-field">
+
+                <label for="parent_customer_id">
+                    Parent Company
+                </label>
+
+                {% set selected_parent_customer = request.form.get(
+                    'parent_customer_id',
+                    customer['parent_customer_id']|string
+                    if customer['parent_customer_id']
+                    else ''
+                ) %}
+
+                <select
+                    id="parent_customer_id"
+                    name="parent_customer_id"
+                >
+
+                    <option value="">
+                        None — Standalone Customer
+                    </option>
+
+                    {% for parent_customer in parent_customers %}
+
+                        <option
+                            value="{{ parent_customer['id'] }}"
+                            {% if
+                                selected_parent_customer
+                                == parent_customer['id']|string
+                            %}
+                                selected
+                            {% endif %}
+                        >
+
+                            {{
+                                parent_customer["display_name"]
+                                or parent_customer["commercial_name"]
+                                or (
+                                    (
+                                        parent_customer["first_name"]
+                                        or ""
+                                    )
+                                    ~ " "
+                                    ~ (
+                                        parent_customer["last_name"]
+                                        or ""
+                                    )
+                                )|trim
+                                or "Unnamed Customer"
+                            }}
+
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+                <small>
+                    Use this when the customer is a
+                    branch, subsidiary, location, or
+                    other entity belonging to another
+                    customer.
+                </small>
+
+            </div>
 
             <div class="admin-field">
 

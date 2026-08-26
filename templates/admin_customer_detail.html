@@ -71,6 +71,169 @@
         cursor: not-allowed;
     }
 
+
+    /* =====================================================
+       CONTACTS
+       ===================================================== */
+
+    .customer-contact-list {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+    }
+
+    .customer-contact-row {
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+        background: #ffffff;
+    }
+
+    .customer-contact-row.is-inactive {
+        opacity: 0.65;
+        background: #f6f7f8;
+    }
+
+    .customer-contact-summary {
+        display: grid;
+        grid-template-columns:
+            minmax(160px, 1.2fr)
+            minmax(130px, 0.9fr)
+            minmax(150px, 1fr)
+            minmax(190px, 1.3fr)
+            auto;
+        align-items: center;
+        gap: 14px;
+        padding: 12px 14px;
+    }
+
+    .customer-contact-main {
+        display: grid;
+        gap: 2px;
+    }
+
+    .customer-contact-main strong {
+        font-size: 0.9rem;
+    }
+
+    .customer-contact-main small,
+    .customer-contact-detail small {
+        color: #6d7885;
+        font-size: 0.73rem;
+    }
+
+    .customer-contact-detail {
+        display: grid;
+        gap: 2px;
+        font-size: 0.82rem;
+    }
+
+    .customer-contact-badges {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        margin-top: 3px;
+    }
+
+    .customer-contact-badge {
+        display: inline-flex;
+        align-items: center;
+        width: fit-content;
+        padding: 2px 6px;
+        border-radius: 999px;
+        background: #eef2f5;
+        font-size: 0.67rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .customer-contact-badge-primary {
+        background: #e7f2e9;
+        color: #276637;
+    }
+
+    .customer-contact-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .customer-contact-actions form {
+        margin: 0;
+    }
+
+    .customer-contact-actions button,
+    .customer-contact-edit-toggle {
+        min-height: 32px;
+        padding: 5px 9px;
+        font-size: 0.72rem;
+    }
+
+    .customer-contact-editor {
+        border-top: 1px solid #e2e7ec;
+    }
+
+    .customer-contact-editor summary {
+        display: none;
+    }
+
+    .customer-contact-edit-form,
+    .customer-contact-add-form {
+        padding: 14px;
+    }
+
+    .customer-contact-form-grid {
+        display: grid;
+        grid-template-columns:
+            repeat(3, minmax(0, 1fr));
+        gap: 12px;
+    }
+
+    .customer-contact-form-grid .admin-field {
+        min-width: 0;
+    }
+
+    .customer-contact-form-actions {
+        display: flex;
+        flex-wrap: wrap;
+        margin-top: 12px;
+        gap: 8px;
+    }
+
+    .customer-contact-add {
+        margin-top: 18px;
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+    }
+
+    .customer-contact-add > summary {
+        padding: 12px 14px;
+        font-weight: 800;
+        cursor: pointer;
+        list-style: none;
+    }
+
+    .customer-contact-add > summary::-webkit-details-marker {
+        display: none;
+    }
+
+
+    @media (max-width: 1000px) {
+
+        .customer-contact-summary {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+
+        .customer-contact-actions {
+            justify-content: flex-start;
+        }
+
+    }
+
+
     @media (max-width: 760px) {
 
         .customer-profile-grid {
@@ -85,6 +248,19 @@
         .customer-profile-actions span {
             flex: 1 1 100%;
             text-align: center;
+        }
+
+        .customer-contact-summary {
+            grid-template-columns: 1fr;
+            gap: 7px;
+        }
+
+        .customer-contact-actions {
+            margin-top: 4px;
+        }
+
+        .customer-contact-form-grid {
+            grid-template-columns: 1fr;
         }
 
     }
@@ -138,7 +314,6 @@
         <span
             class="admin-primary-button
                    customer-profile-placeholder"
-            title="Work order creation will be connected next."
         >
             Create Work Order
         </span>
@@ -146,7 +321,6 @@
         <span
             class="admin-secondary-button
                    customer-profile-placeholder"
-            title="Estimate creation will be connected next."
         >
             Create Estimate
         </span>
@@ -176,9 +350,8 @@
             </h3>
 
             <p>
-                This customer was imported or saved with
-                information that should be completed before
-                it is considered fully reviewed.
+                Complete the missing customer or primary
+                contact information when it becomes available.
             </p>
 
         </div>
@@ -295,114 +468,6 @@
         <div class="customer-profile-card">
 
             <h4>
-                Primary Contact
-            </h4>
-
-            <div class="customer-profile-list">
-
-                <div class="customer-profile-item">
-
-                    <span>
-                        Name
-                    </span>
-
-                    <strong>
-
-                        {% if
-                            primary_contact
-                            and (
-                                primary_contact["first_name"]
-                                or primary_contact["last_name"]
-                            )
-                        %}
-
-                            {{ primary_contact["first_name"] or "" }}
-                            {{ primary_contact["last_name"] or "" }}
-
-                        {% else %}
-
-                            Not Available
-
-                        {% endif %}
-
-                    </strong>
-
-                </div>
-
-
-                <div class="customer-profile-item">
-
-                    <span>
-                        Title / Role
-                    </span>
-
-                    <strong>
-                        {{
-                            primary_contact["job_title"]
-                            if primary_contact
-                            and primary_contact["job_title"]
-                            else "Not Available"
-                        }}
-                    </strong>
-
-                </div>
-
-
-                <div class="customer-profile-item">
-
-                    <span>
-                        Phone
-                    </span>
-
-                    <strong>
-
-                        {% if
-                            primary_contact
-                            and primary_contact["phone"]
-                        %}
-
-                            {{ primary_contact["phone"] }}
-
-                            {% if primary_contact["phone_type"] %}
-                                · {{ primary_contact["phone_type"]|title }}
-                            {% endif %}
-
-                        {% else %}
-
-                            Not Available
-
-                        {% endif %}
-
-                    </strong>
-
-                </div>
-
-
-                <div class="customer-profile-item">
-
-                    <span>
-                        Email
-                    </span>
-
-                    <strong>
-                        {{
-                            primary_contact["email"]
-                            if primary_contact
-                            and primary_contact["email"]
-                            else "Not Available"
-                        }}
-                    </strong>
-
-                </div>
-
-            </div>
-
-        </div>
-
-
-        <div class="customer-profile-card">
-
-            <h4>
                 Address
             </h4>
 
@@ -501,23 +566,42 @@
 
                 </div>
 
+                <div class="customer-profile-item">
 
-                {% if customer["quickbooks_customer_id"] %}
+                    <span>
+                        QuickBooks Sync
+                    </span>
 
-                    <div class="customer-profile-item">
+                    <form
+                        method="post"
+                        action="{{ url_for(
+                            'admin_customer_quickbooks_sync',
+                            customer_id=customer['id']
+                        ) }}"
+                    >
 
-                        <span>
-                            QuickBooks Customer ID
-                        </span>
+                        <input
+                            type="hidden"
+                            name="csrf_token"
+                            value="{{ csrf_token() }}"
+                        >
 
-                        <strong>
-                            {{ customer["quickbooks_customer_id"] }}
-                        </strong>
+                        <button
+                            type="submit"
+                            class="admin-secondary-button"
+                        >
 
-                    </div>
+                            {% if customer["quickbooks_customer_id"] %}
+                                Sync to QuickBooks
+                            {% else %}
+                                Create in QuickBooks
+                            {% endif %}
 
-                {% endif %}
+                        </button>
 
+                    </form>
+
+                </div>
 
                 <div class="customer-profile-item">
 
@@ -567,14 +651,25 @@
                     <div class="customer-profile-item">
 
                         <span>
-                            Parent Customer
+                            Parent Company
                         </span>
 
                         <strong>
-                            {{
-                                customer["parent_display_name"]
-                                or customer["parent_commercial_name"]
-                            }}
+
+                            <a
+                                href="{{ url_for(
+                                    'admin_customer_detail',
+                                    customer_id=customer[
+                                        'parent_customer_id'
+                                    ]
+                                ) }}"
+                            >
+                                {{
+                                    customer["parent_display_name"]
+                                    or customer["parent_commercial_name"]
+                                }}
+                            </a>
+
                         </strong>
 
                     </div>
@@ -590,6 +685,577 @@
 </section>
 
 
+<section
+    class="admin-panel"
+    id="customer-contacts"
+>
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Contacts
+            </h3>
+
+            <p>
+                Maintain the people associated with this
+                customer. The primary contact is the default
+                contact for the customer, but estimates and
+                work orders can use any active contact.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    {% if contacts %}
+
+        <div class="customer-contact-list">
+
+            {% for contact in contacts %}
+
+                <div
+                    class="customer-contact-row
+                    {% if not contact['is_active'] %}
+                        is-inactive
+                    {% endif %}"
+                >
+
+                    <div class="customer-contact-summary">
+
+                        <div class="customer-contact-main">
+
+                            <strong>
+                                {{
+                                    (
+                                        (
+                                            contact["first_name"]
+                                            or ""
+                                        )
+                                        ~ " "
+                                        ~ (
+                                            contact["last_name"]
+                                            or ""
+                                        )
+                                    )|trim
+                                    or "Unnamed Contact"
+                                }}
+                            </strong>
+
+                            {% if contact["job_title"] %}
+
+                                <small>
+                                    {{ contact["job_title"] }}
+                                </small>
+
+                            {% endif %}
+
+                            <div class="customer-contact-badges">
+
+                                {% if contact["is_primary"] %}
+
+                                    <span
+                                        class="
+                                            customer-contact-badge
+                                            customer-contact-badge-primary
+                                        "
+                                    >
+                                        Primary
+                                    </span>
+
+                                {% endif %}
+
+                                {% if not contact["is_active"] %}
+
+                                    <span
+                                        class="customer-contact-badge"
+                                    >
+                                        Inactive
+                                    </span>
+
+                                {% endif %}
+
+                            </div>
+
+                        </div>
+
+
+                        <div class="customer-contact-detail">
+
+                            <small>
+                                Phone
+                            </small>
+
+                            <span>
+                                {{ contact["phone"] or "Not Available" }}
+                            </span>
+
+                        </div>
+
+
+                        <div class="customer-contact-detail">
+
+                            <small>
+                                Phone Type
+                            </small>
+
+                            <span>
+                                {{
+                                    contact["phone_type"]|title
+                                    if contact["phone_type"]
+                                    else "Not Set"
+                                }}
+                            </span>
+
+                        </div>
+
+
+                        <div class="customer-contact-detail">
+
+                            <small>
+                                Email
+                            </small>
+
+                            <span>
+                                {{ contact["email"] or "Not Available" }}
+                            </span>
+
+                        </div>
+
+
+                        <div class="customer-contact-actions">
+
+                            {% if
+                                contact["is_active"]
+                                and not contact["is_primary"]
+                            %}
+
+                                <form
+                                    method="post"
+                                    action="{{ url_for(
+                                        'admin_customer_contact_primary',
+                                        customer_id=customer['id'],
+                                        contact_id=contact['id']
+                                    ) }}"
+                                >
+
+                                    <input
+                                        type="hidden"
+                                        name="csrf_token"
+                                        value="{{ csrf_token() }}"
+                                    >
+
+                                    <button
+                                        type="submit"
+                                        class="admin-secondary-button"
+                                    >
+                                        Make Primary
+                                    </button>
+
+                                </form>
+
+                            {% endif %}
+
+
+                            <button
+                                type="button"
+                                class="
+                                    admin-secondary-button
+                                    customer-contact-edit-toggle
+                                "
+                                onclick="
+                                    const editor =
+                                        document.getElementById(
+                                            'contact-editor-{{ contact['id'] }}'
+                                        );
+                                    editor.open = !editor.open;
+                                "
+                            >
+                                Edit
+                            </button>
+
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'admin_customer_contact_toggle_active',
+                                    customer_id=customer['id'],
+                                    contact_id=contact['id']
+                                ) }}"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="csrf_token"
+                                    value="{{ csrf_token() }}"
+                                >
+
+                                <button
+                                    type="submit"
+                                    class="admin-secondary-button"
+                                >
+
+                                    {% if contact["is_active"] %}
+                                        Deactivate
+                                    {% else %}
+                                        Reactivate
+                                    {% endif %}
+
+                                </button>
+
+                            </form>
+
+                        </div>
+
+                    </div>
+
+
+                    <details
+                        class="customer-contact-editor"
+                        id="contact-editor-{{ contact['id'] }}"
+                    >
+
+                        <summary>
+                            Edit Contact
+                        </summary>
+
+                        <form
+                            method="post"
+                            action="{{ url_for(
+                                'admin_customer_contact_update',
+                                customer_id=customer['id'],
+                                contact_id=contact['id']
+                            ) }}"
+                            class="customer-contact-edit-form"
+                        >
+
+                            <input
+                                type="hidden"
+                                name="csrf_token"
+                                value="{{ csrf_token() }}"
+                            >
+
+
+                            <div class="customer-contact-form-grid">
+
+                                <div class="admin-field">
+
+                                    <label>
+                                        First Name
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        name="first_name"
+                                        value="{{ contact['first_name'] or '' }}"
+                                    >
+
+                                </div>
+
+
+                                <div class="admin-field">
+
+                                    <label>
+                                        Last Name
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        name="last_name"
+                                        value="{{ contact['last_name'] or '' }}"
+                                    >
+
+                                </div>
+
+
+                                <div class="admin-field">
+
+                                    <label>
+                                        Role / Title
+                                    </label>
+
+                                    <input
+                                        type="text"
+                                        name="job_title"
+                                        value="{{ contact['job_title'] or '' }}"
+                                    >
+
+                                </div>
+
+
+                                <div class="admin-field">
+
+                                    <label>
+                                        Phone
+                                    </label>
+
+                                    <input
+                                        type="tel"
+                                        name="phone"
+                                        value="{{ contact['phone'] or '' }}"
+                                    >
+
+                                </div>
+
+
+                                <div class="admin-field">
+
+                                    <label>
+                                        Phone Type
+                                    </label>
+
+                                    <select name="phone_type">
+
+                                        <option value="">
+                                            Not Set
+                                        </option>
+
+                                        {% for phone_type in [
+                                            "mobile",
+                                            "work",
+                                            "home"
+                                        ] %}
+
+                                            <option
+                                                value="{{ phone_type }}"
+                                                {% if
+                                                    contact["phone_type"]
+                                                    == phone_type
+                                                %}
+                                                    selected
+                                                {% endif %}
+                                            >
+                                                {{ phone_type|title }}
+                                            </option>
+
+                                        {% endfor %}
+
+                                    </select>
+
+                                </div>
+
+
+                                <div class="admin-field">
+
+                                    <label>
+                                        Email
+                                    </label>
+
+                                    <input
+                                        type="email"
+                                        name="email"
+                                        value="{{ contact['email'] or '' }}"
+                                    >
+
+                                </div>
+
+                            </div>
+
+
+                            <div class="customer-contact-form-actions">
+
+                                <button
+                                    type="submit"
+                                    class="admin-primary-button"
+                                >
+                                    Save Contact
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </details>
+
+                </div>
+
+            {% endfor %}
+
+        </div>
+
+    {% else %}
+
+        <div class="admin-empty-state">
+
+            <p>
+                No contacts have been added to this customer.
+            </p>
+
+        </div>
+
+    {% endif %}
+
+
+    <details class="customer-contact-add">
+
+        <summary>
+            + Add Contact
+        </summary>
+
+        <form
+            method="post"
+            action="{{ url_for(
+                'admin_customer_contact_add',
+                customer_id=customer['id']
+            ) }}"
+            class="customer-contact-add-form"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+
+            <div class="customer-contact-form-grid">
+
+                <div class="admin-field">
+
+                    <label>
+                        First Name
+                    </label>
+
+                    <input
+                        type="text"
+                        name="first_name"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="admin-field">
+
+                    <label>
+                        Last Name
+                    </label>
+
+                    <input
+                        type="text"
+                        name="last_name"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="admin-field">
+
+                    <label>
+                        Role / Title
+                    </label>
+
+                    <input
+                        type="text"
+                        name="job_title"
+                        placeholder="
+                            Estimator, Project Manager,
+                            Administrator, etc.
+                        "
+                    >
+
+                </div>
+
+
+                <div class="admin-field">
+
+                    <label>
+                        Phone
+                    </label>
+
+                    <input
+                        type="tel"
+                        name="phone"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="admin-field">
+
+                    <label>
+                        Phone Type
+                    </label>
+
+                    <select name="phone_type">
+
+                        <option value="">
+                            Not Set
+                        </option>
+
+                        <option value="mobile">
+                            Mobile
+                        </option>
+
+                        <option value="work">
+                            Work
+                        </option>
+
+                        <option value="home">
+                            Home
+                        </option>
+
+                    </select>
+
+                </div>
+
+
+                <div class="admin-field">
+
+                    <label>
+                        Email
+                    </label>
+
+                    <input
+                        type="email"
+                        name="email"
+                        required
+                    >
+
+                </div>
+
+
+                <div class="admin-field admin-field-full">
+
+                    <label class="admin-checkbox">
+
+                        <input
+                            type="checkbox"
+                            name="is_primary"
+                            value="1"
+                        >
+
+                        Make this the primary contact
+
+                    </label>
+
+                </div>
+
+            </div>
+
+
+            <div class="customer-contact-form-actions">
+
+                <button
+                    type="submit"
+                    class="admin-primary-button"
+                >
+                    Add Contact
+                </button>
+
+            </div>
+
+        </form>
+
+    </details>
+
+</section>
+
+
 {% if customer["notes"] %}
 
 <section class="admin-panel">
@@ -597,11 +1263,9 @@
     <div class="admin-panel-heading">
 
         <div>
-
             <h3>
                 Customer Notes
             </h3>
-
         </div>
 
     </div>
