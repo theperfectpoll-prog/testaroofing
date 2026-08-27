@@ -74,10 +74,18 @@
 
                 <div class="admin-navigation-submenu">
 
-                    <span class="admin-navigation-disabled">
+                    <a
+                        href="{{ url_for(
+                            'admin_work_orders'
+                        ) }}"
+                        class="{% if request.endpoint in [
+                            'admin_work_orders',
+                            'admin_work_order_new',
+                            'admin_work_order_detail'
+                        ] %}active{% endif %}"
+                    >
                         Work Orders
-                        <small>Coming soon</small>
-                    </span>
+                    </a>
 
                     <span class="admin-navigation-disabled">
                         Estimates

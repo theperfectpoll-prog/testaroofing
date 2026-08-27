@@ -187,6 +187,33 @@
 
             </div>
 
+            <div class="admin-field admin-field-full">
+
+                <label class="admin-checkbox">
+
+                    <input
+                        type="checkbox"
+                        name="is_time_worker"
+                        value="1"
+                        {% if request.method == "POST" %}
+                            {% if request.form.get('is_time_worker') %}
+                                checked
+                            {% endif %}
+                        {% elif person["is_time_worker"] %}
+                            checked
+                        {% endif %}
+                    >
+
+                    This person's time can be tracked
+
+                </label>
+
+                <small class="admin-field-help">
+                    Time-tracked personnel appear in
+                    Work Order timesheet dropdowns.
+                </small>
+
+            </div>
 
             <div class="admin-field admin-field-full">
 

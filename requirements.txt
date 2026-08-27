@@ -6,3 +6,4 @@ python-dotenv
 pyotp
 cryptography
 qrcode[pil]
+reportlab

@@ -1,0 +1,2006 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    {{ formatted_work_order_number }} | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<style>
+
+    .work-order-grid {
+        display: grid;
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+        gap: 18px;
+    }
+
+    .work-order-card {
+        padding: 18px;
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+        background: #ffffff;
+    }
+
+    .work-order-card h4 {
+        margin: 0 0 14px;
+    }
+
+    .work-order-list {
+        display: grid;
+        gap: 11px;
+    }
+
+    .work-order-item {
+        display: grid;
+        gap: 2px;
+    }
+
+    .work-order-item span {
+        color: #6d7885;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .work-order-copy {
+        white-space: pre-wrap;
+    }
+
+    .work-order-hours-summary {
+        display: grid;
+        grid-template-columns:
+            repeat(2, minmax(140px, 220px));
+        gap: 18px;
+    }
+
+    .work-order-material-table-wrap {
+        overflow-x: auto;
+    }
+
+    .work-order-material-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .work-order-material-table th,
+    .work-order-material-table td {
+        padding: 9px 11px;
+        border-bottom: 1px solid #e1e5e9;
+        text-align: left;
+        vertical-align: middle;
+    }
+
+    .work-order-material-table th {
+        color: #66717d;
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .work-order-material-table td {
+        font-size: 0.86rem;
+    }
+
+    .work-order-material-used-add-form {
+        display: grid;
+        grid-template-columns:
+            130px
+            minmax(220px, 2fr)
+            90px
+            120px
+            110px
+            auto;
+        gap: 8px;
+        align-items: end;
+        margin-bottom: 20px;
+        padding: 12px;
+        border: 1px solid #dce2e8;
+        border-radius: 7px;
+        background: #f8f9fa;
+    }
+
+    .work-order-material-used-field {
+        min-width: 0;
+    }
+
+    .work-order-material-used-field label {
+        display: block;
+        margin-bottom: 4px;
+        color: #66717d;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .work-order-material-used-field input {
+        width: 100%;
+        min-width: 0;
+        min-height: 36px;
+        padding: 6px 8px;
+        margin: 0;
+        font-size: 0.82rem;
+    }
+
+    .work-order-material-used-table-wrap {
+        overflow-x: auto;
+    }
+
+    .work-order-material-used-table {
+        width: 100%;
+        min-width: 900px;
+        border-collapse: collapse;
+    }
+
+    .work-order-material-used-table th,
+    .work-order-material-used-table td {
+        padding: 8px 9px;
+        border-bottom: 1px solid #e1e5e9;
+        text-align: left;
+        vertical-align: middle;
+        font-size: 0.82rem;
+    }
+
+    .work-order-material-used-table th {
+        color: #66717d;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+
+    .work-order-material-used-table input {
+        width: 100%;
+        min-width: 0;
+        min-height: 34px;
+        padding: 5px 7px;
+        margin: 0;
+        font-size: 0.8rem;
+    }
+
+    .work-order-material-used-invoice {
+        min-width: 120px;
+    }
+
+    .work-order-material-used-name {
+        min-width: 200px;
+    }
+
+    .work-order-material-used-quantity {
+        width: 85px;
+    }
+
+    .work-order-material-used-unit {
+        width: 105px;
+    }
+
+    .work-order-material-used-cost {
+        width: 100px;
+    }
+
+    .work-order-material-used-total {
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .work-order-material-used-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        white-space: nowrap;
+    }
+
+    .work-order-material-used-actions form {
+        margin: 0;
+    }
+
+    .work-order-material-used-actions button {
+        min-height: 32px;
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
+
+    .work-order-material-used-summary {
+        display: flex;
+        justify-content: flex-end;
+        margin-top: 14px;
+    }
+
+    .work-order-material-used-summary strong {
+        font-size: 0.95rem;
+    }
+
+    .work-order-photo-upload {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 12px;
+        margin-top: 14px;
+    }
+
+    .work-order-photo-upload input[type="file"] {
+        max-width: 100%;
+    }
+
+    .work-order-photo-help {
+        margin: 8px 0 0;
+        color: #6d7885;
+        font-size: 0.78rem;
+    }
+
+    .work-order-photo-grid {
+        display: grid;
+        grid-template-columns:
+            repeat(
+                auto-fill,
+                minmax(180px, 1fr)
+            );
+        gap: 14px;
+        margin-top: 18px;
+    }
+
+    .work-order-photo-card {
+        overflow: hidden;
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+        background: #ffffff;
+    }
+
+    .work-order-photo-link {
+        display: block;
+        aspect-ratio: 4 / 3;
+        background: #eef1f4;
+    }
+
+    .work-order-photo-link img {
+        width: 100%;
+        height: 100%;
+        display: block;
+        object-fit: cover;
+    }
+
+    .work-order-photo-meta {
+        padding: 10px;
+    }
+
+    .work-order-photo-meta small {
+        display: block;
+        color: #6d7885;
+        margin-bottom: 8px;
+    }
+
+    .work-order-photo-delete {
+        margin: 0;
+    }
+
+    .work-order-photo-delete button {
+        min-height: 32px;
+        padding: 5px 9px;
+        font-size: 0.72rem;
+    }
+
+    .work-order-time-summary {
+        display: grid;
+        grid-template-columns:
+            repeat(4, minmax(120px, 1fr));
+        gap: 12px;
+        margin-bottom: 20px;
+    }
+
+    .work-order-time-summary-card {
+        padding: 12px 14px;
+        border: 1px solid #dce2e8;
+        border-radius: 7px;
+        background: #ffffff;
+    }
+
+    .work-order-time-summary-card span {
+        display: block;
+        margin-bottom: 3px;
+        color: #6d7885;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .work-order-time-summary-card strong {
+        font-size: 1rem;
+    }
+
+    .work-order-time-entry-form {
+        display: grid;
+        grid-template-columns:
+            140px
+            minmax(180px, 1.25fr)
+            100px
+            100px
+            70px
+            minmax(180px, 1.5fr)
+            auto;
+        gap: 8px;
+        align-items: end;
+        margin-bottom: 20px;
+        padding: 12px;
+        border: 1px solid #dce2e8;
+        border-radius: 7px;
+        background: #f8f9fa;
+    }
+
+    .work-order-time-field {
+        min-width: 0;
+    }
+
+    .work-order-time-field label {
+        display: block;
+        margin-bottom: 4px;
+        color: #66717d;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .work-order-time-field input,
+    .work-order-time-field select {
+        width: 100%;
+        min-width: 0;
+        min-height: 36px;
+        padding: 6px 8px;
+        margin: 0;
+        font-size: 0.82rem;
+    }
+
+    .work-order-time-table-wrap {
+        overflow-x: auto;
+    }
+
+    .work-order-time-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .work-order-time-table th,
+    .work-order-time-table td {
+        padding: 8px 9px;
+        border-bottom: 1px solid #e1e5e9;
+        text-align: left;
+        vertical-align: middle;
+        font-size: 0.82rem;
+    }
+
+    .work-order-time-table th {
+        color: #66717d;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        white-space: nowrap;
+    }
+
+    .work-order-time-table input,
+    .work-order-time-table select {
+        width: 100%;
+        min-width: 0;
+        min-height: 34px;
+        padding: 5px 7px;
+        margin: 0;
+        font-size: 0.8rem;
+    }
+
+    .work-order-time-table
+    input[type="number"] {
+        width: 80px;
+    }
+
+    .work-order-time-table
+    input[type="date"] {
+        width: 135px;
+    }
+
+    .work-order-time-worker {
+        min-width: 170px;
+    }
+
+    .work-order-time-notes {
+        min-width: 180px;
+    }
+
+    .work-order-time-lunch {
+        text-align: center;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .work-order-time-total {
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .work-order-time-actions {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+        white-space: nowrap;
+    }
+
+    .work-order-time-actions form {
+        margin: 0;
+    }
+
+    .work-order-time-actions button {
+        min-height: 32px;
+        padding: 5px 8px;
+        font-size: 0.7rem;
+    }
+
+    .work-order-time-entry-meta {
+        display: block;
+        margin-top: 4px;
+        color: #7a838d;
+        font-size: 0.68rem;
+    }
+
+    @media (max-width: 1050px) {
+
+        .work-order-material-used-add-form {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+
+        .work-order-material-used-add-form
+        .admin-primary-button {
+            width: max-content;
+        }
+
+    }
+
+    @media (max-width: 1050px) {
+
+        .work-order-time-entry-form {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+
+        .work-order-time-entry-form
+        .admin-primary-button {
+            width: max-content;
+        }
+
+    }
+
+    @media (max-width: 760px) {
+
+        .work-order-time-summary {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+
+        .work-order-time-entry-form {
+            grid-template-columns: 1fr;
+        }
+
+    }
+
+    @media (max-width: 760px) {
+
+        .work-order-grid {
+            grid-template-columns: 1fr;
+        }
+
+    }
+
+</style>
+
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            Work Order
+        </span>
+
+        <h2>
+            {{ formatted_work_order_number }}
+        </h2>
+
+        <p>
+            {{ work_order["work_order_type"] }}
+        </p>
+
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for(
+                'admin_work_order_edit',
+                work_order_id=work_order['id']
+            ) }}"
+            class="admin-primary-button"
+        >
+            Edit Work Order
+        </a>
+
+        <a
+            href="{{ url_for(
+                'admin_customer_detail',
+                customer_id=work_order['customer_id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Customer Profile
+        </a>
+
+        <a
+            href="{{ url_for(
+                'admin_work_orders'
+            ) }}"
+            class="admin-secondary-button"
+        >
+            All Work Orders
+        </a>
+
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="work-order-grid">
+
+
+        <div class="work-order-card">
+
+            <h4>
+                Work Order
+            </h4>
+
+            <div class="work-order-list">
+
+                <div class="work-order-item">
+
+                    <span>
+                        Status
+                    </span>
+
+                    <strong>
+                        {{
+                            work_order["status"]
+                            |replace("_", " ")
+                            |title
+                        }}
+                    </strong>
+
+                </div>
+
+
+                <div class="work-order-item">
+
+                    <span>
+                        Scheduled Date
+                    </span>
+
+                    <strong>
+                        {{
+                            work_order["scheduled_date"]
+                            or "Not Scheduled"
+                        }}
+                    </strong>
+
+                </div>
+
+
+                <div class="work-order-item">
+
+                    <span>
+                        Created
+                    </span>
+
+                    <strong>
+                        {{ work_order["created_at"] }}
+                    </strong>
+
+                </div>
+
+
+                <div class="work-order-item">
+
+                    <span>
+                        Created By
+                    </span>
+
+                    <strong>
+
+                        {% if work_order["created_by_first_name"] %}
+
+                            {{ work_order["created_by_first_name"] }}
+                            {{ work_order["created_by_last_name"] }}
+
+                        {% else %}
+
+                            Not Available
+
+                        {% endif %}
+
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="work-order-card">
+
+            <h4>
+                Customer
+            </h4>
+
+            <div class="work-order-list">
+
+                <div class="work-order-item">
+
+                    <span>
+                        Customer
+                    </span>
+
+                    <strong>
+
+                        <a
+                            href="{{ url_for(
+                                'admin_customer_detail',
+                                customer_id=work_order['customer_id']
+                            ) }}"
+                        >
+                            {{
+                                work_order["customer_display_name"]
+                                or work_order["customer_commercial_name"]
+                                or "Unnamed Customer"
+                            }}
+                        </a>
+
+                    </strong>
+
+                </div>
+
+
+                <div class="work-order-item">
+
+                    <span>
+                        Contact
+                    </span>
+
+                    <strong>
+
+                        {% if
+                            work_order["contact_first_name"]
+                            or work_order["contact_last_name"]
+                        %}
+
+                            {{ work_order["contact_first_name"] or "" }}
+                            {{ work_order["contact_last_name"] or "" }}
+
+                        {% else %}
+
+                            Not Assigned
+
+                        {% endif %}
+
+                    </strong>
+
+                    {% if work_order["contact_job_title"] %}
+                        <small>
+                            {{ work_order["contact_job_title"] }}
+                        </small>
+                    {% endif %}
+
+                </div>
+
+
+                <div class="work-order-item">
+
+                    <span>
+                        Phone
+                    </span>
+
+                    <strong>
+                        {{
+                            work_order["contact_phone"]
+                            or "Not Available"
+                        }}
+                    </strong>
+
+                </div>
+
+
+                <div class="work-order-item">
+
+                    <span>
+                        Email
+                    </span>
+
+                    <strong>
+                        {{
+                            work_order["contact_email"]
+                            or "Not Available"
+                        }}
+                    </strong>
+
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="work-order-card">
+
+            <h4>
+                Project / Service Address
+            </h4>
+
+            <div class="work-order-list">
+
+                <strong>
+
+                    {{ work_order["project_address_line_1"] }}
+
+                    {% if work_order["project_address_line_2"] %}
+                        <br>
+                        {{ work_order["project_address_line_2"] }}
+                    {% endif %}
+
+                    <br>
+
+                    {{ work_order["project_city"] }},
+                    {{ work_order["project_state"] }}
+                    {{ work_order["project_postal_code"] }}
+
+                </strong>
+
+            </div>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>
+                Work Description / Notes
+            </h3>
+        </div>
+
+    </div>
+
+    <div class="work-order-copy">{{ work_order["work_description"] or "None entered." }}</div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>
+                Scope of Work
+            </h3>
+        </div>
+
+    </div>
+
+    <div class="work-order-copy">{{ work_order["scope_of_work"] or "None entered." }}</div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>
+                Labor Hours
+            </h3>
+        </div>
+
+    </div>
+
+
+    <div class="work-order-hours-summary">
+
+        <div class="work-order-item">
+
+            <span>
+                Total Onsite Hours
+            </span>
+
+            <strong>
+                {{
+                    work_order["total_onsite_hours"]
+                    if work_order["total_onsite_hours"]
+                    is not none
+                    else "Not Entered"
+                }}
+            </strong>
+
+        </div>
+
+
+        <div class="work-order-item">
+
+            <span>
+                Total Travel Hours
+            </span>
+
+            <strong>
+                {{
+                    work_order["total_travel_hours"]
+                    if work_order["total_travel_hours"]
+                    is not none
+                    else "Not Entered"
+                }}
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>
+                Estimated Materials
+            </h3>
+        </div>
+
+    </div>
+
+
+    {% if materials %}
+
+        <div class="work-order-material-table-wrap">
+
+            <table class="work-order-material-table">
+
+                <thead>
+
+                    <tr>
+                        <th>Material</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                        <th>Unit Cost</th>
+                        <th>Total</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for material in materials %}
+
+                        <tr>
+
+                            <td>
+                                {{ material["material_name"] }}
+                            </td>
+
+                            <td>
+                                {{ material["quantity"] }}
+                            </td>
+
+                            <td>
+                                {{ material["unit"] or "—" }}
+                            </td>
+
+                            <td>
+                                ${{ "%.2f"|format(
+                                    material["unit_cost"]
+                                ) }}
+                            </td>
+
+                            <td>
+                                ${{ "%.2f"|format(
+                                    material["quantity"]
+                                    * material["unit_cost"]
+                                ) }}
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p>
+            No estimated materials entered.
+        </p>
+
+    {% endif %}
+
+</section>
+
+<section
+    class="admin-panel"
+    id="work-order-materials-used"
+>
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Materials Used
+            </h3>
+
+            <p>
+                Record materials actually used or
+                purchased for this work order.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <form
+        method="post"
+        action="{{ url_for(
+            'admin_work_order_material_used_add',
+            work_order_id=work_order['id']
+        ) }}"
+        class="work-order-material-used-add-form"
+    >
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+
+        <div class="work-order-material-used-field">
+
+            <label for="material_used_invoice_number">
+                Invoice #
+            </label>
+
+            <input
+                type="text"
+                id="material_used_invoice_number"
+                name="invoice_number"
+                placeholder="Optional"
+            >
+
+        </div>
+
+
+        <div class="work-order-material-used-field">
+
+            <label for="material_used_name">
+                Material
+            </label>
+
+            <input
+                type="text"
+                id="material_used_name"
+                name="material_name"
+                placeholder="Material"
+                required
+            >
+
+        </div>
+
+
+        <div class="work-order-material-used-field">
+
+            <label for="material_used_quantity">
+                Quantity
+            </label>
+
+            <input
+                type="number"
+                id="material_used_quantity"
+                name="quantity"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                required
+            >
+
+        </div>
+
+
+        <div class="work-order-material-used-field">
+
+            <label for="material_used_unit">
+                Unit
+            </label>
+
+            <input
+                type="text"
+                id="material_used_unit"
+                name="unit"
+                placeholder="EA, LF, SQ, GAL"
+            >
+
+        </div>
+
+
+        <div class="work-order-material-used-field">
+
+            <label for="material_used_unit_cost">
+                Unit Cost
+            </label>
+
+            <input
+                type="number"
+                id="material_used_unit_cost"
+                name="unit_cost"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                required
+            >
+
+        </div>
+
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Add Material
+        </button>
+
+    </form>
+
+
+    {% if materials_used %}
+
+        <div class="work-order-material-used-table-wrap">
+
+            <table class="work-order-material-used-table">
+
+                <thead>
+
+                    <tr>
+                        <th>Invoice #</th>
+                        <th>Material</th>
+                        <th>Quantity</th>
+                        <th>Unit</th>
+                        <th>Unit Cost</th>
+                        <th>Total</th>
+                        <th>Actions</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for material_used in materials_used %}
+
+                        <tr>
+
+                            <td>
+
+                                <input
+                                    type="text"
+                                    name="invoice_number"
+                                    value="{{ material_used['invoice_number'] or '' }}"
+                                    class="work-order-material-used-invoice"
+                                    form="material-used-edit-{{ material_used['id'] }}"
+                                >
+
+                            </td>
+
+
+                            <td>
+
+                                <input
+                                    type="text"
+                                    name="material_name"
+                                    value="{{ material_used['material_name'] }}"
+                                    class="work-order-material-used-name"
+                                    form="material-used-edit-{{ material_used['id'] }}"
+                                    required
+                                >
+
+                            </td>
+
+
+                            <td>
+
+                                <input
+                                    type="number"
+                                    name="quantity"
+                                    min="0"
+                                    step="0.01"
+                                    value="{{ material_used['quantity'] }}"
+                                    class="work-order-material-used-quantity"
+                                    form="material-used-edit-{{ material_used['id'] }}"
+                                    required
+                                >
+
+                            </td>
+
+
+                            <td>
+
+                                <input
+                                    type="text"
+                                    name="unit"
+                                    value="{{ material_used['unit'] or '' }}"
+                                    class="work-order-material-used-unit"
+                                    form="material-used-edit-{{ material_used['id'] }}"
+                                >
+
+                            </td>
+
+
+                            <td>
+
+                                <input
+                                    type="number"
+                                    name="unit_cost"
+                                    min="0"
+                                    step="0.01"
+                                    value="{{ material_used['unit_cost'] }}"
+                                    class="work-order-material-used-cost"
+                                    form="material-used-edit-{{ material_used['id'] }}"
+                                    required
+                                >
+
+                            </td>
+
+
+                            <td class="work-order-material-used-total">
+
+                                ${{ "%.2f"|format(
+                                    material_used["quantity"]
+                                    * material_used["unit_cost"]
+                                ) }}
+
+                            </td>
+
+
+                            <td>
+
+                                <div class="work-order-material-used-actions">
+
+                                    <form
+                                        id="material-used-edit-{{ material_used['id'] }}"
+                                        method="post"
+                                        action="{{ url_for(
+                                            'admin_work_order_material_used_edit',
+                                            work_order_id=work_order['id'],
+                                            material_used_id=material_used['id']
+                                        ) }}"
+                                    >
+
+                                        <input
+                                            type="hidden"
+                                            name="csrf_token"
+                                            value="{{ csrf_token() }}"
+                                        >
+
+                                        <button
+                                            type="submit"
+                                            class="admin-secondary-button"
+                                        >
+                                            Save
+                                        </button>
+
+                                    </form>
+
+
+                                    <form
+                                        method="post"
+                                        action="{{ url_for(
+                                            'admin_work_order_material_used_delete',
+                                            work_order_id=work_order['id'],
+                                            material_used_id=material_used['id']
+                                        ) }}"
+                                        onsubmit="
+                                            return confirm(
+                                                'Delete this material used entry?'
+                                            );
+                                        "
+                                    >
+
+                                        <input
+                                            type="hidden"
+                                            name="csrf_token"
+                                            value="{{ csrf_token() }}"
+                                        >
+
+                                        <button
+                                            type="submit"
+                                            class="admin-secondary-button"
+                                        >
+                                            Delete
+                                        </button>
+
+                                    </form>
+
+                                </div>
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <div class="work-order-material-used-summary">
+
+            <strong>
+                Actual Material Cost:
+                ${{ "%.2f"|format(
+                    materials_used_summary["total_cost"]
+                ) }}
+            </strong>
+
+        </div>
+
+    {% else %}
+
+        <p>
+            No materials used have been entered for
+            this work order yet.
+        </p>
+
+    {% endif %}
+
+</section>
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+            <h3>
+                Internal Notes
+            </h3>
+        </div>
+
+    </div>
+
+    <div class="work-order-copy">{{ work_order["internal_notes"] or "None entered." }}</div>
+
+</section>
+
+<section
+    class="admin-panel"
+    id="work-order-photos"
+>
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Work Order Photos
+            </h3>
+
+            <p>
+                Upload jobsite, repair, evaluation,
+                progress, and completed-work photos.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <form
+        method="post"
+        action="{{ url_for(
+            'admin_work_order_photos_upload',
+            work_order_id=work_order['id']
+        ) }}"
+        enctype="multipart/form-data"
+    >
+
+        <input
+            type="hidden"
+            name="csrf_token"
+            value="{{ csrf_token() }}"
+        >
+
+        <div class="work-order-photo-upload">
+
+            <input
+                type="file"
+                name="work_order_photos"
+                accept="
+                    .jpg,
+                    .jpeg,
+                    .png,
+                    .webp,
+                    image/jpeg,
+                    image/png,
+                    image/webp
+                "
+                multiple
+                required
+            >
+
+            <button
+                type="submit"
+                class="admin-primary-button"
+            >
+                Upload Photos
+            </button>
+
+        </div>
+
+        <p class="work-order-photo-help">
+            Select up to 10 photos at a time.
+            Photos are automatically resized and
+            compressed after upload.
+        </p>
+
+    </form>
+
+
+    {% if photos %}
+
+        <div class="work-order-photo-grid">
+
+            {% for photo in photos %}
+
+                <article class="work-order-photo-card">
+
+                    <a
+                        href="{{ url_for(
+                            'admin_work_order_photo_file',
+                            work_order_id=work_order['id'],
+                            photo_id=photo['id'],
+                            photo_size='full'
+                        ) }}"
+                        target="_blank"
+                        class="work-order-photo-link"
+                    >
+
+                        <img
+                            src="{{ url_for(
+                                'admin_work_order_photo_file',
+                                work_order_id=work_order['id'],
+                                photo_id=photo['id'],
+                                photo_size='thumbnail'
+                            ) }}"
+                            alt="Work order photo"
+                            loading="lazy"
+                        >
+
+                    </a>
+
+
+                    <div class="work-order-photo-meta">
+
+                        <small>
+
+                            {{ photo["created_at"] }}
+
+                            {% if
+                                photo["uploaded_by_first_name"]
+                            %}
+
+                                ·
+                                {{
+                                    photo[
+                                        "uploaded_by_first_name"
+                                    ]
+                                }}
+                                {{
+                                    photo[
+                                        "uploaded_by_last_name"
+                                    ]
+                                }}
+
+                            {% endif %}
+
+                        </small>
+
+
+                        <form
+                            method="post"
+                            action="{{ url_for(
+                                'admin_work_order_photo_delete',
+                                work_order_id=work_order['id'],
+                                photo_id=photo['id']
+                            ) }}"
+                            class="work-order-photo-delete"
+                            onsubmit="
+                                return confirm(
+                                    'Delete this work order photo?'
+                                );
+                            "
+                        >
+
+                            <input
+                                type="hidden"
+                                name="csrf_token"
+                                value="{{ csrf_token() }}"
+                            >
+
+                            <button
+                                type="submit"
+                                class="admin-secondary-button"
+                            >
+                                Delete
+                            </button>
+
+                        </form>
+
+                    </div>
+
+                </article>
+
+            {% endfor %}
+
+        </div>
+
+    {% else %}
+
+        <p>
+            No photos have been added to this
+            work order yet.
+        </p>
+
+    {% endif %}
+
+</section>
+
+<section
+    class="admin-panel"
+    id="work-order-timesheet"
+>
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Timesheet
+            </h3>
+
+            <p>
+                Track onsite and paid travel time for
+                this work order.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    <div class="work-order-time-summary">
+
+        <div class="work-order-time-summary-card">
+
+            <span>
+                Onsite Hours
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    time_summary["onsite_hours"]
+                ) }}
+            </strong>
+
+        </div>
+
+
+        <div class="work-order-time-summary-card">
+
+            <span>
+                Travel Hours
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    time_summary["travel_hours"]
+                ) }}
+            </strong>
+
+        </div>
+
+
+        <div class="work-order-time-summary-card">
+
+            <span>
+                Lunch Deducted
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    time_summary["lunch_hours"]
+                ) }}
+            </strong>
+
+        </div>
+
+
+        <div class="work-order-time-summary-card">
+
+            <span>
+                Payable Hours
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    time_summary["total_hours"]
+                ) }}
+            </strong>
+
+        </div>
+
+    </div>
+
+
+    {% if time_workers %}
+
+        <form
+            method="post"
+            action="{{ url_for(
+                'admin_work_order_time_entry_add',
+                work_order_id=work_order['id']
+            ) }}"
+            class="work-order-time-entry-form"
+        >
+
+            <input
+                type="hidden"
+                name="csrf_token"
+                value="{{ csrf_token() }}"
+            >
+
+
+            <div class="work-order-time-field">
+
+                <label for="time_work_date">
+                    Work Date
+                </label>
+
+                <input
+                    type="date"
+                    id="time_work_date"
+                    name="work_date"
+                    required
+                >
+
+            </div>
+
+
+            <div class="work-order-time-field">
+
+                <label for="time_personnel_id">
+                    Worker
+                </label>
+
+                <select
+                    id="time_personnel_id"
+                    name="personnel_id"
+                    required
+                >
+
+                    <option value="">
+                        Select Worker
+                    </option>
+
+                    {% for worker in time_workers %}
+
+                        <option
+                            value="{{ worker['id'] }}"
+                        >
+                            {{ worker["first_name"] }}
+                            {{ worker["last_name"] }}
+
+                            {% if worker["job_title"] %}
+                                — {{ worker["job_title"] }}
+                            {% endif %}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="work-order-time-field">
+
+                <label for="time_onsite_hours">
+                    Onsite
+                </label>
+
+                <input
+                    type="number"
+                    id="time_onsite_hours"
+                    name="onsite_hours"
+                    min="0"
+                    step="0.25"
+                    placeholder="0.00"
+                >
+
+            </div>
+
+
+            <div class="work-order-time-field">
+
+                <label for="time_travel_hours">
+                    Travel
+                </label>
+
+                <input
+                    type="number"
+                    id="time_travel_hours"
+                    name="travel_hours"
+                    min="0"
+                    step="0.25"
+                    placeholder="0.00"
+                >
+
+            </div>
+
+            <div class="work-order-time-field">
+
+                <label for="time_lunch_applies">
+                    Lunch
+                </label>
+
+                <input
+                    type="checkbox"
+                    id="time_lunch_applies"
+                    name="lunch_applies"
+                    value="1"
+                >
+
+            </div>
+
+            <div class="work-order-time-field">
+
+                <label for="time_notes">
+                    Notes
+                </label>
+
+                <input
+                    type="text"
+                    id="time_notes"
+                    name="notes"
+                    placeholder="Optional"
+                >
+
+            </div>
+
+
+            <button
+                type="submit"
+                class="admin-primary-button"
+            >
+                Add Time
+            </button>
+
+        </form>
+
+    {% else %}
+
+        <p>
+            No active personnel are currently
+            enabled for time tracking.
+        </p>
+
+    {% endif %}
+
+
+    {% if time_entries %}
+
+        <div class="work-order-time-table-wrap">
+
+            <table class="work-order-time-table">
+
+                <thead>
+
+                    <tr>
+                        <th>Work Date</th>
+                        <th>Worker</th>
+                        <th>Onsite</th>
+                        <th>Travel</th>
+                        <th>Lunch</th>
+                        <th>Total</th>
+                        <th>Notes</th>
+                        <th>Actions</th>
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for entry in time_entries %}
+
+                        <tr>
+
+                            <form
+                                method="post"
+                                action="{{ url_for(
+                                    'admin_work_order_time_entry_edit',
+                                    work_order_id=work_order['id'],
+                                    time_entry_id=entry['id']
+                                ) }}"
+                            >
+
+                                <input
+                                    type="hidden"
+                                    name="csrf_token"
+                                    value="{{ csrf_token() }}"
+                                >
+
+
+                                <td>
+
+                                    <input
+                                        type="date"
+                                        name="work_date"
+                                        value="{{ entry['work_date'] }}"
+                                        required
+                                    >
+
+                                </td>
+
+
+                                <td>
+
+                                    <select
+                                        name="personnel_id"
+                                        class="work-order-time-worker"
+                                        required
+                                    >
+
+                                        {% set
+                                            current_worker_found
+                                            = namespace(value=false)
+                                        %}
+
+                                        {% for worker in time_workers %}
+
+                                            {% if
+                                                worker["id"]
+                                                == entry["personnel_id"]
+                                            %}
+                                                {% set
+                                                    current_worker_found.value
+                                                    = true
+                                                %}
+                                            {% endif %}
+
+                                            <option
+                                                value="{{ worker['id'] }}"
+                                                {% if
+                                                    worker["id"]
+                                                    == entry["personnel_id"]
+                                                %}
+                                                    selected
+                                                {% endif %}
+                                            >
+                                                {{ worker["first_name"] }}
+                                                {{ worker["last_name"] }}
+                                            </option>
+
+                                        {% endfor %}
+
+
+                                        {% if
+                                            not current_worker_found.value
+                                        %}
+
+                                            <option
+                                                value="{{ entry['personnel_id'] }}"
+                                                selected
+                                            >
+                                                {{ entry["worker_first_name"] }}
+                                                {{ entry["worker_last_name"] }}
+                                                — Inactive
+                                            </option>
+
+                                        {% endif %}
+
+                                    </select>
+
+                                </td>
+
+
+                                <td>
+
+                                    <input
+                                        type="number"
+                                        name="onsite_hours"
+                                        min="0"
+                                        step="0.25"
+                                        value="{{ entry['onsite_hours'] }}"
+                                    >
+
+                                </td>
+
+
+                                <td>
+
+                                    <input
+                                        type="number"
+                                        name="travel_hours"
+                                        min="0"
+                                        step="0.25"
+                                        value="{{ entry['travel_hours'] }}"
+                                    >
+
+                                </td>
+
+
+                                <td class="work-order-time-lunch">
+
+                                    <input
+                                        type="checkbox"
+                                        name="lunch_applies"
+                                        value="1"
+                                        {% if entry["lunch_hours"] > 0 %}
+                                            checked
+                                        {% endif %}
+                                    >
+
+                                </td>
+
+
+                                <td class="work-order-time-total">
+
+                                    {{ "%.2f"|format(
+                                        entry["total_hours"]
+                                    ) }}
+
+                                </td>
+
+
+                                <td>
+
+                                    <input
+                                        type="text"
+                                        name="notes"
+                                        value="{{ entry['notes'] or '' }}"
+                                        class="work-order-time-notes"
+                                    >
+
+                                    <small class="work-order-time-entry-meta">
+
+                                        Entered
+                                        {{ entry["created_at"] }}
+
+                                        {% if
+                                            entry["entered_by_first_name"]
+                                        %}
+
+                                            by
+                                            {{
+                                                entry[
+                                                    "entered_by_first_name"
+                                                ]
+                                            }}
+                                            {{
+                                                entry[
+                                                    "entered_by_last_name"
+                                                ]
+                                            }}
+
+                                        {% endif %}
+
+                                    </small>
+
+                                </td>
+
+
+                                <td>
+
+                                    <div class="work-order-time-actions">
+
+                                        <button
+                                            type="submit"
+                                            class="admin-secondary-button"
+                                        >
+                                            Save
+                                        </button>
+
+                            </form>
+
+
+                                        <form
+                                            method="post"
+                                            action="{{ url_for(
+                                                'admin_work_order_time_entry_delete',
+                                                work_order_id=work_order['id'],
+                                                time_entry_id=entry['id']
+                                            ) }}"
+                                            onsubmit="
+                                                return confirm(
+                                                    'Delete this time entry?'
+                                                );
+                                            "
+                                        >
+
+                                            <input
+                                                type="hidden"
+                                                name="csrf_token"
+                                                value="{{ csrf_token() }}"
+                                            >
+
+                                            <button
+                                                type="submit"
+                                                class="admin-secondary-button"
+                                            >
+                                                Delete
+                                            </button>
+
+                                        </form>
+
+                                    </div>
+
+                                </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p>
+            No time has been entered for this
+            work order yet.
+        </p>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

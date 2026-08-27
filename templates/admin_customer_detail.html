@@ -311,12 +311,15 @@
             Edit Customer
         </a>
 
-        <span
-            class="admin-primary-button
-                   customer-profile-placeholder"
+        <a
+            href="{{ url_for(
+                'admin_work_order_new',
+                customer_id=customer['id']
+            ) }}"
+            class="admin-primary-button"
         >
             Create Work Order
-        </span>
+        </a>
 
         <span
             class="admin-secondary-button

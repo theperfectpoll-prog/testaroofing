@@ -1,0 +1,433 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Work Orders | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<style>
+
+    .work-order-controls {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        align-items: end;
+        margin-bottom: 16px;
+    }
+
+    .work-order-control-field {
+        display: grid;
+        gap: 4px;
+    }
+
+    .work-order-control-field label {
+        color: #66717d;
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .work-order-search-field {
+        min-width: 280px;
+        flex: 1;
+    }
+
+    .work-order-control-field input,
+    .work-order-control-field select {
+        min-height: 38px;
+        padding: 7px 9px;
+    }
+
+    .work-order-table-shell {
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .work-order-table-wrap {
+        max-height: 620px;
+        overflow: auto;
+    }
+
+    .work-order-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 850px;
+    }
+
+    .work-order-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: #f8f9fa;
+    }
+
+    .work-order-table th,
+    .work-order-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #e1e5e9;
+        text-align: left;
+        vertical-align: middle;
+    }
+
+    .work-order-table th {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: #66717d;
+    }
+
+    .work-order-table td {
+        font-size: 0.86rem;
+    }
+
+    .work-order-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .work-order-results-note {
+        margin: 0 0 10px;
+        color: #6d7885;
+        font-size: 0.78rem;
+    }
+
+    @media (max-width: 700px) {
+
+        .work-order-controls {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .work-order-search-field {
+            min-width: 0;
+        }
+
+    }
+
+</style>
+
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            Projects
+        </span>
+
+        <h2>
+            Work Orders
+        </h2>
+
+        <p>
+            Current Testa Roofing work orders.
+        </p>
+
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <form
+        method="get"
+        action="{{ url_for(
+            'admin_work_orders'
+        ) }}"
+        class="work-order-controls"
+    >
+
+        <div
+            class="
+                work-order-control-field
+                work-order-search-field
+            "
+        >
+
+            <label for="work_order_search">
+                Search
+            </label>
+
+            <input
+                type="search"
+                id="work_order_search"
+                name="q"
+                value="{{ search_query }}"
+                placeholder="
+                    WO number, customer, type,
+                    status, date, or contact
+                "
+            >
+
+        </div>
+
+
+        <div class="work-order-control-field">
+
+            <label for="work_order_status">
+                Status
+            </label>
+
+            <select
+                id="work_order_status"
+                name="status"
+            >
+
+                <option
+                    value="active"
+                    {% if status_filter == "active" %}
+                        selected
+                    {% endif %}
+                >
+                    Active
+                </option>
+
+                <option
+                    value="open"
+                    {% if status_filter == "open" %}
+                        selected
+                    {% endif %}
+                >
+                    Open
+                </option>
+
+                <option
+                    value="scheduled"
+                    {% if status_filter == "scheduled" %}
+                        selected
+                    {% endif %}
+                >
+                    Scheduled
+                </option>
+
+                <option
+                    value="in_progress"
+                    {% if status_filter == "in_progress" %}
+                        selected
+                    {% endif %}
+                >
+                    In Progress
+                </option>
+
+                <option
+                    value="completed"
+                    {% if status_filter == "completed" %}
+                        selected
+                    {% endif %}
+                >
+                    Completed
+                </option>
+
+                <option
+                    value="cancelled"
+                    {% if status_filter == "cancelled" %}
+                        selected
+                    {% endif %}
+                >
+                    Cancelled
+                </option>
+
+                <option
+                    value="all"
+                    {% if status_filter == "all" %}
+                        selected
+                    {% endif %}
+                >
+                    All
+                </option>
+
+            </select>
+
+        </div>
+
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Filter
+        </button>
+
+
+        {% if
+            search_query
+            or status_filter != "active"
+        %}
+
+            <a
+                href="{{ url_for(
+                    'admin_work_orders'
+                ) }}"
+                class="admin-secondary-button"
+            >
+                Clear
+            </a>
+
+        {% endif %}
+
+    </form>
+
+
+    <p class="work-order-results-note">
+        Showing up to 50 work orders.
+    </p>
+
+
+    {% if work_orders %}
+
+        <div class="work-order-table-shell">
+
+            <div class="work-order-table-wrap">
+
+                <table class="work-order-table">
+
+                    <thead>
+
+                        <tr>
+                            <th>Work Order</th>
+                            <th>Customer</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Scheduled</th>
+                            <th>Contact</th>
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody>
+
+                        {% for work_order in work_orders %}
+
+                            <tr>
+
+                                <td>
+
+                                    <strong>
+
+                                        <a
+                                            href="{{ url_for(
+                                                'admin_work_order_detail',
+                                                work_order_id=work_order['id']
+                                            ) }}"
+                                        >
+                                            {{
+                                                format_work_order_number(
+                                                    work_order[
+                                                        "work_order_number"
+                                                    ]
+                                                )
+                                            }}
+                                        </a>
+
+                                    </strong>
+
+                                </td>
+
+
+                                <td>
+                                    {{
+                                        work_order[
+                                            "customer_display_name"
+                                        ]
+                                        or work_order[
+                                            "customer_commercial_name"
+                                        ]
+                                        or "Unnamed Customer"
+                                    }}
+                                </td>
+
+
+                                <td>
+                                    {{
+                                        work_order[
+                                            "work_order_type"
+                                        ]
+                                    }}
+                                </td>
+
+
+                                <td>
+                                    {{
+                                        work_order["status"]
+                                        |replace("_", " ")
+                                        |title
+                                    }}
+                                </td>
+
+
+                                <td>
+                                    {{
+                                        work_order[
+                                            "scheduled_date"
+                                        ]
+                                        or "Not Scheduled"
+                                    }}
+                                </td>
+
+
+                                <td>
+
+                                    {% if
+                                        work_order[
+                                            "contact_first_name"
+                                        ]
+                                        or work_order[
+                                            "contact_last_name"
+                                        ]
+                                    %}
+
+                                        {{
+                                            work_order[
+                                                "contact_first_name"
+                                            ]
+                                            or ""
+                                        }}
+                                        {{
+                                            work_order[
+                                                "contact_last_name"
+                                            ]
+                                            or ""
+                                        }}
+
+                                    {% else %}
+
+                                        —
+
+                                    {% endif %}
+
+                                </td>
+
+                            </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+    {% else %}
+
+        <div class="admin-empty-state">
+
+            <p>
+                No work orders match the current
+                search and filter.
+            </p>
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+{% endblock %}

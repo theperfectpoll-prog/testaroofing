@@ -16,7 +16,28 @@ from datetime import UTC, datetime, timedelta
 from functools import wraps
 from hmac import compare_digest
 from urllib.parse import urlencode
-
+from PIL import (
+    Image,
+    ImageOps,
+    UnidentifiedImageError,
+)
+from reportlab.lib import colors
+from reportlab.lib.enums import TA_RIGHT
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import (
+    ParagraphStyle,
+    getSampleStyleSheet,
+)
+from reportlab.lib.units import inch
+from reportlab.platypus import (
+    Image as ReportLabImage,
+    PageBreak,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 from flask import (
     Flask,
     Response,
@@ -146,6 +167,18 @@ LEARNING_UPLOAD_ROOT = os.path.join(
     "uploads",
     "learning_center",
 )
+
+WORK_ORDER_UPLOAD_ROOT = os.path.join(
+    os.path.dirname(
+        DATABASE_PATH
+    ),
+    "work_order_uploads",
+)
+
+WORK_ORDER_PHOTO_MAX_DIMENSION = 2000
+WORK_ORDER_PHOTO_THUMBNAIL_DIMENSION = 450
+WORK_ORDER_PHOTO_JPEG_QUALITY = 82
+WORK_ORDER_PHOTO_MAX_FILES_PER_UPLOAD = 10
 
 # =========================================================
 # QUICKBOOKS ONLINE HELPERS
@@ -3118,6 +3151,31 @@ def ensure_database_schema():
         """
     )
 
+    personnel_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(company_personnel)"
+        ).fetchall()
+    }
+
+    if "is_time_worker" not in personnel_columns:
+        cursor.execute(
+            """
+            ALTER TABLE company_personnel
+            ADD COLUMN is_time_worker INTEGER
+            NOT NULL DEFAULT 0
+            """
+        )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_company_personnel_time_worker
+        ON company_personnel (
+            is_time_worker,
+            is_active
+        )
+        """
+    )
 
     # ---------------------------------------------------------
     # CUSTOMERS
@@ -3786,6 +3844,327 @@ def ensure_database_schema():
         ON customer_contacts (
             customer_id,
             is_billing_contact
+        )
+        """
+    )
+
+    # ---------------------------------------------------------
+    # WORK ORDERS
+    # ---------------------------------------------------------
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            work_order_number INTEGER
+                NOT NULL UNIQUE,
+
+            customer_id INTEGER NOT NULL,
+            customer_contact_id INTEGER,
+
+            work_order_type TEXT NOT NULL,
+
+            status TEXT NOT NULL
+                DEFAULT 'open',
+
+            scheduled_date TEXT,
+
+            project_address_line_1 TEXT,
+            project_address_line_2 TEXT,
+            project_city TEXT,
+            project_state TEXT,
+            project_postal_code TEXT,
+
+            work_description TEXT,
+            scope_of_work TEXT,
+            estimated_materials TEXT,
+            internal_notes TEXT,
+
+            source_estimate_id INTEGER,
+
+            created_by INTEGER,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (customer_id)
+                REFERENCES customers (id)
+                ON DELETE RESTRICT,
+
+            FOREIGN KEY (customer_contact_id)
+                REFERENCES customer_contacts (id)
+                ON DELETE SET NULL,
+
+            FOREIGN KEY (created_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+
+            CHECK (
+                status IN (
+                    'open',
+                    'scheduled',
+                    'in_progress',
+                    'completed',
+                    'cancelled'
+                )
+            )
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_orders_customer
+        ON work_orders (
+            customer_id,
+            work_order_number
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_orders_status
+        ON work_orders (
+            status,
+            scheduled_date
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_orders_scheduled
+        ON work_orders (
+            scheduled_date
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_orders_contact
+        ON work_orders (
+            customer_contact_id
+        )
+        """
+    )
+
+    work_order_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(work_orders)"
+        ).fetchall()
+    }
+
+    if "total_onsite_hours" not in work_order_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_orders
+            ADD COLUMN total_onsite_hours REAL
+            """
+        )
+
+    if "total_travel_hours" not in work_order_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_orders
+            ADD COLUMN total_travel_hours REAL
+            """
+        )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_order_materials (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            work_order_id INTEGER NOT NULL,
+
+            material_name TEXT NOT NULL,
+
+            quantity REAL NOT NULL DEFAULT 0,
+
+            unit TEXT,
+
+            unit_cost REAL NOT NULL DEFAULT 0,
+
+            display_order INTEGER NOT NULL DEFAULT 0,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (work_order_id)
+                REFERENCES work_orders (id)
+                ON DELETE CASCADE,
+
+            CHECK (
+                quantity >= 0
+            ),
+
+            CHECK (
+                unit_cost >= 0
+            )
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_order_materials_work_order
+        ON work_order_materials (
+            work_order_id,
+            display_order,
+            id
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_order_materials_used (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            work_order_id INTEGER NOT NULL,
+
+            invoice_number TEXT,
+
+            material_name TEXT NOT NULL,
+
+            quantity REAL NOT NULL DEFAULT 0,
+
+            unit TEXT,
+
+            unit_cost REAL NOT NULL DEFAULT 0,
+
+            display_order INTEGER NOT NULL DEFAULT 0,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (work_order_id)
+                REFERENCES work_orders (id)
+                ON DELETE CASCADE,
+
+            CHECK (
+                quantity >= 0
+            ),
+
+            CHECK (
+                unit_cost >= 0
+            )
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+            idx_work_order_materials_used_work_order
+        ON work_order_materials_used (
+            work_order_id,
+            display_order,
+            id
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_order_photos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            work_order_id INTEGER NOT NULL,
+
+            filename TEXT NOT NULL,
+            thumbnail_filename TEXT NOT NULL,
+            original_filename TEXT,
+
+            uploaded_by INTEGER,
+
+            created_at TEXT NOT NULL,
+
+            FOREIGN KEY (work_order_id)
+                REFERENCES work_orders (id)
+                ON DELETE CASCADE,
+
+            FOREIGN KEY (uploaded_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_order_photos_work_order
+        ON work_order_photos (
+            work_order_id,
+            created_at,
+            id
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS work_order_time_entries (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+            work_order_id INTEGER NOT NULL,
+            personnel_id INTEGER NOT NULL,
+
+            work_date TEXT NOT NULL,
+
+            onsite_hours REAL NOT NULL DEFAULT 0,
+            travel_hours REAL NOT NULL DEFAULT 0,
+            lunch_hours REAL NOT NULL DEFAULT 0,
+            total_hours REAL NOT NULL DEFAULT 0,
+
+            notes TEXT,
+
+            entered_by INTEGER,
+
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+
+            FOREIGN KEY (work_order_id)
+                REFERENCES work_orders (id)
+                ON DELETE CASCADE,
+
+            FOREIGN KEY (personnel_id)
+                REFERENCES company_personnel (id)
+                ON DELETE RESTRICT,
+
+            FOREIGN KEY (entered_by)
+                REFERENCES admin_users (id)
+                ON DELETE SET NULL,
+
+            CHECK (onsite_hours >= 0),
+            CHECK (travel_hours >= 0),
+            CHECK (lunch_hours >= 0),
+            CHECK (total_hours >= 0)
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_order_time_entries_work_order
+        ON work_order_time_entries (
+            work_order_id,
+            work_date,
+            id
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_work_order_time_entries_personnel
+        ON work_order_time_entries (
+            personnel_id,
+            work_date,
+            id
         )
         """
     )
@@ -8581,6 +8960,14 @@ def admin_personnel_new():
             else 0
         )
 
+        is_time_worker = (
+            1
+            if request.form.get(
+                "is_time_worker"
+            )
+            else 0
+        )
+
         errors = []
 
         if not first_name:
@@ -8618,12 +9005,13 @@ def admin_personnel_new():
                 email,
                 phone,
                 is_salesperson,
+                is_time_worker,
                 is_active,
                 created_at,
                 updated_at
             )
             VALUES (
-                ?, ?, ?, ?, ?, ?, 1, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
             )
             """,
             (
@@ -8633,6 +9021,7 @@ def admin_personnel_new():
                 email or None,
                 phone or None,
                 is_salesperson,
+                is_time_worker,
                 now,
                 now,
             ),
@@ -8745,6 +9134,14 @@ def admin_personnel_edit(personnel_id):
             else 0
         )
 
+        is_time_worker = (
+            1
+            if request.form.get(
+                "is_time_worker"
+            )
+            else 0
+        )
+
         is_active = (
             1
             if request.form.get(
@@ -8791,6 +9188,7 @@ def admin_personnel_edit(personnel_id):
                 email = ?,
                 phone = ?,
                 is_salesperson = ?,
+                is_time_worker = ?,
                 is_active = ?,
                 updated_at = ?
             WHERE id = ?
@@ -8802,6 +9200,7 @@ def admin_personnel_edit(personnel_id):
                 email or None,
                 phone or None,
                 is_salesperson,
+                is_time_worker,
                 is_active,
                 now,
                 personnel_id,
@@ -9603,6 +10002,267 @@ def refresh_customer_review_status(
     )
 
     return review_issues
+
+WORK_ORDER_START_NUMBER = 3000
+
+
+def get_next_work_order_number(
+    connection,
+):
+    current_number = connection.execute(
+        """
+        SELECT MAX(work_order_number)
+        FROM work_orders
+        """
+    ).fetchone()[0]
+
+    if current_number is None:
+        return WORK_ORDER_START_NUMBER
+
+    return max(
+        WORK_ORDER_START_NUMBER,
+        int(current_number) + 1,
+    )
+
+def format_work_order_number(
+    work_order_number,
+):
+    return (
+        f"WO-{int(work_order_number)}"
+    )
+
+def calculate_work_order_time(
+    onsite_hours,
+    travel_hours,
+    lunch_applies,
+):
+    combined_hours = (
+        onsite_hours
+        + travel_hours
+    )
+
+    lunch_hours = (
+        0.5
+        if lunch_applies
+        else 0.0
+    )
+
+    total_hours = (
+        combined_hours
+        - lunch_hours
+    )
+
+    return {
+        "lunch_hours": lunch_hours,
+        "total_hours": round(
+            total_hours,
+            2,
+        ),
+    }
+
+def refresh_work_order_time_totals(
+    connection,
+    work_order_id,
+):
+    totals = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(onsite_hours),
+                0
+            ) AS onsite_hours,
+
+            COALESCE(
+                SUM(travel_hours),
+                0
+            ) AS travel_hours
+
+        FROM work_order_time_entries
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    connection.execute(
+        """
+        UPDATE work_orders
+        SET
+            total_onsite_hours = ?,
+            total_travel_hours = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            totals["onsite_hours"],
+            totals["travel_hours"],
+            current_timestamp(),
+            work_order_id,
+        ),
+    )
+
+def get_work_order_photo_directory(
+    work_order_id,
+):
+    return os.path.join(
+        WORK_ORDER_UPLOAD_ROOT,
+        str(work_order_id),
+    )
+
+
+def prepare_work_order_photo_image(
+    uploaded_file,
+):
+    try:
+        image = Image.open(
+            uploaded_file.stream
+        )
+
+        image.load()
+
+    except (
+        UnidentifiedImageError,
+        OSError,
+    ) as exc:
+        raise ValueError(
+            "The uploaded file is not a valid image."
+        ) from exc
+
+    image = ImageOps.exif_transpose(
+        image
+    )
+
+    if image.mode in {
+        "RGBA",
+        "LA",
+    }:
+        background = Image.new(
+            "RGB",
+            image.size,
+            "white",
+        )
+
+        alpha_channel = image.getchannel(
+            "A"
+        )
+
+        background.paste(
+            image.convert("RGB"),
+            mask=alpha_channel,
+        )
+
+        image = background
+
+    elif image.mode != "RGB":
+        image = image.convert(
+            "RGB"
+        )
+
+    return image
+
+
+def save_work_order_photo(
+    uploaded_file,
+    work_order_id,
+):
+    original_filename = secure_filename(
+        uploaded_file.filename
+        or ""
+    )
+
+    if (
+        not original_filename
+        or not allowed_image_file(
+            original_filename
+        )
+    ):
+        raise ValueError(
+            (
+                "Only JPG, JPEG, PNG, and WebP "
+                "photos can be uploaded."
+            )
+        )
+
+    image = prepare_work_order_photo_image(
+        uploaded_file
+    )
+
+    image.thumbnail(
+        (
+            WORK_ORDER_PHOTO_MAX_DIMENSION,
+            WORK_ORDER_PHOTO_MAX_DIMENSION,
+        ),
+        Image.Resampling.LANCZOS,
+    )
+
+    unique_id = secrets.token_hex(
+        12
+    )
+
+    filename = (
+        f"{unique_id}.jpg"
+    )
+
+    thumbnail_filename = (
+        f"{unique_id}_thumb.jpg"
+    )
+
+    upload_directory = (
+        get_work_order_photo_directory(
+            work_order_id
+        )
+    )
+
+    os.makedirs(
+        upload_directory,
+        exist_ok=True,
+    )
+
+    full_path = os.path.join(
+        upload_directory,
+        filename,
+    )
+
+    thumbnail_path = os.path.join(
+        upload_directory,
+        thumbnail_filename,
+    )
+
+    image.save(
+        full_path,
+        format="JPEG",
+        quality=(
+            WORK_ORDER_PHOTO_JPEG_QUALITY
+        ),
+        optimize=True,
+    )
+
+    thumbnail = image.copy()
+
+    thumbnail.thumbnail(
+        (
+            WORK_ORDER_PHOTO_THUMBNAIL_DIMENSION,
+            WORK_ORDER_PHOTO_THUMBNAIL_DIMENSION,
+        ),
+        Image.Resampling.LANCZOS,
+    )
+
+    thumbnail.save(
+        thumbnail_path,
+        format="JPEG",
+        quality=78,
+        optimize=True,
+    )
+
+    return {
+        "filename": filename,
+        "thumbnail_filename": (
+            thumbnail_filename
+        ),
+        "original_filename": (
+            original_filename
+        ),
+    }
 
 @app.route("/admin/customers")
 @admin_required
@@ -12075,6 +12735,5397 @@ def admin_customer_edit(
         salespeople=salespeople,
         billing_customers=billing_customers,
         parent_customers=parent_customers,
+    )
+
+# =========================================================
+# WORK ORDERS
+# =========================================================
+
+
+@app.route(
+    "/admin/work-orders"
+)
+@admin_required
+def admin_work_orders():
+    search_query = request.args.get(
+        "q",
+        "",
+    ).strip()
+
+    status_filter = request.args.get(
+        "status",
+        "active",
+    ).strip().lower()
+
+    valid_status_filters = {
+        "active",
+        "open",
+        "scheduled",
+        "in_progress",
+        "completed",
+        "cancelled",
+        "all",
+    }
+
+    if status_filter not in valid_status_filters:
+        status_filter = "active"
+
+    connection = get_db_connection()
+
+    where_clauses = []
+    query_parameters = []
+
+    if status_filter == "active":
+        where_clauses.append(
+            """
+            work_orders.status IN (
+                'open',
+                'scheduled',
+                'in_progress'
+            )
+            """
+        )
+
+    elif status_filter != "all":
+        where_clauses.append(
+            "work_orders.status = ?"
+        )
+
+        query_parameters.append(
+            status_filter
+        )
+
+    if search_query:
+        search_value = (
+            f"%{search_query}%"
+        )
+
+        numeric_search = (
+            search_query
+            .upper()
+            .replace("WO-", "")
+            .replace("WO", "")
+            .strip()
+        )
+
+        search_clauses = [
+            """
+            customers.display_name
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            customers.commercial_name
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            work_orders.work_order_type
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            work_orders.status
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            work_orders.scheduled_date
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            customer_contacts.first_name
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            customer_contacts.last_name
+                LIKE ? COLLATE NOCASE
+            """,
+            """
+            (
+                COALESCE(
+                    customer_contacts.first_name,
+                    ''
+                )
+                || ' '
+                || COALESCE(
+                    customer_contacts.last_name,
+                    ''
+                )
+            ) LIKE ? COLLATE NOCASE
+            """,
+        ]
+
+        search_parameters = [
+            search_value,
+            search_value,
+            search_value,
+            search_value,
+            search_value,
+            search_value,
+            search_value,
+            search_value,
+        ]
+
+        if numeric_search.isdigit():
+            search_clauses.append(
+                """
+                CAST(
+                    work_orders.work_order_number
+                    AS TEXT
+                ) LIKE ?
+                """
+            )
+
+            search_parameters.append(
+                f"%{numeric_search}%"
+            )
+
+        where_clauses.append(
+            (
+                "("
+                + " OR ".join(
+                    search_clauses
+                )
+                + ")"
+            )
+        )
+
+        query_parameters.extend(
+            search_parameters
+        )
+
+    where_sql = ""
+
+    if where_clauses:
+        where_sql = (
+            "WHERE "
+            + " AND ".join(
+                where_clauses
+            )
+        )
+
+    work_orders = connection.execute(
+        f"""
+        SELECT
+            work_orders.*,
+
+            customers.display_name
+                AS customer_display_name,
+
+            customers.commercial_name
+                AS customer_commercial_name,
+
+            customer_contacts.first_name
+                AS contact_first_name,
+
+            customer_contacts.last_name
+                AS contact_last_name
+
+        FROM work_orders
+
+        JOIN customers
+            ON customers.id =
+                work_orders.customer_id
+
+        LEFT JOIN customer_contacts
+            ON customer_contacts.id =
+                work_orders.customer_contact_id
+
+        {where_sql}
+
+        ORDER BY
+            CASE
+                WHEN work_orders.scheduled_date IS NULL
+                     OR work_orders.scheduled_date = ''
+                THEN 0
+                ELSE 1
+            END ASC,
+
+            work_orders.scheduled_date ASC,
+            work_orders.work_order_number ASC
+
+        LIMIT 50
+        """,
+        query_parameters,
+    ).fetchall()
+
+    connection.close()
+
+    return render_template(
+        "admin_work_orders.html",
+        work_orders=work_orders,
+        format_work_order_number=(
+            format_work_order_number
+        ),
+        search_query=search_query,
+        status_filter=status_filter,
+    )
+
+@app.route(
+    "/admin/customers/<int:customer_id>/work-orders/new",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_work_order_new(
+    customer_id,
+):
+    connection = get_db_connection()
+
+    customer = connection.execute(
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
+        (customer_id,),
+    ).fetchone()
+
+    if customer is None:
+        connection.close()
+        abort(404)
+
+    contacts = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_active = 1
+        ORDER BY
+            is_primary DESC,
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE,
+            id
+        """,
+        (customer_id,),
+    ).fetchall()
+
+    primary_contact = next(
+        (
+            contact
+            for contact in contacts
+            if contact["is_primary"]
+        ),
+        None,
+    )
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        contact_id = (
+            request.form.get(
+                "customer_contact_id",
+                "",
+            ).strip()
+        )
+
+        work_order_type = (
+            request.form.get(
+                "work_order_type",
+                "",
+            ).strip()
+        )
+
+        status = (
+            request.form.get(
+                "status",
+                "open",
+            )
+            .strip()
+            .lower()
+        )
+
+        scheduled_date = (
+            request.form.get(
+                "scheduled_date",
+                "",
+            ).strip()
+        )
+
+        project_address_line_1 = (
+            request.form.get(
+                "project_address_line_1",
+                "",
+            ).strip()
+        )
+
+        project_address_line_2 = (
+            request.form.get(
+                "project_address_line_2",
+                "",
+            ).strip()
+        )
+
+        project_city = (
+            request.form.get(
+                "project_city",
+                "",
+            ).strip()
+        )
+
+        project_state = (
+            request.form.get(
+                "project_state",
+                "",
+            )
+            .strip()
+            .upper()
+        )
+
+        project_postal_code = (
+            request.form.get(
+                "project_postal_code",
+                "",
+            ).strip()
+        )
+
+        work_description = (
+            request.form.get(
+                "work_description",
+                "",
+            ).strip()
+        )
+
+        scope_of_work = (
+            request.form.get(
+                "scope_of_work",
+                "",
+            ).strip()
+        )
+
+        total_onsite_hours_text = (
+            request.form.get(
+                "total_onsite_hours",
+                "",
+            ).strip()
+        )
+
+        total_travel_hours_text = (
+            request.form.get(
+                "total_travel_hours",
+                "",
+            ).strip()
+        )
+
+        material_names = request.form.getlist(
+            "material_name[]"
+        )
+
+        material_quantities = request.form.getlist(
+            "material_quantity[]"
+        )
+
+        material_units = request.form.getlist(
+            "material_unit[]"
+        )
+
+        material_unit_costs = request.form.getlist(
+            "material_unit_cost[]"
+        )
+
+        submitted_materials = []
+
+        material_row_count = max(
+            len(material_names),
+            len(material_quantities),
+            len(material_units),
+            len(material_unit_costs),
+        )
+
+        for material_index in range(
+            material_row_count
+        ):
+            submitted_materials.append(
+                {
+                    "material_name": (
+                        material_names[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_names)
+                        else ""
+                    ),
+                    "quantity": (
+                        material_quantities[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_quantities)
+                        else ""
+                    ),
+                    "unit": (
+                        material_units[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_units)
+                        else ""
+                    ),
+                    "unit_cost": (
+                        material_unit_costs[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_unit_costs)
+                        else ""
+                    ),
+                }
+            )
+
+        internal_notes = (
+            request.form.get(
+                "internal_notes",
+                "",
+            ).strip()
+        )
+
+        errors = []
+
+        total_onsite_hours = None
+        total_travel_hours = None
+
+        if total_onsite_hours_text:
+            try:
+                total_onsite_hours = float(
+                    total_onsite_hours_text
+                )
+
+                if total_onsite_hours < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        "Total onsite hours must be "
+                        "zero or greater."
+                    )
+                )
+
+        if total_travel_hours_text:
+            try:
+                total_travel_hours = float(
+                    total_travel_hours_text
+                )
+
+                if total_travel_hours < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        "Total travel hours must be "
+                        "zero or greater."
+                    )
+                )
+
+        cleaned_materials = []
+
+        for material_index, material in enumerate(
+            submitted_materials,
+            start=1,
+        ):
+            material_name = material[
+                "material_name"
+            ]
+
+            quantity_text = material[
+                "quantity"
+            ]
+
+            unit = material[
+                "unit"
+            ]
+
+            unit_cost_text = material[
+                "unit_cost"
+            ]
+
+            row_has_data = any(
+                [
+                    material_name,
+                    quantity_text,
+                    unit,
+                    unit_cost_text,
+                ]
+            )
+
+            if not row_has_data:
+                continue
+
+            if not material_name:
+                errors.append(
+                    (
+                        f"Material row {material_index} "
+                        "needs a material name."
+                    )
+                )
+
+                continue
+
+            try:
+                quantity = float(
+                    quantity_text or 0
+                )
+
+                if quantity < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        f"Material row {material_index} "
+                        "has an invalid quantity."
+                    )
+                )
+
+                continue
+
+            try:
+                unit_cost = float(
+                    unit_cost_text or 0
+                )
+
+                if unit_cost < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        f"Material row {material_index} "
+                        "has an invalid unit cost."
+                    )
+                )
+
+                continue
+
+            cleaned_materials.append(
+                {
+                    "material_name": material_name,
+                    "quantity": quantity,
+                    "unit": unit or None,
+                    "unit_cost": unit_cost,
+                }
+            )
+
+        valid_statuses = {
+            "open",
+            "scheduled",
+            "in_progress",
+            "completed",
+            "cancelled",
+        }
+
+        if not work_order_type:
+            errors.append(
+                "Work order type is required."
+            )
+
+        if status not in valid_statuses:
+            errors.append(
+                "Select a valid work order status."
+            )
+
+        if (
+            status == "scheduled"
+            and not scheduled_date
+        ):
+            errors.append(
+                (
+                    "A scheduled work order must "
+                    "have a scheduled date."
+                )
+            )
+
+        selected_contact = None
+
+        if contact_id:
+            selected_contact = (
+                connection.execute(
+                    """
+                    SELECT id
+                    FROM customer_contacts
+                    WHERE id = ?
+                      AND customer_id = ?
+                      AND is_active = 1
+                    """,
+                    (
+                        int(contact_id),
+                        customer_id,
+                    ),
+                ).fetchone()
+            )
+
+            if selected_contact is None:
+                errors.append(
+                    (
+                        "Select a valid active "
+                        "customer contact."
+                    )
+                )
+
+        if not project_address_line_1:
+            errors.append(
+                "Project address is required."
+            )
+
+        if not project_city:
+            errors.append(
+                "Project city is required."
+            )
+
+        if not project_state:
+            errors.append(
+                "Project state is required."
+            )
+
+        if not project_postal_code:
+            errors.append(
+                "Project ZIP / Postal Code is required."
+            )
+
+        if errors:
+            connection.close()
+
+            for error in errors:
+                flash(
+                    error,
+                    "error",
+                )
+
+            return render_template(
+                "admin_work_order_new.html",
+                customer=customer,
+                contacts=contacts,
+                primary_contact=primary_contact,
+                form_materials=(
+                    submitted_materials
+                ),
+            )
+
+        current_admin = (
+            get_current_admin_user()
+        )
+
+        now = current_timestamp()
+
+        connection.execute(
+            "BEGIN IMMEDIATE"
+        )
+
+        work_order_number = (
+            get_next_work_order_number(
+                connection
+            )
+        )
+
+        cursor = connection.execute(
+            """
+            INSERT INTO work_orders (
+                work_order_number,
+                customer_id,
+                customer_contact_id,
+                work_order_type,
+                status,
+                scheduled_date,
+                project_address_line_1,
+                project_address_line_2,
+                project_city,
+                project_state,
+                project_postal_code,
+                work_description,
+                scope_of_work,
+                total_onsite_hours,
+                total_travel_hours,
+                estimated_materials,
+                internal_notes,
+                source_estimate_id,
+                created_by,
+                created_at,
+                updated_at
+            )
+            VALUES (
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?,
+                NULL,
+                ?, ?, ?
+            )
+            """,
+            (
+                work_order_number,
+                customer_id,
+                (
+                    int(contact_id)
+                    if contact_id
+                    else None
+                ),
+                work_order_type,
+                status,
+                scheduled_date or None,
+                project_address_line_1,
+                project_address_line_2 or None,
+                project_city,
+                project_state,
+                project_postal_code,
+                work_description or None,
+                scope_of_work or None,
+                total_onsite_hours,
+                total_travel_hours,
+                None,
+                internal_notes or None,
+                (
+                    current_admin["id"]
+                    if current_admin
+                    else None
+                ),
+                now,
+                now,
+            ),
+        )
+
+        work_order_id = cursor.lastrowid
+
+        for display_order, material in enumerate(
+            cleaned_materials
+        ):
+            connection.execute(
+                """
+                INSERT INTO work_order_materials (
+                    work_order_id,
+                    material_name,
+                    quantity,
+                    unit,
+                    unit_cost,
+                    display_order,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    work_order_id,
+                    material["material_name"],
+                    material["quantity"],
+                    material["unit"],
+                    material["unit_cost"],
+                    display_order,
+                    now,
+                    now,
+                ),
+            )
+
+        connection.commit()
+        connection.close()
+
+        formatted_number = (
+            format_work_order_number(
+                work_order_number
+            )
+        )
+
+        write_audit_log(
+            action="work_order_created",
+            category="work_orders",
+            description=(
+                f"{formatted_number} "
+                "was created."
+            ),
+            entity_type="work_order",
+            entity_id=work_order_id,
+        )
+
+        flash(
+            (
+                f"{formatted_number} "
+                "was created successfully."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+        )
+
+    connection.close()
+
+    return render_template(
+        "admin_work_order_new.html",
+        customer=customer,
+        contacts=contacts,
+        primary_contact=primary_contact,
+        form_materials=[
+            {
+                "material_name": "",
+                "quantity": "",
+                "unit": "",
+                "unit_cost": "",
+            }
+        ],
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/pdf"
+)
+@admin_required
+def admin_work_order_pdf(
+    work_order_id,
+):
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            work_orders.*,
+
+            customers.display_name
+                AS customer_display_name,
+
+            customers.commercial_name
+                AS customer_commercial_name,
+
+            customer_contacts.first_name
+                AS contact_first_name,
+
+            customer_contacts.last_name
+                AS contact_last_name,
+
+            customer_contacts.job_title
+                AS contact_job_title,
+
+            customer_contacts.phone
+                AS contact_phone,
+
+            customer_contacts.email
+                AS contact_email
+
+        FROM work_orders
+
+        JOIN customers
+            ON customers.id =
+                work_orders.customer_id
+
+        LEFT JOIN customer_contacts
+            ON customer_contacts.id =
+                work_orders.customer_contact_id
+
+        WHERE work_orders.id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    estimated_materials = connection.execute(
+        """
+        SELECT *
+        FROM work_order_materials
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    materials_used = connection.execute(
+        """
+        SELECT *
+        FROM work_order_materials_used
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    time_entries = connection.execute(
+        """
+        SELECT
+            work_order_time_entries.*,
+
+            company_personnel.first_name
+                AS worker_first_name,
+
+            company_personnel.last_name
+                AS worker_last_name,
+
+            company_personnel.job_title
+                AS worker_job_title
+
+        FROM work_order_time_entries
+
+        JOIN company_personnel
+            ON company_personnel.id =
+                work_order_time_entries.personnel_id
+
+        WHERE work_order_time_entries.work_order_id = ?
+
+        ORDER BY
+            work_order_time_entries.work_date ASC,
+            company_personnel.last_name
+                COLLATE NOCASE,
+            company_personnel.first_name
+                COLLATE NOCASE,
+            work_order_time_entries.id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    time_summary = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(onsite_hours),
+                0
+            ) AS onsite_hours,
+
+            COALESCE(
+                SUM(travel_hours),
+                0
+            ) AS travel_hours,
+
+            COALESCE(
+                SUM(lunch_hours),
+                0
+            ) AS lunch_hours,
+
+            COALESCE(
+                SUM(total_hours),
+                0
+            ) AS total_hours
+
+        FROM work_order_time_entries
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    photos = connection.execute(
+        """
+        SELECT
+            work_order_photos.*
+        FROM work_order_photos
+        WHERE work_order_id = ?
+        ORDER BY
+            created_at ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            work_order[
+                "work_order_number"
+            ]
+        )
+    )
+
+    pdf_buffer = io.BytesIO()
+
+    document = SimpleDocTemplate(
+        pdf_buffer,
+        pagesize=letter,
+        rightMargin=36,
+        leftMargin=36,
+        topMargin=30,
+        bottomMargin=36,
+        title=(
+            f"{formatted_number} - "
+            "Testa Roofing"
+        ),
+        author="Testa Roofing",
+    )
+
+    page_width, page_height = letter
+
+    brand_blue = colors.HexColor(
+        "#33459B"
+    )
+
+    brand_gray = colors.HexColor(
+        "#A7A7A7"
+    )
+
+    dark_text = colors.HexColor(
+        "#18283A"
+    )
+
+    light_gray = colors.HexColor(
+        "#F2F4F6"
+    )
+
+    border_gray = colors.HexColor(
+        "#D7DCE1"
+    )
+
+    styles = getSampleStyleSheet()
+
+    body_style = ParagraphStyle(
+        "WorkOrderBody",
+        parent=styles["BodyText"],
+        fontName="Helvetica",
+        fontSize=9,
+        leading=12,
+        textColor=dark_text,
+        spaceAfter=0,
+    )
+
+    small_style = ParagraphStyle(
+        "WorkOrderSmall",
+        parent=body_style,
+        fontSize=8,
+        leading=10,
+    )
+
+    label_style = ParagraphStyle(
+        "WorkOrderLabel",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=7,
+        leading=9,
+        textColor=colors.HexColor(
+            "#66717D"
+        ),
+        spaceAfter=2,
+    )
+
+    value_style = ParagraphStyle(
+        "WorkOrderValue",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=9,
+        leading=11,
+    )
+
+    section_style = ParagraphStyle(
+        "WorkOrderSection",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=10,
+        leading=12,
+        textColor=brand_blue,
+        spaceBefore=0,
+        spaceAfter=5,
+    )
+
+    right_title_style = ParagraphStyle(
+        "WorkOrderRightTitle",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=16,
+        leading=18,
+        alignment=TA_RIGHT,
+        textColor=dark_text,
+    )
+
+    right_number_style = ParagraphStyle(
+        "WorkOrderRightNumber",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=13,
+        leading=15,
+        alignment=TA_RIGHT,
+        textColor=brand_blue,
+    )
+
+    table_header_style = ParagraphStyle(
+        "WorkOrderTableHeader",
+        parent=body_style,
+        fontName="Helvetica-Bold",
+        fontSize=7,
+        leading=8,
+        textColor=colors.white,
+    )
+
+    table_body_style = ParagraphStyle(
+        "WorkOrderTableBody",
+        parent=body_style,
+        fontSize=8,
+        leading=9,
+    )
+
+    def pdf_text(
+        value,
+        fallback="—",
+    ):
+        if value is None:
+            return fallback
+
+        text = str(value).strip()
+
+        if not text:
+            return fallback
+
+        return (
+            text
+            .replace("&", "&amp;")
+            .replace("<", "&lt;")
+            .replace(">", "&gt;")
+            .replace("\n", "<br/>")
+        )
+
+    def format_date(
+        value,
+    ):
+        if not value:
+            return "Not Scheduled"
+
+        try:
+            parsed_date = datetime.strptime(
+                value,
+                "%Y-%m-%d",
+            )
+
+            return parsed_date.strftime(
+                "%m/%d/%Y"
+            )
+
+        except ValueError:
+            return str(value)
+
+    def section_heading(
+        title,
+    ):
+        heading_table = Table(
+            [
+                [
+                    Paragraph(
+                        title,
+                        section_style,
+                    )
+                ]
+            ],
+            colWidths=[
+                7.5 * inch
+            ],
+        )
+
+        heading_table.setStyle(
+            TableStyle(
+                [
+                    (
+                        "LINEBELOW",
+                        (0, 0),
+                        (-1, -1),
+                        1,
+                        brand_blue,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        4,
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        0,
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        0,
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        0,
+                    ),
+                ]
+            )
+        )
+
+        return heading_table
+
+    def draw_footer(
+        pdf_canvas,
+        pdf_document,
+    ):
+        pdf_canvas.saveState()
+
+        pdf_canvas.setStrokeColor(
+            border_gray
+        )
+
+        pdf_canvas.line(
+            36,
+            25,
+            page_width - 36,
+            25,
+        )
+
+        pdf_canvas.setFont(
+            "Helvetica",
+            7,
+        )
+
+        pdf_canvas.setFillColor(
+            colors.HexColor(
+                "#737D87"
+            )
+        )
+
+        pdf_canvas.drawString(
+            36,
+            14,
+            (
+                f"Testa Roofing  |  "
+                f"{formatted_number}"
+            ),
+        )
+
+        pdf_canvas.drawRightString(
+            page_width - 36,
+            14,
+            (
+                f"Page "
+                f"{pdf_document.page}"
+            ),
+        )
+
+        pdf_canvas.restoreState()
+
+    story = []
+
+    logo_path = os.path.join(
+        BASE_DIR,
+        "static",
+        "img",
+        "logo_full.png",
+    )
+
+    if os.path.exists(
+        logo_path
+    ):
+        logo = ReportLabImage(
+            logo_path,
+            width=2.45 * inch,
+            height=1.085 * inch,
+        )
+
+        logo.hAlign = "LEFT"
+
+    else:
+        logo = Paragraph(
+            "<b>TESTA ROOFING</b>",
+            section_style,
+        )
+
+    header_right = [
+        Paragraph(
+            "WORK ORDER",
+            right_title_style,
+        ),
+        Paragraph(
+            formatted_number,
+            right_number_style,
+        ),
+    ]
+
+    header_table = Table(
+        [
+            [
+                logo,
+                header_right,
+            ]
+        ],
+        colWidths=[
+            3.6 * inch,
+            3.9 * inch,
+        ],
+        vAlign="MIDDLE",
+    )
+
+    header_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    3,
+                ),
+                (
+                    "LINEBELOW",
+                    (0, 0),
+                    (-1, -1),
+                    1.5,
+                    brand_gray,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        header_table
+    )
+
+    story.append(
+        Spacer(
+            1,
+            10,
+        )
+    )
+
+    customer_name = (
+        work_order[
+            "customer_display_name"
+        ]
+        or work_order[
+            "customer_commercial_name"
+        ]
+        or "Unnamed Customer"
+    )
+
+    contact_name = (
+        (
+            f"{work_order['contact_first_name'] or ''} "
+            f"{work_order['contact_last_name'] or ''}"
+        ).strip()
+        or "Not Assigned"
+    )
+
+    address_lines = []
+
+    if work_order[
+        "project_address_line_1"
+    ]:
+        address_lines.append(
+            work_order[
+                "project_address_line_1"
+            ]
+        )
+
+    if work_order[
+        "project_address_line_2"
+    ]:
+        address_lines.append(
+            work_order[
+                "project_address_line_2"
+            ]
+        )
+
+    city_state_zip = " ".join(
+        part
+        for part in [
+            (
+                (
+                    f"{work_order['project_city']},"
+                )
+                if work_order[
+                    "project_city"
+                ]
+                else ""
+            ),
+            (
+                work_order[
+                    "project_state"
+                ]
+                or ""
+            ),
+            (
+                work_order[
+                    "project_postal_code"
+                ]
+                or ""
+            ),
+        ]
+        if part
+    )
+
+    if city_state_zip:
+        address_lines.append(
+            city_state_zip
+        )
+
+    project_address = (
+        "<br/>".join(
+            pdf_text(
+                line,
+                "",
+            )
+            for line in address_lines
+        )
+        or "Not Entered"
+    )
+
+    customer_information = [
+        [
+            Paragraph(
+                "CUSTOMER / PROJECT",
+                section_style,
+            )
+        ],
+        [
+            Paragraph(
+                "CUSTOMER",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                pdf_text(
+                    customer_name
+                ),
+                value_style,
+            )
+        ],
+        [
+            Paragraph(
+                "CONTACT",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                pdf_text(
+                    contact_name
+                ),
+                value_style,
+            )
+        ],
+        [
+            Paragraph(
+                "PHONE",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                pdf_text(
+                    work_order[
+                        "contact_phone"
+                    ]
+                ),
+                value_style,
+            )
+        ],
+        [
+            Paragraph(
+                "EMAIL",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                pdf_text(
+                    work_order[
+                        "contact_email"
+                    ]
+                ),
+                small_style,
+            )
+        ],
+        [
+            Paragraph(
+                "PROJECT / SERVICE ADDRESS",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                project_address,
+                value_style,
+            )
+        ],
+    ]
+
+    work_order_information = [
+        [
+            Paragraph(
+                "WORK ORDER INFORMATION",
+                section_style,
+            )
+        ],
+        [
+            Paragraph(
+                "TYPE",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                pdf_text(
+                    work_order[
+                        "work_order_type"
+                    ]
+                ),
+                value_style,
+            )
+        ],
+        [
+            Paragraph(
+                "STATUS",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                pdf_text(
+                    (
+                        work_order[
+                            "status"
+                        ]
+                        or ""
+                    )
+                    .replace(
+                        "_",
+                        " ",
+                    )
+                    .title()
+                ),
+                value_style,
+            )
+        ],
+        [
+            Paragraph(
+                "SCHEDULED DATE",
+                label_style,
+            )
+        ],
+        [
+            Paragraph(
+                format_date(
+                    work_order[
+                        "scheduled_date"
+                    ]
+                ),
+                value_style,
+            )
+        ],
+    ]
+
+    customer_table = Table(
+        customer_information,
+        colWidths=[
+            3.55 * inch
+        ],
+    )
+
+    work_order_table = Table(
+        work_order_information,
+        colWidths=[
+            3.55 * inch
+        ],
+    )
+
+    for info_table in (
+        customer_table,
+        work_order_table,
+    ):
+        info_table.setStyle(
+            TableStyle(
+                [
+                    (
+                        "BOX",
+                        (0, 0),
+                        (-1, -1),
+                        0.75,
+                        border_gray,
+                    ),
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        light_gray,
+                    ),
+                    (
+                        "LEFTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        9,
+                    ),
+                    (
+                        "RIGHTPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        9,
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        3,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        3,
+                    ),
+                ]
+            )
+        )
+
+    info_grid = Table(
+        [
+            [
+                customer_table,
+                work_order_table,
+            ]
+        ],
+        colWidths=[
+            3.65 * inch,
+            3.65 * inch,
+        ],
+    )
+
+    info_grid.setStyle(
+        TableStyle(
+            [
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "TOP",
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (0, 0),
+                    5,
+                ),
+                (
+                    "LEFTPADDING",
+                    (1, 0),
+                    (1, 0),
+                    5,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (1, 0),
+                    (1, 0),
+                    0,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        info_grid
+    )
+
+    story.append(
+        Spacer(
+            1,
+            11,
+        )
+    )
+
+    story.append(
+        section_heading(
+            "WORK DESCRIPTION / NOTES"
+        )
+    )
+
+    story.append(
+        Paragraph(
+            pdf_text(
+                work_order[
+                    "work_description"
+                ],
+                "None entered.",
+            ),
+            body_style,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            10,
+        )
+    )
+
+    story.append(
+        section_heading(
+            "SCOPE OF WORK"
+        )
+    )
+
+    story.append(
+        Paragraph(
+            pdf_text(
+                work_order[
+                    "scope_of_work"
+                ],
+                "None entered.",
+            ),
+            body_style,
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            10,
+        )
+    )
+
+    story.append(
+        section_heading(
+            "LABOR SUMMARY"
+        )
+    )
+
+    labor_data = [
+        [
+            Paragraph(
+                "ONSITE HOURS",
+                label_style,
+            ),
+            Paragraph(
+                "TRAVEL HOURS",
+                label_style,
+            ),
+            Paragraph(
+                "LUNCH DEDUCTED",
+                label_style,
+            ),
+            Paragraph(
+                "PAYABLE HOURS",
+                label_style,
+            ),
+        ],
+        [
+            Paragraph(
+                (
+                    f"{time_summary['onsite_hours']:.2f}"
+                ),
+                value_style,
+            ),
+            Paragraph(
+                (
+                    f"{time_summary['travel_hours']:.2f}"
+                ),
+                value_style,
+            ),
+            Paragraph(
+                (
+                    f"{time_summary['lunch_hours']:.2f}"
+                ),
+                value_style,
+            ),
+            Paragraph(
+                (
+                    f"{time_summary['total_hours']:.2f}"
+                ),
+                value_style,
+            ),
+        ],
+    ]
+
+    labor_table = Table(
+        labor_data,
+        colWidths=[
+            1.875 * inch,
+            1.875 * inch,
+            1.875 * inch,
+            1.875 * inch,
+        ],
+    )
+
+    labor_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.75,
+                    border_gray,
+                ),
+                (
+                    "INNERGRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    border_gray,
+                ),
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    light_gray,
+                ),
+                (
+                    "ALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "CENTER",
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        labor_table
+    )
+
+    story.append(
+        Spacer(
+            1,
+            10,
+        )
+    )
+
+    story.append(
+        section_heading(
+            "ESTIMATED MATERIALS"
+        )
+    )
+
+    estimated_material_data = [
+        [
+            Paragraph(
+                "MATERIAL",
+                table_header_style,
+            ),
+            Paragraph(
+                "QTY",
+                table_header_style,
+            ),
+            Paragraph(
+                "UNIT",
+                table_header_style,
+            ),
+            Paragraph(
+                "UNIT COST",
+                table_header_style,
+            ),
+            Paragraph(
+                "TOTAL",
+                table_header_style,
+            ),
+        ]
+    ]
+
+    estimated_material_total = 0.0
+
+    for material in estimated_materials:
+        line_total = (
+            material[
+                "quantity"
+            ]
+            * material[
+                "unit_cost"
+            ]
+        )
+
+        estimated_material_total += (
+            line_total
+        )
+
+        estimated_material_data.append(
+            [
+                Paragraph(
+                    pdf_text(
+                        material[
+                            "material_name"
+                        ]
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    f"{material['quantity']:g}",
+                    table_body_style,
+                ),
+                Paragraph(
+                    pdf_text(
+                        material[
+                            "unit"
+                        ]
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"${material['unit_cost']:.2f}"
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"${line_total:.2f}"
+                    ),
+                    table_body_style,
+                ),
+            ]
+        )
+
+    if not estimated_materials:
+        estimated_material_data.append(
+            [
+                Paragraph(
+                    "No estimated materials entered.",
+                    table_body_style,
+                ),
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+
+    estimated_material_data.append(
+        [
+            "",
+            "",
+            "",
+            Paragraph(
+                "<b>ESTIMATED TOTAL</b>",
+                table_body_style,
+            ),
+            Paragraph(
+                (
+                    f"<b>${estimated_material_total:.2f}</b>"
+                ),
+                table_body_style,
+            ),
+        ]
+    )
+
+    estimated_material_table = Table(
+        estimated_material_data,
+        colWidths=[
+            3.15 * inch,
+            0.65 * inch,
+            0.85 * inch,
+            1.15 * inch,
+            1.15 * inch,
+        ],
+        repeatRows=1,
+    )
+
+    estimated_material_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    brand_blue,
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.75,
+                    border_gray,
+                ),
+                (
+                    "INNERGRID",
+                    (0, 0),
+                    (-1, -2),
+                    0.4,
+                    border_gray,
+                ),
+                (
+                    "BACKGROUND",
+                    (0, -1),
+                    (-1, -1),
+                    light_gray,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "ALIGN",
+                    (1, 1),
+                    (-1, -1),
+                    "RIGHT",
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        estimated_material_table
+    )
+
+    # =====================================================
+    # PAGE 2 — TIMESHEET
+    # =====================================================
+
+    story.append(
+        PageBreak()
+    )
+
+    story.append(
+        section_heading(
+            (
+                f"TIMESHEET — "
+                f"{formatted_number}"
+            )
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            8,
+        )
+    )
+
+    timesheet_data = [
+        [
+            Paragraph(
+                "DATE",
+                table_header_style,
+            ),
+            Paragraph(
+                "WORKER",
+                table_header_style,
+            ),
+            Paragraph(
+                "ONSITE",
+                table_header_style,
+            ),
+            Paragraph(
+                "TRAVEL",
+                table_header_style,
+            ),
+            Paragraph(
+                "LUNCH",
+                table_header_style,
+            ),
+            Paragraph(
+                "TOTAL",
+                table_header_style,
+            ),
+            Paragraph(
+                "NOTES",
+                table_header_style,
+            ),
+        ]
+    ]
+
+    for entry in time_entries:
+        worker_name = (
+            f"{entry['worker_first_name']} "
+            f"{entry['worker_last_name']}"
+        ).strip()
+
+        timesheet_data.append(
+            [
+                Paragraph(
+                    format_date(
+                        entry[
+                            "work_date"
+                        ]
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    pdf_text(
+                        worker_name
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"{entry['onsite_hours']:.2f}"
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"{entry['travel_hours']:.2f}"
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"{entry['lunch_hours']:.2f}"
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"{entry['total_hours']:.2f}"
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    pdf_text(
+                        entry[
+                            "notes"
+                        ],
+                        "",
+                    ),
+                    table_body_style,
+                ),
+            ]
+        )
+
+    timesheet_target_rows = 32
+
+    timesheet_blank_rows = max(
+        0,
+        timesheet_target_rows
+        - len(time_entries),
+    )
+
+    for _ in range(
+        timesheet_blank_rows
+    ):
+        timesheet_data.append(
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+
+    timesheet_table = Table(
+        timesheet_data,
+        colWidths=[
+            0.75 * inch,
+            1.35 * inch,
+            0.65 * inch,
+            0.65 * inch,
+            0.6 * inch,
+            0.65 * inch,
+            2.15 * inch,
+        ],
+        repeatRows=1,
+    )
+
+    timesheet_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    brand_blue,
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.75,
+                    border_gray,
+                ),
+                (
+                    "INNERGRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.4,
+                    border_gray,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "ALIGN",
+                    (2, 1),
+                    (5, -1),
+                    "RIGHT",
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        timesheet_table
+    )
+
+    # =====================================================
+    # PAGE 3 — MATERIALS USED
+    # =====================================================
+
+    story.append(
+        PageBreak()
+    )
+
+    story.append(
+        section_heading(
+            (
+                f"MATERIALS USED — "
+                f"{formatted_number}"
+            )
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            8,
+        )
+    )
+
+    material_used_data = [
+        [
+            Paragraph(
+                "INVOICE #",
+                table_header_style,
+            ),
+            Paragraph(
+                "MATERIAL",
+                table_header_style,
+            ),
+            Paragraph(
+                "QTY",
+                table_header_style,
+            ),
+            Paragraph(
+                "UNIT",
+                table_header_style,
+            ),
+            Paragraph(
+                "UNIT COST",
+                table_header_style,
+            ),
+            Paragraph(
+                "TOTAL",
+                table_header_style,
+            ),
+        ]
+    ]
+
+    for material in materials_used:
+        line_total = (
+            material[
+                "quantity"
+            ]
+            * material[
+                "unit_cost"
+            ]
+        )
+
+        material_used_data.append(
+            [
+                Paragraph(
+                    pdf_text(
+                        material[
+                            "invoice_number"
+                        ]
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    pdf_text(
+                        material[
+                            "material_name"
+                        ]
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    f"{material['quantity']:g}",
+                    table_body_style,
+                ),
+                Paragraph(
+                    pdf_text(
+                        material[
+                            "unit"
+                        ]
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"${material['unit_cost']:.2f}"
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    (
+                        f"${line_total:.2f}"
+                    ),
+                    table_body_style,
+                ),
+            ]
+        )
+
+    material_used_target_rows = 32
+
+    material_used_blank_rows = max(
+        0,
+        material_used_target_rows
+        - len(materials_used),
+    )
+
+    for _ in range(
+        material_used_blank_rows
+    ):
+        material_used_data.append(
+            [
+                "",
+                "",
+                "",
+                "",
+                "",
+                "",
+            ]
+        )
+
+    materials_used_table = Table(
+        material_used_data,
+        colWidths=[
+            1.15 * inch,
+            2.8 * inch,
+            0.6 * inch,
+            0.8 * inch,
+            1.05 * inch,
+            1.1 * inch,
+        ],
+        repeatRows=1,
+    )
+
+    materials_used_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    brand_blue,
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.75,
+                    border_gray,
+                ),
+                (
+                    "INNERGRID",
+                    (0, 0),
+                    (-1, -1),
+                    0.4,
+                    border_gray,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "ALIGN",
+                    (2, 1),
+                    (-1, -1),
+                    "RIGHT",
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        materials_used_table
+    )
+
+    # =====================================================
+    # PAGE 4+ — PHOTOGRAPHS
+    # =====================================================
+
+    if photos:
+        story.append(
+            PageBreak()
+        )
+
+        photo_directory = (
+            get_work_order_photo_directory(
+                work_order_id
+            )
+        )
+
+        valid_photo_items = []
+
+        for photo_index, photo in enumerate(
+            photos,
+            start=1,
+        ):
+            photo_path = os.path.join(
+                photo_directory,
+                photo[
+                    "filename"
+                ],
+            )
+
+            if not os.path.exists(
+                photo_path
+            ):
+                continue
+
+            try:
+                with Image.open(
+                    photo_path
+                ) as photo_image:
+                    image_width, image_height = (
+                        photo_image.size
+                    )
+
+            except (
+                OSError,
+                UnidentifiedImageError,
+            ):
+                continue
+
+            valid_photo_items.append(
+                {
+                    "photo": photo,
+                    "photo_number": photo_index,
+                    "photo_path": photo_path,
+                    "image_width": image_width,
+                    "image_height": image_height,
+                }
+            )
+
+        photos_per_page = 8
+
+        for page_start in range(
+            0,
+            len(valid_photo_items),
+            photos_per_page,
+        ):
+            if page_start > 0:
+                story.append(
+                    PageBreak()
+                )
+
+            story.append(
+                section_heading(
+                    (
+                        "WORK ORDER PHOTOGRAPHS — "
+                        f"{formatted_number}"
+                    )
+                )
+            )
+
+            story.append(
+                Spacer(
+                    1,
+                    8,
+                )
+            )
+
+            page_photos = (
+                valid_photo_items[
+                    page_start:
+                    page_start
+                    + photos_per_page
+                ]
+            )
+
+            photo_cells = []
+
+            photo_cell_width = (
+                3.55 * inch
+            )
+
+            photo_cell_height = (
+                1.68 * inch
+            )
+
+            caption_height = (
+                0.28 * inch
+            )
+
+            image_area_width = (
+                3.30 * inch
+            )
+
+            image_area_height = (
+                1.25 * inch
+            )
+
+            for photo_item in page_photos:
+                image_width = (
+                    photo_item[
+                        "image_width"
+                    ]
+                )
+
+                image_height = (
+                    photo_item[
+                        "image_height"
+                    ]
+                )
+
+                scale = min(
+                    image_area_width
+                    / image_width,
+                    image_area_height
+                    / image_height,
+                )
+
+                display_width = (
+                    image_width
+                    * scale
+                )
+
+                display_height = (
+                    image_height
+                    * scale
+                )
+
+                photo_element = (
+                    ReportLabImage(
+                        photo_item[
+                            "photo_path"
+                        ],
+                        width=display_width,
+                        height=display_height,
+                    )
+                )
+
+                photo_element.hAlign = (
+                    "CENTER"
+                )
+
+                caption_text = (
+                    f"Photo "
+                    f"{photo_item['photo_number']}"
+                )
+
+                photo_record = (
+                    photo_item[
+                        "photo"
+                    ]
+                )
+
+                if photo_record[
+                    "created_at"
+                ]:
+                    caption_text += (
+                        "  |  "
+                        f"{photo_record['created_at']}"
+                    )
+
+                photo_cell = Table(
+                    [
+                        [
+                            photo_element
+                        ],
+                        [
+                            Paragraph(
+                                caption_text,
+                                small_style,
+                            )
+                        ],
+                    ],
+                    colWidths=[
+                        photo_cell_width
+                    ],
+                    rowHeights=[
+                        photo_cell_height
+                        - caption_height,
+                        caption_height,
+                    ],
+                )
+
+                photo_cell.setStyle(
+                    TableStyle(
+                        [
+                            (
+                                "BOX",
+                                (0, 0),
+                                (-1, -1),
+                                0.6,
+                                border_gray,
+                            ),
+                            (
+                                "VALIGN",
+                                (0, 0),
+                                (0, 0),
+                                "MIDDLE",
+                            ),
+                            (
+                                "ALIGN",
+                                (0, 0),
+                                (0, 0),
+                                "CENTER",
+                            ),
+                            (
+                                "VALIGN",
+                                (0, 1),
+                                (0, 1),
+                                "MIDDLE",
+                            ),
+                            (
+                                "ALIGN",
+                                (0, 1),
+                                (0, 1),
+                                "CENTER",
+                            ),
+                            (
+                                "BACKGROUND",
+                                (0, 1),
+                                (0, 1),
+                                light_gray,
+                            ),
+                            (
+                                "LEFTPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                4,
+                            ),
+                            (
+                                "RIGHTPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                4,
+                            ),
+                            (
+                                "TOPPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                4,
+                            ),
+                            (
+                                "BOTTOMPADDING",
+                                (0, 0),
+                                (-1, -1),
+                                4,
+                            ),
+                        ]
+                    )
+                )
+
+                photo_cells.append(
+                    photo_cell
+                )
+
+            photo_rows = []
+
+            for photo_index in range(
+                0,
+                len(photo_cells),
+                2,
+            ):
+                left_photo = (
+                    photo_cells[
+                        photo_index
+                    ]
+                )
+
+                if (
+                    photo_index + 1
+                    < len(photo_cells)
+                ):
+                    right_photo = (
+                        photo_cells[
+                            photo_index + 1
+                        ]
+                    )
+
+                else:
+                    right_photo = ""
+
+                photo_rows.append(
+                    [
+                        left_photo,
+                        right_photo,
+                    ]
+                )
+
+            while len(
+                photo_rows
+            ) < 4:
+                photo_rows.append(
+                    [
+                        "",
+                        "",
+                    ]
+                )
+
+            photo_grid = Table(
+                photo_rows,
+                colWidths=[
+                    3.65 * inch,
+                    3.65 * inch,
+                ],
+                rowHeights=[
+                    1.75 * inch,
+                    1.75 * inch,
+                    1.75 * inch,
+                    1.75 * inch,
+                ],
+            )
+
+            photo_grid.setStyle(
+                TableStyle(
+                    [
+                        (
+                            "VALIGN",
+                            (0, 0),
+                            (-1, -1),
+                            "MIDDLE",
+                        ),
+                        (
+                            "ALIGN",
+                            (0, 0),
+                            (-1, -1),
+                            "CENTER",
+                        ),
+                        (
+                            "LEFTPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            3,
+                        ),
+                        (
+                            "RIGHTPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            3,
+                        ),
+                        (
+                            "TOPPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            3,
+                        ),
+                        (
+                            "BOTTOMPADDING",
+                            (0, 0),
+                            (-1, -1),
+                            3,
+                        ),
+                    ]
+                )
+            )
+
+            story.append(
+                photo_grid
+            )
+
+    document.build(
+        story,
+        onFirstPage=draw_footer,
+        onLaterPages=draw_footer,
+    )
+
+    pdf_buffer.seek(0)
+
+    return Response(
+        pdf_buffer.getvalue(),
+        mimetype="application/pdf",
+        headers={
+            "Content-Disposition": (
+                "inline; "
+                f'filename="{formatted_number}.pdf"'
+            ),
+        },
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>"
+)
+@admin_required
+def admin_work_order_detail(
+    work_order_id,
+):
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            work_orders.*,
+
+            customers.display_name
+                AS customer_display_name,
+
+            customers.commercial_name
+                AS customer_commercial_name,
+
+            customer_contacts.first_name
+                AS contact_first_name,
+
+            customer_contacts.last_name
+                AS contact_last_name,
+
+            customer_contacts.job_title
+                AS contact_job_title,
+
+            customer_contacts.phone
+                AS contact_phone,
+
+            customer_contacts.email
+                AS contact_email,
+
+            admin_users.first_name
+                AS created_by_first_name,
+
+            admin_users.last_name
+                AS created_by_last_name
+
+        FROM work_orders
+
+        JOIN customers
+            ON customers.id =
+                work_orders.customer_id
+
+        LEFT JOIN customer_contacts
+            ON customer_contacts.id =
+                work_orders.customer_contact_id
+
+        LEFT JOIN admin_users
+            ON admin_users.id =
+                work_orders.created_by
+
+        WHERE work_orders.id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    materials = connection.execute(
+        """
+        SELECT *
+        FROM work_order_materials
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    materials_used = connection.execute(
+        """
+        SELECT *
+        FROM work_order_materials_used
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    materials_used_summary = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(
+                    quantity
+                    * unit_cost
+                ),
+                0
+            ) AS total_cost
+
+        FROM work_order_materials_used
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    photos = connection.execute(
+        """
+        SELECT
+            work_order_photos.*,
+
+            admin_users.first_name
+                AS uploaded_by_first_name,
+
+            admin_users.last_name
+                AS uploaded_by_last_name
+
+        FROM work_order_photos
+
+        LEFT JOIN admin_users
+            ON admin_users.id =
+                work_order_photos.uploaded_by
+
+        WHERE work_order_photos.work_order_id = ?
+
+        ORDER BY
+            work_order_photos.created_at DESC,
+            work_order_photos.id DESC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    time_entries = connection.execute(
+        """
+        SELECT
+            work_order_time_entries.*,
+
+            company_personnel.first_name
+                AS worker_first_name,
+
+            company_personnel.last_name
+                AS worker_last_name,
+
+            company_personnel.job_title
+                AS worker_job_title,
+
+            admin_users.first_name
+                AS entered_by_first_name,
+
+            admin_users.last_name
+                AS entered_by_last_name
+
+        FROM work_order_time_entries
+
+        JOIN company_personnel
+            ON company_personnel.id =
+                work_order_time_entries.personnel_id
+
+        LEFT JOIN admin_users
+            ON admin_users.id =
+                work_order_time_entries.entered_by
+
+        WHERE work_order_time_entries.work_order_id = ?
+
+        ORDER BY
+            work_order_time_entries.work_date ASC,
+            company_personnel.last_name
+                COLLATE NOCASE,
+            company_personnel.first_name
+                COLLATE NOCASE,
+            work_order_time_entries.id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    time_workers = connection.execute(
+        """
+        SELECT
+            id,
+            first_name,
+            last_name,
+            job_title
+        FROM company_personnel
+        WHERE is_active = 1
+          AND is_time_worker = 1
+        ORDER BY
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE,
+            id
+        """
+    ).fetchall()
+
+    time_summary = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(onsite_hours),
+                0
+            ) AS onsite_hours,
+
+            COALESCE(
+                SUM(travel_hours),
+                0
+            ) AS travel_hours,
+
+            COALESCE(
+                SUM(lunch_hours),
+                0
+            ) AS lunch_hours,
+
+            COALESCE(
+                SUM(total_hours),
+                0
+            ) AS total_hours
+
+        FROM work_order_time_entries
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    connection.close()
+
+    if work_order is None:
+        abort(404)
+
+    return render_template(
+        "admin_work_order_detail.html",
+        work_order=work_order,
+        formatted_work_order_number=(
+            format_work_order_number(
+                work_order[
+                    "work_order_number"
+                ]
+            )
+        ),
+        materials=materials,
+        materials_used=materials_used,
+        materials_used_summary=(
+            materials_used_summary
+        ),
+        photos=photos,
+        time_entries=time_entries,
+        time_workers=time_workers,
+        time_summary=time_summary,
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/edit",
+    methods=["GET", "POST"],
+)
+@admin_required
+def admin_work_order_edit(
+    work_order_id,
+):
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT *
+        FROM work_orders
+        WHERE id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    customer = connection.execute(
+        """
+        SELECT *
+        FROM customers
+        WHERE id = ?
+        """,
+        (work_order["customer_id"],),
+    ).fetchone()
+
+    contacts = connection.execute(
+        """
+        SELECT *
+        FROM customer_contacts
+        WHERE customer_id = ?
+          AND is_active = 1
+        ORDER BY
+            is_primary DESC,
+            last_name COLLATE NOCASE,
+            first_name COLLATE NOCASE,
+            id
+        """,
+        (work_order["customer_id"],),
+    ).fetchall()
+
+    materials = connection.execute(
+        """
+        SELECT *
+        FROM work_order_materials
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    if request.method == "POST":
+        validate_csrf_token()
+
+        contact_id = (
+            request.form.get(
+                "customer_contact_id",
+                "",
+            ).strip()
+        )
+
+        work_order_type = (
+            request.form.get(
+                "work_order_type",
+                "",
+            ).strip()
+        )
+
+        status = (
+            request.form.get(
+                "status",
+                "open",
+            )
+            .strip()
+            .lower()
+        )
+
+        scheduled_date = (
+            request.form.get(
+                "scheduled_date",
+                "",
+            ).strip()
+        )
+
+        project_address_line_1 = (
+            request.form.get(
+                "project_address_line_1",
+                "",
+            ).strip()
+        )
+
+        project_address_line_2 = (
+            request.form.get(
+                "project_address_line_2",
+                "",
+            ).strip()
+        )
+
+        project_city = (
+            request.form.get(
+                "project_city",
+                "",
+            ).strip()
+        )
+
+        project_state = (
+            request.form.get(
+                "project_state",
+                "",
+            )
+            .strip()
+            .upper()
+        )
+
+        project_postal_code = (
+            request.form.get(
+                "project_postal_code",
+                "",
+            ).strip()
+        )
+
+        work_description = (
+            request.form.get(
+                "work_description",
+                "",
+            ).strip()
+        )
+
+        scope_of_work = (
+            request.form.get(
+                "scope_of_work",
+                "",
+            ).strip()
+        )
+
+        total_onsite_hours_text = (
+            request.form.get(
+                "total_onsite_hours",
+                "",
+            ).strip()
+        )
+
+        total_travel_hours_text = (
+            request.form.get(
+                "total_travel_hours",
+                "",
+            ).strip()
+        )
+
+        internal_notes = (
+            request.form.get(
+                "internal_notes",
+                "",
+            ).strip()
+        )
+
+        material_names = request.form.getlist(
+            "material_name[]"
+        )
+
+        material_quantities = request.form.getlist(
+            "material_quantity[]"
+        )
+
+        material_units = request.form.getlist(
+            "material_unit[]"
+        )
+
+        material_unit_costs = request.form.getlist(
+            "material_unit_cost[]"
+        )
+
+        submitted_materials = []
+
+        material_row_count = max(
+            len(material_names),
+            len(material_quantities),
+            len(material_units),
+            len(material_unit_costs),
+        )
+
+        for material_index in range(
+            material_row_count
+        ):
+            submitted_materials.append(
+                {
+                    "material_name": (
+                        material_names[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_names)
+                        else ""
+                    ),
+                    "quantity": (
+                        material_quantities[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_quantities)
+                        else ""
+                    ),
+                    "unit": (
+                        material_units[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_units)
+                        else ""
+                    ),
+                    "unit_cost": (
+                        material_unit_costs[
+                            material_index
+                        ].strip()
+                        if material_index
+                        < len(material_unit_costs)
+                        else ""
+                    ),
+                }
+            )
+
+        errors = []
+
+        total_onsite_hours = None
+        total_travel_hours = None
+
+        if total_onsite_hours_text:
+            try:
+                total_onsite_hours = float(
+                    total_onsite_hours_text
+                )
+
+                if total_onsite_hours < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        "Total onsite hours must be "
+                        "zero or greater."
+                    )
+                )
+
+        if total_travel_hours_text:
+            try:
+                total_travel_hours = float(
+                    total_travel_hours_text
+                )
+
+                if total_travel_hours < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        "Total travel hours must be "
+                        "zero or greater."
+                    )
+                )
+
+        cleaned_materials = []
+
+        for material_index, material in enumerate(
+            submitted_materials,
+            start=1,
+        ):
+            material_name = material[
+                "material_name"
+            ]
+
+            quantity_text = material[
+                "quantity"
+            ]
+
+            unit = material[
+                "unit"
+            ]
+
+            unit_cost_text = material[
+                "unit_cost"
+            ]
+
+            row_has_data = any(
+                [
+                    material_name,
+                    quantity_text,
+                    unit,
+                    unit_cost_text,
+                ]
+            )
+
+            if not row_has_data:
+                continue
+
+            if not material_name:
+                errors.append(
+                    (
+                        f"Material row {material_index} "
+                        "needs a material name."
+                    )
+                )
+
+                continue
+
+            try:
+                quantity = float(
+                    quantity_text or 0
+                )
+
+                if quantity < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        f"Material row {material_index} "
+                        "has an invalid quantity."
+                    )
+                )
+
+                continue
+
+            try:
+                unit_cost = float(
+                    unit_cost_text or 0
+                )
+
+                if unit_cost < 0:
+                    raise ValueError
+
+            except ValueError:
+                errors.append(
+                    (
+                        f"Material row {material_index} "
+                        "has an invalid unit cost."
+                    )
+                )
+
+                continue
+
+            cleaned_materials.append(
+                {
+                    "material_name": material_name,
+                    "quantity": quantity,
+                    "unit": unit or None,
+                    "unit_cost": unit_cost,
+                }
+            )
+
+        valid_statuses = {
+            "open",
+            "scheduled",
+            "in_progress",
+            "completed",
+            "cancelled",
+        }
+
+        if not work_order_type:
+            errors.append(
+                "Work order type is required."
+            )
+
+        if status not in valid_statuses:
+            errors.append(
+                "Select a valid work order status."
+            )
+
+        if (
+            status == "scheduled"
+            and not scheduled_date
+        ):
+            errors.append(
+                (
+                    "A scheduled work order must "
+                    "have a scheduled date."
+                )
+            )
+
+        if contact_id:
+            selected_contact = (
+                connection.execute(
+                    """
+                    SELECT id
+                    FROM customer_contacts
+                    WHERE id = ?
+                      AND customer_id = ?
+                      AND is_active = 1
+                    """,
+                    (
+                        int(contact_id),
+                        work_order["customer_id"],
+                    ),
+                ).fetchone()
+            )
+
+            if selected_contact is None:
+                errors.append(
+                    (
+                        "Select a valid active "
+                        "customer contact."
+                    )
+                )
+
+        if not project_address_line_1:
+            errors.append(
+                "Project address is required."
+            )
+
+        if not project_city:
+            errors.append(
+                "Project city is required."
+            )
+
+        if not project_state:
+            errors.append(
+                "Project state is required."
+            )
+
+        if not project_postal_code:
+            errors.append(
+                (
+                    "Project ZIP / Postal Code "
+                    "is required."
+                )
+            )
+
+        if errors:
+            connection.close()
+
+            for error in errors:
+                flash(
+                    error,
+                    "error",
+                )
+
+            return render_template(
+                "admin_work_order_edit.html",
+                work_order=work_order,
+                customer=customer,
+                contacts=contacts,
+                form_materials=(
+                    submitted_materials
+                ),
+                formatted_work_order_number=(
+                    format_work_order_number(
+                        work_order[
+                            "work_order_number"
+                        ]
+                    )
+                ),
+            )
+
+        now = current_timestamp()
+
+        connection.execute(
+            """
+            UPDATE work_orders
+            SET
+                customer_contact_id = ?,
+                work_order_type = ?,
+                status = ?,
+                scheduled_date = ?,
+                project_address_line_1 = ?,
+                project_address_line_2 = ?,
+                project_city = ?,
+                project_state = ?,
+                project_postal_code = ?,
+                work_description = ?,
+                scope_of_work = ?,
+                total_onsite_hours = ?,
+                total_travel_hours = ?,
+                internal_notes = ?,
+                updated_at = ?
+            WHERE id = ?
+            """,
+            (
+                (
+                    int(contact_id)
+                    if contact_id
+                    else None
+                ),
+                work_order_type,
+                status,
+                scheduled_date or None,
+                project_address_line_1,
+                project_address_line_2 or None,
+                project_city,
+                project_state,
+                project_postal_code,
+                work_description or None,
+                scope_of_work or None,
+                total_onsite_hours,
+                total_travel_hours,
+                internal_notes or None,
+                now,
+                work_order_id,
+            ),
+        )
+
+        connection.execute(
+            """
+            DELETE FROM work_order_materials
+            WHERE work_order_id = ?
+            """,
+            (work_order_id,),
+        )
+
+        for display_order, material in enumerate(
+            cleaned_materials
+        ):
+            connection.execute(
+                """
+                INSERT INTO work_order_materials (
+                    work_order_id,
+                    material_name,
+                    quantity,
+                    unit,
+                    unit_cost,
+                    display_order,
+                    created_at,
+                    updated_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    work_order_id,
+                    material["material_name"],
+                    material["quantity"],
+                    material["unit"],
+                    material["unit_cost"],
+                    display_order,
+                    now,
+                    now,
+                ),
+            )
+
+        connection.commit()
+        connection.close()
+
+        formatted_number = (
+            format_work_order_number(
+                work_order[
+                    "work_order_number"
+                ]
+            )
+        )
+
+        write_audit_log(
+            action="work_order_updated",
+            category="work_orders",
+            description=(
+                f"{formatted_number} "
+                "was updated."
+            ),
+            entity_type="work_order",
+            entity_id=work_order_id,
+        )
+
+        flash(
+            (
+                f"{formatted_number} "
+                "was updated successfully."
+            ),
+            "success",
+        )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+        )
+
+    connection.close()
+
+    form_materials = [
+        {
+            "material_name": (
+                material["material_name"]
+            ),
+            "quantity": material["quantity"],
+            "unit": material["unit"] or "",
+            "unit_cost": material["unit_cost"],
+        }
+        for material in materials
+    ]
+
+    if not form_materials:
+        form_materials = [
+            {
+                "material_name": "",
+                "quantity": "",
+                "unit": "",
+                "unit_cost": "",
+            }
+        ]
+
+    return render_template(
+        "admin_work_order_edit.html",
+        work_order=work_order,
+        customer=customer,
+        contacts=contacts,
+        form_materials=form_materials,
+        formatted_work_order_number=(
+            format_work_order_number(
+                work_order[
+                    "work_order_number"
+                ]
+            )
+        ),
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/materials-used/add",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_material_used_add(
+    work_order_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            id,
+            work_order_number
+        FROM work_orders
+        WHERE id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    invoice_number = (
+        request.form.get(
+            "invoice_number",
+            "",
+        ).strip()
+    )
+
+    material_name = (
+        request.form.get(
+            "material_name",
+            "",
+        ).strip()
+    )
+
+    quantity_text = (
+        request.form.get(
+            "quantity",
+            "",
+        ).strip()
+    )
+
+    unit = (
+        request.form.get(
+            "unit",
+            "",
+        ).strip()
+    )
+
+    unit_cost_text = (
+        request.form.get(
+            "unit_cost",
+            "",
+        ).strip()
+    )
+
+    errors = []
+
+    if not material_name:
+        errors.append(
+            "Material is required."
+        )
+
+    try:
+        quantity = float(
+            quantity_text
+        )
+
+        if quantity < 0:
+            raise ValueError
+
+    except ValueError:
+        quantity = 0
+
+        errors.append(
+            (
+                "Quantity must be a number "
+                "that is zero or greater."
+            )
+        )
+
+    try:
+        unit_cost = float(
+            unit_cost_text
+        )
+
+        if unit_cost < 0:
+            raise ValueError
+
+    except ValueError:
+        unit_cost = 0
+
+        errors.append(
+            (
+                "Unit cost must be a number "
+                "that is zero or greater."
+            )
+        )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-materials-used"
+        )
+
+    next_display_order = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                MAX(display_order),
+                -1
+            ) + 1
+        FROM work_order_materials_used
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()[0]
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        INSERT INTO work_order_materials_used (
+            work_order_id,
+            invoice_number,
+            material_name,
+            quantity,
+            unit,
+            unit_cost,
+            display_order,
+            created_at,
+            updated_at
+        )
+        VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """,
+        (
+            work_order_id,
+            invoice_number or None,
+            material_name,
+            quantity,
+            unit or None,
+            unit_cost,
+            next_display_order,
+            now,
+            now,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            work_order[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_material_used_added",
+        category="work_orders",
+        description=(
+            f"Material used was added to "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Material used was added.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-materials-used"
+    )
+
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/materials-used/"
+    "<int:material_used_id>/edit",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_material_used_edit(
+    work_order_id,
+    material_used_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    material_used = connection.execute(
+        """
+        SELECT
+            work_order_materials_used.*,
+            work_orders.work_order_number
+        FROM work_order_materials_used
+
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_materials_used.work_order_id
+
+        WHERE work_order_materials_used.id = ?
+          AND work_order_materials_used.work_order_id = ?
+        """,
+        (
+            material_used_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if material_used is None:
+        connection.close()
+        abort(404)
+
+    invoice_number = (
+        request.form.get(
+            "invoice_number",
+            "",
+        ).strip()
+    )
+
+    material_name = (
+        request.form.get(
+            "material_name",
+            "",
+        ).strip()
+    )
+
+    quantity_text = (
+        request.form.get(
+            "quantity",
+            "",
+        ).strip()
+    )
+
+    unit = (
+        request.form.get(
+            "unit",
+            "",
+        ).strip()
+    )
+
+    unit_cost_text = (
+        request.form.get(
+            "unit_cost",
+            "",
+        ).strip()
+    )
+
+    errors = []
+
+    if not material_name:
+        errors.append(
+            "Material is required."
+        )
+
+    try:
+        quantity = float(
+            quantity_text
+        )
+
+        if quantity < 0:
+            raise ValueError
+
+    except ValueError:
+        quantity = 0
+
+        errors.append(
+            (
+                "Quantity must be a number "
+                "that is zero or greater."
+            )
+        )
+
+    try:
+        unit_cost = float(
+            unit_cost_text
+        )
+
+        if unit_cost < 0:
+            raise ValueError
+
+    except ValueError:
+        unit_cost = 0
+
+        errors.append(
+            (
+                "Unit cost must be a number "
+                "that is zero or greater."
+            )
+        )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-materials-used"
+        )
+
+    connection.execute(
+        """
+        UPDATE work_order_materials_used
+        SET
+            invoice_number = ?,
+            material_name = ?,
+            quantity = ?,
+            unit = ?,
+            unit_cost = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            invoice_number or None,
+            material_name,
+            quantity,
+            unit or None,
+            unit_cost,
+            current_timestamp(),
+            material_used_id,
+            work_order_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            material_used[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_material_used_updated",
+        category="work_orders",
+        description=(
+            f"Material used was updated on "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Material used was updated.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-materials-used"
+    )
+
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/materials-used/"
+    "<int:material_used_id>/delete",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_material_used_delete(
+    work_order_id,
+    material_used_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    material_used = connection.execute(
+        """
+        SELECT
+            work_order_materials_used.*,
+            work_orders.work_order_number
+        FROM work_order_materials_used
+
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_materials_used.work_order_id
+
+        WHERE work_order_materials_used.id = ?
+          AND work_order_materials_used.work_order_id = ?
+        """,
+        (
+            material_used_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if material_used is None:
+        connection.close()
+        abort(404)
+
+    connection.execute(
+        """
+        DELETE FROM work_order_materials_used
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            material_used_id,
+            work_order_id,
+        ),
+    )
+
+    remaining_materials = connection.execute(
+        """
+        SELECT id
+        FROM work_order_materials_used
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    for display_order, material in enumerate(
+        remaining_materials
+    ):
+        connection.execute(
+            """
+            UPDATE work_order_materials_used
+            SET display_order = ?
+            WHERE id = ?
+            """,
+            (
+                display_order,
+                material["id"],
+            ),
+        )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            material_used[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_material_used_deleted",
+        category="work_orders",
+        description=(
+            f"Material used was deleted from "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Material used was deleted.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-materials-used"
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/photos/upload",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_photos_upload(
+    work_order_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            id,
+            work_order_number
+        FROM work_orders
+        WHERE id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    uploaded_files = [
+        uploaded_file
+        for uploaded_file
+        in request.files.getlist(
+            "work_order_photos"
+        )
+        if (
+            uploaded_file
+            and uploaded_file.filename
+        )
+    ]
+
+    if not uploaded_files:
+        connection.close()
+
+        flash(
+            "Choose at least one photo to upload.",
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-photos"
+        )
+
+    if (
+        len(uploaded_files)
+        > WORK_ORDER_PHOTO_MAX_FILES_PER_UPLOAD
+    ):
+        connection.close()
+
+        flash(
+            (
+                "Upload no more than "
+                f"{WORK_ORDER_PHOTO_MAX_FILES_PER_UPLOAD} "
+                "photos at one time."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-photos"
+        )
+
+    current_admin = (
+        get_current_admin_user()
+    )
+
+    now = current_timestamp()
+
+    saved_files = []
+
+    try:
+        for uploaded_file in uploaded_files:
+            photo_data = (
+                save_work_order_photo(
+                    uploaded_file,
+                    work_order_id,
+                )
+            )
+
+            saved_files.append(
+                photo_data
+            )
+
+            connection.execute(
+                """
+                INSERT INTO work_order_photos (
+                    work_order_id,
+                    filename,
+                    thumbnail_filename,
+                    original_filename,
+                    uploaded_by,
+                    created_at
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?
+                )
+                """,
+                (
+                    work_order_id,
+                    photo_data[
+                        "filename"
+                    ],
+                    photo_data[
+                        "thumbnail_filename"
+                    ],
+                    photo_data[
+                        "original_filename"
+                    ],
+                    (
+                        current_admin["id"]
+                        if current_admin
+                        else None
+                    ),
+                    now,
+                ),
+            )
+
+        connection.commit()
+
+    except (
+        ValueError,
+        OSError,
+    ) as exc:
+        connection.rollback()
+        connection.close()
+
+        upload_directory = (
+            get_work_order_photo_directory(
+                work_order_id
+            )
+        )
+
+        for saved_file in saved_files:
+            for filename in (
+                saved_file["filename"],
+                saved_file[
+                    "thumbnail_filename"
+                ],
+            ):
+                file_path = os.path.join(
+                    upload_directory,
+                    filename,
+                )
+
+                if os.path.exists(
+                    file_path
+                ):
+                    os.remove(
+                        file_path
+                    )
+
+        flash(
+            str(exc),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-photos"
+        )
+
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            work_order[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_photos_uploaded",
+        category="work_orders",
+        description=(
+            f"{len(saved_files)} photo(s) "
+            f"were added to {formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        (
+            f"{len(saved_files)} photo(s) "
+            "uploaded successfully."
+        ),
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-photos"
+    )
+
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/photos/"
+    "<int:photo_id>/<photo_size>"
+)
+@admin_required
+def admin_work_order_photo_file(
+    work_order_id,
+    photo_id,
+    photo_size,
+):
+    connection = get_db_connection()
+
+    photo = connection.execute(
+        """
+        SELECT *
+        FROM work_order_photos
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            photo_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    connection.close()
+
+    if photo is None:
+        abort(404)
+
+    if photo_size == "thumbnail":
+        filename = photo[
+            "thumbnail_filename"
+        ]
+
+    elif photo_size == "full":
+        filename = photo[
+            "filename"
+        ]
+
+    else:
+        abort(404)
+
+    return send_from_directory(
+        get_work_order_photo_directory(
+            work_order_id
+        ),
+        filename,
+    )
+
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/photos/"
+    "<int:photo_id>/delete",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_photo_delete(
+    work_order_id,
+    photo_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    photo = connection.execute(
+        """
+        SELECT
+            work_order_photos.*,
+            work_orders.work_order_number
+
+        FROM work_order_photos
+
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_photos.work_order_id
+
+        WHERE work_order_photos.id = ?
+          AND work_order_photos.work_order_id = ?
+        """,
+        (
+            photo_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if photo is None:
+        connection.close()
+        abort(404)
+
+    connection.execute(
+        """
+        DELETE FROM work_order_photos
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            photo_id,
+            work_order_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    upload_directory = (
+        get_work_order_photo_directory(
+            work_order_id
+        )
+    )
+
+    for filename in (
+        photo["filename"],
+        photo["thumbnail_filename"],
+    ):
+        file_path = os.path.join(
+            upload_directory,
+            filename,
+        )
+
+        if os.path.exists(
+            file_path
+        ):
+            os.remove(
+                file_path
+            )
+
+    formatted_number = (
+        format_work_order_number(
+            photo[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_photo_deleted",
+        category="work_orders",
+        description=(
+            "A photo was deleted from "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Work order photo deleted.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-photos"
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/time-entries/add",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_time_entry_add(
+    work_order_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            id,
+            work_order_number
+        FROM work_orders
+        WHERE id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    work_date = (
+        request.form.get(
+            "work_date",
+            "",
+        ).strip()
+    )
+
+    personnel_id_text = (
+        request.form.get(
+            "personnel_id",
+            "",
+        ).strip()
+    )
+
+    onsite_hours_text = (
+        request.form.get(
+            "onsite_hours",
+            "",
+        ).strip()
+    )
+
+    travel_hours_text = (
+        request.form.get(
+            "travel_hours",
+            "",
+        ).strip()
+    )
+
+    lunch_applies = bool(
+        request.form.get(
+            "lunch_applies"
+        )
+    )
+
+    notes = (
+        request.form.get(
+            "notes",
+            "",
+        ).strip()
+    )
+
+    errors = []
+
+    try:
+        datetime.strptime(
+            work_date,
+            "%Y-%m-%d",
+        )
+
+    except ValueError:
+        errors.append(
+            "Enter a valid work date."
+        )
+
+    personnel = None
+
+    if personnel_id_text:
+        try:
+            personnel_id = int(
+                personnel_id_text
+            )
+
+        except ValueError:
+            personnel_id = None
+
+        if personnel_id is not None:
+            personnel = connection.execute(
+                """
+                SELECT *
+                FROM company_personnel
+                WHERE id = ?
+                  AND is_active = 1
+                  AND is_time_worker = 1
+                """,
+                (personnel_id,),
+            ).fetchone()
+
+    if personnel is None:
+        errors.append(
+            (
+                "Select an active person who "
+                "is enabled for time tracking."
+            )
+        )
+
+    try:
+        onsite_hours = float(
+            onsite_hours_text or 0
+        )
+
+        if onsite_hours < 0:
+            raise ValueError
+
+    except ValueError:
+        onsite_hours = 0
+
+        errors.append(
+            (
+                "Onsite hours must be "
+                "zero or greater."
+            )
+        )
+
+    try:
+        travel_hours = float(
+            travel_hours_text or 0
+        )
+
+        if travel_hours < 0:
+            raise ValueError
+
+    except ValueError:
+        travel_hours = 0
+
+        errors.append(
+            (
+                "Travel hours must be "
+                "zero or greater."
+            )
+        )
+
+    if (
+        onsite_hours == 0
+        and travel_hours == 0
+    ):
+        errors.append(
+            (
+                "Enter onsite hours, travel "
+                "hours, or both."
+            )
+        )
+
+    if (
+        lunch_applies
+        and personnel is not None
+        and work_date
+    ):
+        existing_lunch = connection.execute(
+            """
+            SELECT
+                work_order_time_entries.id,
+                work_orders.work_order_number
+            FROM work_order_time_entries
+
+            JOIN work_orders
+                ON work_orders.id =
+                    work_order_time_entries.work_order_id
+
+            WHERE work_order_time_entries.personnel_id = ?
+              AND work_order_time_entries.work_date = ?
+              AND work_order_time_entries.lunch_hours > 0
+            LIMIT 1
+            """,
+            (
+                personnel["id"],
+                work_date,
+            ),
+        ).fetchone()
+
+        if existing_lunch is not None:
+            errors.append(
+                (
+                    "This worker already has a "
+                    "lunch deduction for this date "
+                    "on "
+                    + format_work_order_number(
+                        existing_lunch[
+                            "work_order_number"
+                        ]
+                    )
+                    + "."
+                )
+            )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-timesheet"
+        )
+
+    calculated_time = (
+        calculate_work_order_time(
+            onsite_hours,
+            travel_hours,
+            lunch_applies,
+        )
+    )
+
+    current_admin = (
+        get_current_admin_user()
+    )
+
+    now = current_timestamp()
+
+    cursor = connection.execute(
+        """
+        INSERT INTO work_order_time_entries (
+            work_order_id,
+            personnel_id,
+            work_date,
+            onsite_hours,
+            travel_hours,
+            lunch_hours,
+            total_hours,
+            notes,
+            entered_by,
+            created_at,
+            updated_at
+        )
+        VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?, ?, ?
+        )
+        """,
+        (
+            work_order_id,
+            personnel["id"],
+            work_date,
+            onsite_hours,
+            travel_hours,
+            calculated_time[
+                "lunch_hours"
+            ],
+            calculated_time[
+                "total_hours"
+            ],
+            notes or None,
+            (
+                current_admin["id"]
+                if current_admin
+                else None
+            ),
+            now,
+            now,
+        ),
+    )
+
+    time_entry_id = cursor.lastrowid
+
+    refresh_work_order_time_totals(
+        connection,
+        work_order_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            work_order[
+                "work_order_number"
+            ]
+        )
+    )
+
+    worker_name = (
+        f"{personnel['first_name']} "
+        f"{personnel['last_name']}"
+    ).strip()
+
+    write_audit_log(
+        action="work_order_time_entry_created",
+        category="work_orders",
+        description=(
+            f"A time entry for {worker_name} "
+            f"was added to {formatted_number}."
+        ),
+        entity_type="work_order_time_entry",
+        entity_id=time_entry_id,
+    )
+
+    flash(
+        "Time entry added.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-timesheet"
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/time-entries/"
+    "<int:time_entry_id>/edit",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_time_entry_edit(
+    work_order_id,
+    time_entry_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    time_entry = connection.execute(
+        """
+        SELECT
+            work_order_time_entries.*,
+            work_orders.work_order_number
+        FROM work_order_time_entries
+
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_time_entries.work_order_id
+
+        WHERE work_order_time_entries.id = ?
+          AND work_order_time_entries.work_order_id = ?
+        """,
+        (
+            time_entry_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if time_entry is None:
+        connection.close()
+        abort(404)
+
+    work_date = (
+        request.form.get(
+            "work_date",
+            "",
+        ).strip()
+    )
+
+    personnel_id_text = (
+        request.form.get(
+            "personnel_id",
+            "",
+        ).strip()
+    )
+
+    onsite_hours_text = (
+        request.form.get(
+            "onsite_hours",
+            "",
+        ).strip()
+    )
+
+    travel_hours_text = (
+        request.form.get(
+            "travel_hours",
+            "",
+        ).strip()
+    )
+
+    lunch_applies = bool(
+        request.form.get(
+            "lunch_applies"
+        )
+    )
+
+    notes = (
+        request.form.get(
+            "notes",
+            "",
+        ).strip()
+    )
+
+    errors = []
+
+    try:
+        datetime.strptime(
+            work_date,
+            "%Y-%m-%d",
+        )
+
+    except ValueError:
+        errors.append(
+            "Enter a valid work date."
+        )
+
+    personnel = None
+
+    try:
+        personnel_id = int(
+            personnel_id_text
+        )
+
+    except ValueError:
+        personnel_id = None
+
+    if personnel_id is not None:
+        personnel = connection.execute(
+            """
+            SELECT *
+            FROM company_personnel
+            WHERE id = ?
+              AND (
+                    (
+                        is_active = 1
+                        AND is_time_worker = 1
+                    )
+                    OR id = ?
+              )
+            """,
+            (
+                personnel_id,
+                time_entry[
+                    "personnel_id"
+                ],
+            ),
+        ).fetchone()
+
+    if personnel is None:
+        errors.append(
+            (
+                "Select a valid person for "
+                "this time entry."
+            )
+        )
+
+    try:
+        onsite_hours = float(
+            onsite_hours_text or 0
+        )
+
+        if onsite_hours < 0:
+            raise ValueError
+
+    except ValueError:
+        onsite_hours = 0
+
+        errors.append(
+            (
+                "Onsite hours must be "
+                "zero or greater."
+            )
+        )
+
+    try:
+        travel_hours = float(
+            travel_hours_text or 0
+        )
+
+        if travel_hours < 0:
+            raise ValueError
+
+    except ValueError:
+        travel_hours = 0
+
+        errors.append(
+            (
+                "Travel hours must be "
+                "zero or greater."
+            )
+        )
+
+    if (
+        onsite_hours == 0
+        and travel_hours == 0
+    ):
+        errors.append(
+            (
+                "Enter onsite hours, travel "
+                "hours, or both."
+            )
+        )
+
+    if (
+        lunch_applies
+        and personnel is not None
+        and work_date
+    ):
+        existing_lunch = connection.execute(
+            """
+            SELECT
+                work_order_time_entries.id,
+                work_orders.work_order_number
+            FROM work_order_time_entries
+
+            JOIN work_orders
+                ON work_orders.id =
+                    work_order_time_entries.work_order_id
+
+            WHERE work_order_time_entries.personnel_id = ?
+              AND work_order_time_entries.work_date = ?
+              AND work_order_time_entries.lunch_hours > 0
+              AND work_order_time_entries.id != ?
+            LIMIT 1
+            """,
+            (
+                personnel["id"],
+                work_date,
+                time_entry_id,
+            ),
+        ).fetchone()
+
+        if existing_lunch is not None:
+            errors.append(
+                (
+                    "This worker already has a "
+                    "lunch deduction for this date "
+                    "on "
+                    + format_work_order_number(
+                        existing_lunch[
+                            "work_order_number"
+                        ]
+                    )
+                    + "."
+                )
+            )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-timesheet"
+        )
+
+    calculated_time = (
+        calculate_work_order_time(
+            onsite_hours,
+            travel_hours,
+            lunch_applies,
+        )
+    )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE work_order_time_entries
+        SET
+            personnel_id = ?,
+            work_date = ?,
+            onsite_hours = ?,
+            travel_hours = ?,
+            lunch_hours = ?,
+            total_hours = ?,
+            notes = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            personnel["id"],
+            work_date,
+            onsite_hours,
+            travel_hours,
+            calculated_time[
+                "lunch_hours"
+            ],
+            calculated_time[
+                "total_hours"
+            ],
+            notes or None,
+            now,
+            time_entry_id,
+            work_order_id,
+        ),
+    )
+
+    refresh_work_order_time_totals(
+        connection,
+        work_order_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            time_entry[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_time_entry_updated",
+        category="work_orders",
+        description=(
+            "A time entry was updated on "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order_time_entry",
+        entity_id=time_entry_id,
+    )
+
+    flash(
+        "Time entry updated.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-timesheet"
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/time-entries/"
+    "<int:time_entry_id>/delete",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_time_entry_delete(
+    work_order_id,
+    time_entry_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    time_entry = connection.execute(
+        """
+        SELECT
+            work_order_time_entries.*,
+            work_orders.work_order_number,
+            company_personnel.first_name,
+            company_personnel.last_name
+
+        FROM work_order_time_entries
+
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_time_entries.work_order_id
+
+        JOIN company_personnel
+            ON company_personnel.id =
+                work_order_time_entries.personnel_id
+
+        WHERE work_order_time_entries.id = ?
+          AND work_order_time_entries.work_order_id = ?
+        """,
+        (
+            time_entry_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if time_entry is None:
+        connection.close()
+        abort(404)
+
+    connection.execute(
+        """
+        DELETE FROM work_order_time_entries
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            time_entry_id,
+            work_order_id,
+        ),
+    )
+
+    refresh_work_order_time_totals(
+        connection,
+        work_order_id,
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            time_entry[
+                "work_order_number"
+            ]
+        )
+    )
+
+    worker_name = (
+        f"{time_entry['first_name']} "
+        f"{time_entry['last_name']}"
+    ).strip()
+
+    write_audit_log(
+        action="work_order_time_entry_deleted",
+        category="work_orders",
+        description=(
+            f"A time entry for {worker_name} "
+            f"was deleted from {formatted_number}."
+        ),
+        entity_type="work_order_time_entry",
+        entity_id=time_entry_id,
+    )
+
+    flash(
+        "Time entry deleted.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-timesheet"
     )
 
 @app.route("/admin/website")

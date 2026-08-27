@@ -1,0 +1,967 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Create Work Order | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<style>
+
+    .work-order-hours-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 18px;
+        align-items: end;
+    }
+
+    .work-order-hours-row .admin-field {
+        width: 170px;
+        min-width: 170px;
+    }
+
+    .work-order-hours-row input {
+        width: 100%;
+        min-height: 38px;
+        padding: 7px 9px;
+    }
+
+
+    .work-order-materials-wrap {
+        display: grid;
+        gap: 10px;
+        width: 100%;
+    }
+
+    .work-order-materials-header,
+    .work-order-material-row {
+        display: grid;
+        grid-template-columns:
+            minmax(220px, 2.4fr)
+            90px
+            130px
+            110px
+            100px
+            86px;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .work-order-materials-header {
+        padding: 0 8px;
+        color: #66717d;
+        font-size: 0.72rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+
+    .work-order-material-row {
+        padding: 6px 8px;
+        border: 1px solid #dce2e8;
+        border-radius: 6px;
+        background: #ffffff;
+    }
+
+    .work-order-material-row input {
+        width: 100%;
+        min-width: 0;
+        min-height: 36px;
+        padding: 6px 8px;
+        margin: 0;
+        font-size: 0.84rem;
+    }
+
+    .material-row-total {
+        font-size: 0.84rem;
+        font-weight: 800;
+        white-space: nowrap;
+        text-align: right;
+    }
+
+    .material-remove-button {
+        width: 86px;
+        min-height: 34px;
+        padding: 5px 7px;
+        margin: 0;
+        font-size: 0.7rem;
+    }
+
+
+    @media (max-width: 1050px) {
+
+        .work-order-materials-wrap {
+            overflow-x: auto;
+            padding-bottom: 4px;
+        }
+
+        .work-order-materials-header,
+        .work-order-material-row {
+            min-width: 820px;
+        }
+
+    }
+
+
+    @media (max-width: 600px) {
+
+        .work-order-hours-row {
+            display: grid;
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+            gap: 10px;
+        }
+
+        .work-order-hours-row .admin-field {
+            width: auto;
+            min-width: 0;
+        }
+
+    }
+
+</style>
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            Work Orders
+        </span>
+
+        <h2>
+            Create Work Order
+        </h2>
+
+        <p>
+            Create a new work order for
+            {{ customer["display_name"]
+               or customer["commercial_name"]
+               or "this customer" }}.
+        </p>
+
+    </div>
+
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for(
+                'admin_customer_detail',
+                customer_id=customer['id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Back to Customer
+        </a>
+
+    </div>
+
+</header>
+
+
+<form
+    method="post"
+    class="admin-project-form"
+>
+
+    <input
+        type="hidden"
+        name="csrf_token"
+        value="{{ csrf_token() }}"
+    >
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+
+                <h3>
+                    Work Order Information
+                </h3>
+
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+
+            <div class="admin-field">
+
+                <label>
+                    Customer
+                </label>
+
+                <input
+                    type="text"
+                    value="{{ customer['display_name']
+                        or customer['commercial_name']
+                        or 'Unnamed Customer' }}"
+                    disabled
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="customer_contact_id">
+                    Customer Contact
+                </label>
+
+                {% set selected_contact = request.form.get(
+                    'customer_contact_id',
+                    primary_contact['id']|string
+                    if primary_contact
+                    else ''
+                ) %}
+
+                <select
+                    id="customer_contact_id"
+                    name="customer_contact_id"
+                >
+
+                    <option value="">
+                        No Contact Selected
+                    </option>
+
+                    {% for contact in contacts %}
+
+                        <option
+                            value="{{ contact['id'] }}"
+                            {% if
+                                selected_contact
+                                == contact['id']|string
+                            %}
+                                selected
+                            {% endif %}
+                        >
+
+                            {{
+                                (
+                                    (contact["first_name"] or "")
+                                    ~ " "
+                                    ~ (contact["last_name"] or "")
+                                )|trim
+                                or "Unnamed Contact"
+                            }}
+
+                            {% if contact["job_title"] %}
+                                — {{ contact["job_title"] }}
+                            {% endif %}
+
+                            {% if contact["is_primary"] %}
+                                — Primary
+                            {% endif %}
+
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="work_order_type">
+                    Work Order Type
+                </label>
+
+                {% set selected_type = request.form.get(
+                    'work_order_type',
+                    ''
+                ) %}
+
+                <select
+                    id="work_order_type"
+                    name="work_order_type"
+                    required
+                >
+
+                    <option value="">
+                        Select Type
+                    </option>
+
+                    {% for value, label in [
+                        ('Standard Repair', 'Standard Repair'),
+                        ('Quote / Project', 'Quote / Project'),
+                        ('Evaluation', 'Evaluation'),
+                        ('Emergency', 'Emergency'),
+                        ('Maintenance', 'Maintenance'),
+                        ('Warranty / Callback', 'Warranty / Callback'),
+                        ('Other', 'Other')
+                    ] %}
+
+                        <option
+                            value="{{ value }}"
+                            {% if selected_type == value %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ label }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="status">
+                    Status
+                </label>
+
+                {% set selected_status = request.form.get(
+                    'status',
+                    'open'
+                ) %}
+
+                <select
+                    id="status"
+                    name="status"
+                    required
+                >
+
+                    <option
+                        value="open"
+                        {% if selected_status == 'open' %}
+                            selected
+                        {% endif %}
+                    >
+                        Open
+                    </option>
+
+                    <option
+                        value="scheduled"
+                        {% if selected_status == 'scheduled' %}
+                            selected
+                        {% endif %}
+                    >
+                        Scheduled
+                    </option>
+
+                    <option
+                        value="in_progress"
+                        {% if selected_status == 'in_progress' %}
+                            selected
+                        {% endif %}
+                    >
+                        In Progress
+                    </option>
+
+                    <option
+                        value="completed"
+                        {% if selected_status == 'completed' %}
+                            selected
+                        {% endif %}
+                    >
+                        Completed
+                    </option>
+
+                    <option
+                        value="cancelled"
+                        {% if selected_status == 'cancelled' %}
+                            selected
+                        {% endif %}
+                    >
+                        Cancelled
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="scheduled_date">
+                    Scheduled Date
+                </label>
+
+                <input
+                    type="date"
+                    id="scheduled_date"
+                    name="scheduled_date"
+                    value="{{ request.form.get(
+                        'scheduled_date',
+                        ''
+                    ) }}"
+                >
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+
+                <h3>
+                    Project / Service Address
+                </h3>
+
+                <p>
+                    The customer's current address is
+                    prefilled, but this can be changed for
+                    the individual work order.
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+
+            <div class="admin-field">
+
+                <label for="project_address_line_1">
+                    Address
+                </label>
+
+                <input
+                    type="text"
+                    id="project_address_line_1"
+                    name="project_address_line_1"
+                    value="{{ request.form.get(
+                        'project_address_line_1',
+                        customer['address_line_1'] or ''
+                    ) }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="project_address_line_2">
+                    Address Line 2
+                </label>
+
+                <input
+                    type="text"
+                    id="project_address_line_2"
+                    name="project_address_line_2"
+                    value="{{ request.form.get(
+                        'project_address_line_2',
+                        customer['address_line_2'] or ''
+                    ) }}"
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="project_city">
+                    City
+                </label>
+
+                <input
+                    type="text"
+                    id="project_city"
+                    name="project_city"
+                    value="{{ request.form.get(
+                        'project_city',
+                        customer['city'] or ''
+                    ) }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="project_state">
+                    State
+                </label>
+
+                <input
+                    type="text"
+                    id="project_state"
+                    name="project_state"
+                    maxlength="2"
+                    value="{{ request.form.get(
+                        'project_state',
+                        customer['state'] or ''
+                    ) }}"
+                    required
+                >
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="project_postal_code">
+                    ZIP / Postal Code
+                </label>
+
+                <input
+                    type="text"
+                    id="project_postal_code"
+                    name="project_postal_code"
+                    value="{{ request.form.get(
+                        'project_postal_code',
+                        customer['postal_code'] or ''
+                    ) }}"
+                    required
+                >
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <section class="admin-panel">
+
+        <div class="admin-panel-heading">
+
+            <div>
+
+                <h3>
+                    Work Information
+                </h3>
+
+            </div>
+
+        </div>
+
+
+        <div class="admin-form-grid">
+
+
+            <div class="admin-field admin-field-full">
+
+                <label for="work_description">
+                    Work Description / Notes
+                </label>
+
+                <textarea
+                    id="work_description"
+                    name="work_description"
+                    rows="5"
+                >{{ request.form.get(
+                    'work_description',
+                    ''
+                ) }}</textarea>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label for="scope_of_work">
+                    Scope of Work
+                </label>
+
+                <textarea
+                    id="scope_of_work"
+                    name="scope_of_work"
+                    rows="7"
+                >{{ request.form.get(
+                    'scope_of_work',
+                    ''
+                ) }}</textarea>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <div class="work-order-hours-row">
+
+                    <div class="admin-field">
+
+                        <label for="total_onsite_hours">
+                            Total Onsite Hours
+                        </label>
+
+                        <input
+                            type="number"
+                            id="total_onsite_hours"
+                            name="total_onsite_hours"
+                            min="0"
+                            step="0.25"
+                            value="{{ request.form.get(
+                                'total_onsite_hours',
+                                ''
+                            ) }}"
+                        >
+
+                    </div>
+
+
+                    <div class="admin-field">
+
+                        <label for="total_travel_hours">
+                            Total Travel Hours
+                        </label>
+
+                        <input
+                            type="number"
+                            id="total_travel_hours"
+                            name="total_travel_hours"
+                            min="0"
+                            step="0.25"
+                            value="{{ request.form.get(
+                                'total_travel_hours',
+                                ''
+                            ) }}"
+                        >
+
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label>
+                    Estimated Materials
+                </label>
+
+                <div class="work-order-materials-wrap">
+
+                    <div class="work-order-materials-header">
+
+                        <span>
+                            Material
+                        </span>
+
+                        <span>
+                            Quantity
+                        </span>
+
+                        <span>
+                            Unit
+                        </span>
+
+                        <span>
+                            Unit Cost
+                        </span>
+
+                        <span>
+                            Total
+                        </span>
+
+                        <span></span>
+
+                    </div>
+
+
+                    <div id="material-rows">
+
+                        {% for material in form_materials %}
+
+                            <div class="work-order-material-row">
+
+                                <input
+                                    type="text"
+                                    name="material_name[]"
+                                    value="{{ material['material_name'] }}"
+                                    placeholder="Material"
+                                >
+
+                                <input
+                                    type="number"
+                                    name="material_quantity[]"
+                                    min="0"
+                                    step="0.01"
+                                    value="{{ material['quantity'] }}"
+                                    placeholder="0"
+                                    class="material-quantity"
+                                >
+
+                                <input
+                                    type="text"
+                                    name="material_unit[]"
+                                    value="{{ material['unit'] }}"
+                                    placeholder="EA, LF, SF, roll..."
+                                >
+
+                                <input
+                                    type="number"
+                                    name="material_unit_cost[]"
+                                    min="0"
+                                    step="0.01"
+                                    value="{{ material['unit_cost'] }}"
+                                    placeholder="0.00"
+                                    class="material-unit-cost"
+                                >
+
+                                <div class="material-row-total">
+                                    $0.00
+                                </div>
+
+                                <button
+                                    type="button"
+                                    class="
+                                        admin-secondary-button
+                                        material-remove-button
+                                    "
+                                    onclick="removeMaterialRow(this)"
+                                >
+                                    Remove
+                                </button>
+
+                            </div>
+
+                        {% endfor %}
+
+                    </div>
+
+
+                    <button
+                        type="button"
+                        class="admin-secondary-button"
+                        onclick="addMaterialRow()"
+                    >
+                        + Add Material
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <div class="admin-field admin-field-full">
+
+                <label for="internal_notes">
+                    Internal Notes
+                </label>
+
+                <textarea
+                    id="internal_notes"
+                    name="internal_notes"
+                    rows="5"
+                >{{ request.form.get(
+                    'internal_notes',
+                    ''
+                ) }}</textarea>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+    <div class="admin-form-actions">
+
+        <button
+            type="submit"
+            class="admin-primary-button"
+        >
+            Create Work Order
+        </button>
+
+        <a
+            href="{{ url_for(
+                'admin_customer_detail',
+                customer_id=customer['id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Cancel
+        </a>
+
+    </div>
+
+</form>
+
+<script>
+
+    function updateMaterialTotal(row) {
+        const quantityInput = row.querySelector(
+            ".material-quantity"
+        );
+
+        const unitCostInput = row.querySelector(
+            ".material-unit-cost"
+        );
+
+        const totalElement = row.querySelector(
+            ".material-row-total"
+        );
+
+        const quantity = parseFloat(
+            quantityInput.value
+        ) || 0;
+
+        const unitCost = parseFloat(
+            unitCostInput.value
+        ) || 0;
+
+        totalElement.textContent = (
+            "$"
+            + (
+                quantity * unitCost
+            ).toFixed(2)
+        );
+    }
+
+
+    function connectMaterialRow(row) {
+        row.querySelectorAll(
+            ".material-quantity, "
+            + ".material-unit-cost"
+        ).forEach(
+            function(input) {
+                input.addEventListener(
+                    "input",
+                    function() {
+                        updateMaterialTotal(
+                            row
+                        );
+                    }
+                );
+            }
+        );
+
+        updateMaterialTotal(
+            row
+        );
+    }
+
+
+    function addMaterialRow() {
+        const rows = document.getElementById(
+            "material-rows"
+        );
+
+        const row = document.createElement(
+            "div"
+        );
+
+        row.className = (
+            "work-order-material-row"
+        );
+
+        row.innerHTML = `
+            <input
+                type="text"
+                name="material_name[]"
+                placeholder="Material"
+            >
+
+            <input
+                type="number"
+                name="material_quantity[]"
+                min="0"
+                step="0.01"
+                placeholder="0"
+                class="material-quantity"
+            >
+
+            <input
+                type="text"
+                name="material_unit[]"
+                placeholder="EA, LF, SF, roll..."
+            >
+
+            <input
+                type="number"
+                name="material_unit_cost[]"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                class="material-unit-cost"
+            >
+
+            <div class="material-row-total">
+                $0.00
+            </div>
+
+            <button
+                type="button"
+                class="
+                    admin-secondary-button
+                    material-remove-button
+                "
+                onclick="removeMaterialRow(this)"
+            >
+                Remove
+            </button>
+        `;
+
+        rows.appendChild(
+            row
+        );
+
+        connectMaterialRow(
+            row
+        );
+    }
+
+
+    function removeMaterialRow(button) {
+        const rows = document.getElementById(
+            "material-rows"
+        );
+
+        const row = button.closest(
+            ".work-order-material-row"
+        );
+
+        if (
+            rows.querySelectorAll(
+                ".work-order-material-row"
+            ).length === 1
+        ) {
+            row.querySelectorAll(
+                "input"
+            ).forEach(
+                function(input) {
+                    input.value = "";
+                }
+            );
+
+            updateMaterialTotal(
+                row
+            );
+
+            return;
+        }
+
+        row.remove();
+    }
+
+
+    document.querySelectorAll(
+        ".work-order-material-row"
+    ).forEach(
+        function(row) {
+            connectMaterialRow(
+                row
+            );
+        }
+    );
+
+</script>
+
+{% endblock %}
