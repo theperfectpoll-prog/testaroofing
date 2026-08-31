@@ -288,7 +288,7 @@
     .work-order-time-summary {
         display: grid;
         grid-template-columns:
-            repeat(4, minmax(120px, 1fr));
+            repeat(2, minmax(140px, 220px));
         gap: 12px;
         margin-bottom: 20px;
     }
@@ -395,8 +395,8 @@
     }
 
     .work-order-time-table
-    input[type="number"] {
-        width: 80px;
+    input[type="time"] {
+        width: 115px;
     }
 
     .work-order-time-table
@@ -528,6 +528,17 @@
             class="admin-primary-button"
         >
             Edit Work Order
+        </a>
+
+        <a
+            href="{{ url_for(
+                'admin_work_order_pdf',
+                work_order_id=work_order['id']
+            ) }}"
+            class="admin-secondary-button"
+            target="_blank"
+        >
+            Open PDF
         </a>
 
         <a
@@ -830,33 +841,14 @@
         <div class="work-order-item">
 
             <span>
-                Total Onsite Hours
+                Total Labor Hours
             </span>
 
             <strong>
                 {{
-                    work_order["total_onsite_hours"]
-                    if work_order["total_onsite_hours"]
-                    is not none
-                    else "Not Entered"
-                }}
-            </strong>
-
-        </div>
-
-
-        <div class="work-order-item">
-
-            <span>
-                Total Travel Hours
-            </span>
-
-            <strong>
-                {{
-                    work_order["total_travel_hours"]
-                    if work_order["total_travel_hours"]
-                    is not none
-                    else "Not Entered"
+                    "%.2f"|format(
+                        time_summary["total_hours"]
+                    )
                 }}
             </strong>
 
@@ -865,7 +857,6 @@
     </div>
 
 </section>
-
 
 <section class="admin-panel">
 
@@ -1504,7 +1495,8 @@
             </h3>
 
             <p>
-                Track onsite and paid travel time for
+                Track each worker's start time, end time,
+                lunch deduction, and total hours for
                 this work order.
             </p>
 
@@ -1514,36 +1506,6 @@
 
 
     <div class="work-order-time-summary">
-
-        <div class="work-order-time-summary-card">
-
-            <span>
-                Onsite Hours
-            </span>
-
-            <strong>
-                {{ "%.2f"|format(
-                    time_summary["onsite_hours"]
-                ) }}
-            </strong>
-
-        </div>
-
-
-        <div class="work-order-time-summary-card">
-
-            <span>
-                Travel Hours
-            </span>
-
-            <strong>
-                {{ "%.2f"|format(
-                    time_summary["travel_hours"]
-                ) }}
-            </strong>
-
-        </div>
-
 
         <div class="work-order-time-summary-card">
 
@@ -1563,7 +1525,7 @@
         <div class="work-order-time-summary-card">
 
             <span>
-                Payable Hours
+                Total Labor Hours
             </span>
 
             <strong>
@@ -1575,7 +1537,6 @@
         </div>
 
     </div>
-
 
     {% if time_workers %}
 
@@ -1597,19 +1558,34 @@
 
             <div class="work-order-time-field">
 
-                <label for="time_work_date">
-                    Work Date
+                <label for="time_in">
+                    Time In
                 </label>
 
                 <input
-                    type="date"
-                    id="time_work_date"
-                    name="work_date"
+                    type="time"
+                    id="time_in"
+                    name="time_in"
                     required
                 >
 
             </div>
 
+
+            <div class="work-order-time-field">
+
+                <label for="time_out">
+                    Time Out
+                </label>
+
+                <input
+                    type="time"
+                    id="time_out"
+                    name="time_out"
+                    required
+                >
+
+            </div>
 
             <div class="work-order-time-field">
 
@@ -1743,8 +1719,8 @@
                     <tr>
                         <th>Work Date</th>
                         <th>Worker</th>
-                        <th>Onsite</th>
-                        <th>Travel</th>
+                        <th>Time In</th>
+                        <th>Time Out</th>
                         <th>Lunch</th>
                         <th>Total</th>
                         <th>Notes</th>
@@ -1848,32 +1824,27 @@
 
                                 </td>
 
-
                                 <td>
 
                                     <input
-                                        type="number"
-                                        name="onsite_hours"
-                                        min="0"
-                                        step="0.25"
-                                        value="{{ entry['onsite_hours'] }}"
+                                        type="time"
+                                        name="time_in"
+                                        value="{{ entry['time_in'] or '' }}"
+                                        required
                                     >
 
                                 </td>
 
-
                                 <td>
 
                                     <input
-                                        type="number"
-                                        name="travel_hours"
-                                        min="0"
-                                        step="0.25"
-                                        value="{{ entry['travel_hours'] }}"
+                                        type="time"
+                                        name="time_out"
+                                        value="{{ entry['time_out'] or '' }}"
+                                        required
                                     >
 
                                 </td>
-
 
                                 <td class="work-order-time-lunch">
 

@@ -187,43 +187,6 @@
 
             </details>
 
-
-            <details
-                class="admin-navigation-group"
-                {% if request.endpoint in [
-                    'admin_personnel',
-                    'admin_products'
-                ] %}
-                    open
-                {% endif %}
-            >
-
-                <summary>
-                    Company
-                </summary>
-
-                <div class="admin-navigation-submenu">
-
-                    <a
-                        class="{% if request.endpoint in [
-                            'admin_personnel',
-                            'admin_personnel_new',
-                            'admin_personnel_edit'
-                        ] %}active{% endif %}"
-                    >
-                        Personnel
-                    </a>
-
-                    <span class="admin-navigation-disabled">
-                        Products / Materials
-                        <small>Coming soon</small>
-                    </span>
-
-                </div>
-
-            </details>
-
-
             <details
                 class="admin-navigation-group"
                 {% if request.endpoint in [

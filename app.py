@@ -3973,6 +3973,15 @@ def ensure_database_schema():
             """
         )
 
+    if "total_labor_hours" not in work_order_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_orders
+            ADD COLUMN total_labor_hours REAL
+            NOT NULL DEFAULT 0
+            """
+        )
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS work_order_materials (
@@ -4146,6 +4155,29 @@ def ensure_database_schema():
         )
         """
     )
+
+    work_order_time_entry_columns = {
+        row["name"]
+        for row in cursor.execute(
+            "PRAGMA table_info(work_order_time_entries)"
+        ).fetchall()
+    }
+
+    if "time_in" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN time_in TEXT
+            """
+        )
+
+    if "time_out" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN time_out TEXT
+            """
+        )
 
     cursor.execute(
         """
@@ -10032,14 +10064,23 @@ def format_work_order_number(
     )
 
 def calculate_work_order_time(
-    onsite_hours,
-    travel_hours,
+    time_in,
+    time_out,
     lunch_applies,
 ):
-    combined_hours = (
-        onsite_hours
-        + travel_hours
+    start_time = datetime.strptime(
+        time_in,
+        "%H:%M",
     )
+
+    end_time = datetime.strptime(
+        time_out,
+        "%H:%M",
+    )
+
+    elapsed_hours = (
+        end_time - start_time
+    ).total_seconds() / 3600
 
     lunch_hours = (
         0.5
@@ -10047,9 +10088,9 @@ def calculate_work_order_time(
         else 0.0
     )
 
-    total_hours = (
-        combined_hours
-        - lunch_hours
+    total_hours = max(
+        elapsed_hours - lunch_hours,
+        0.0,
     )
 
     return {
@@ -10059,6 +10100,64 @@ def calculate_work_order_time(
             2,
         ),
     }
+
+
+def format_work_order_clock_time(
+    value,
+):
+    if not value:
+        return ""
+
+    try:
+        parsed_time = datetime.strptime(
+            value,
+            "%H:%M",
+        )
+
+        return (
+            parsed_time.strftime(
+                "%I:%M %p"
+            )
+            .lstrip("0")
+        )
+
+    except ValueError:
+        return str(value)
+
+
+def refresh_work_order_time_totals(
+    connection,
+    work_order_id,
+):
+    totals = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(total_hours),
+                0
+            ) AS total_hours
+
+        FROM work_order_time_entries
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    connection.execute(
+        """
+        UPDATE work_orders
+        SET
+            total_labor_hours = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (
+            totals["total_hours"],
+            current_timestamp(),
+            work_order_id,
+        ),
+    )
 
 def refresh_work_order_time_totals(
     connection,
@@ -13679,16 +13778,6 @@ def admin_work_order_pdf(
         """
         SELECT
             COALESCE(
-                SUM(onsite_hours),
-                0
-            ) AS onsite_hours,
-
-            COALESCE(
-                SUM(travel_hours),
-                0
-            ) AS travel_hours,
-
-            COALESCE(
                 SUM(lunch_hours),
                 0
             ) AS lunch_hours,
@@ -13763,7 +13852,7 @@ def admin_work_order_pdf(
     )
 
     border_gray = colors.HexColor(
-        "#D7DCE1"
+        "#8A929A"
     )
 
     styles = getSampleStyleSheet()
@@ -14524,35 +14613,15 @@ def admin_work_order_pdf(
     labor_data = [
         [
             Paragraph(
-                "ONSITE HOURS",
-                label_style,
-            ),
-            Paragraph(
-                "TRAVEL HOURS",
-                label_style,
-            ),
-            Paragraph(
                 "LUNCH DEDUCTED",
                 label_style,
             ),
             Paragraph(
-                "PAYABLE HOURS",
+                "TOTAL LABOR HOURS",
                 label_style,
             ),
         ],
         [
-            Paragraph(
-                (
-                    f"{time_summary['onsite_hours']:.2f}"
-                ),
-                value_style,
-            ),
-            Paragraph(
-                (
-                    f"{time_summary['travel_hours']:.2f}"
-                ),
-                value_style,
-            ),
             Paragraph(
                 (
                     f"{time_summary['lunch_hours']:.2f}"
@@ -14571,10 +14640,8 @@ def admin_work_order_pdf(
     labor_table = Table(
         labor_data,
         colWidths=[
-            1.875 * inch,
-            1.875 * inch,
-            1.875 * inch,
-            1.875 * inch,
+            3.75 * inch,
+            3.75 * inch,
         ],
     )
 
@@ -14864,11 +14931,11 @@ def admin_work_order_pdf(
                 table_header_style,
             ),
             Paragraph(
-                "ONSITE",
+                "TIME IN",
                 table_header_style,
             ),
             Paragraph(
-                "TRAVEL",
+                "TIME OUT",
                 table_header_style,
             ),
             Paragraph(
@@ -14876,7 +14943,7 @@ def admin_work_order_pdf(
                 table_header_style,
             ),
             Paragraph(
-                "TOTAL",
+                "TOTAL HOURS",
                 table_header_style,
             ),
             Paragraph(
@@ -14909,20 +14976,32 @@ def admin_work_order_pdf(
                     table_body_style,
                 ),
                 Paragraph(
-                    (
-                        f"{entry['onsite_hours']:.2f}"
+                    pdf_text(
+                        format_work_order_clock_time(
+                            entry[
+                                "time_in"
+                            ]
+                        ),
+                        "",
+                    ),
+                    table_body_style,
+                ),
+                Paragraph(
+                    pdf_text(
+                        format_work_order_clock_time(
+                            entry[
+                                "time_out"
+                            ]
+                        ),
+                        "",
                     ),
                     table_body_style,
                 ),
                 Paragraph(
                     (
-                        f"{entry['travel_hours']:.2f}"
-                    ),
-                    table_body_style,
-                ),
-                Paragraph(
-                    (
-                        f"{entry['lunch_hours']:.2f}"
+                        "YES"
+                        if entry["lunch_hours"] > 0
+                        else ""
                     ),
                     table_body_style,
                 ),
@@ -14944,7 +15023,7 @@ def admin_work_order_pdf(
             ]
         )
 
-    timesheet_target_rows = 32
+    timesheet_target_rows = 31
 
     timesheet_blank_rows = max(
         0,
@@ -14967,16 +15046,36 @@ def admin_work_order_pdf(
             ]
         )
 
+    timesheet_data.append(
+        [
+            "",
+            "",
+            "",
+            "",
+            Paragraph(
+                "TOTAL HOURS:",
+                table_header_style,
+            ),
+            Paragraph(
+                (
+                    f"{time_summary['total_hours']:.2f}"
+                ),
+                table_header_style,
+            ),
+            "",
+        ]
+    )
+
     timesheet_table = Table(
         timesheet_data,
         colWidths=[
             0.75 * inch,
             1.35 * inch,
-            0.65 * inch,
-            0.65 * inch,
-            0.6 * inch,
-            0.65 * inch,
-            2.15 * inch,
+            0.75 * inch,
+            0.75 * inch,
+            0.55 * inch,
+            0.75 * inch,
+            1.95 * inch,
         ],
         repeatRows=1,
     )
@@ -14991,17 +15090,23 @@ def admin_work_order_pdf(
                     brand_blue,
                 ),
                 (
+                    "BACKGROUND",
+                    (4, -1),
+                    (5, -1),
+                    brand_blue,
+                ),
+                (
                     "BOX",
                     (0, 0),
                     (-1, -1),
-                    0.75,
+                    0.9,
                     border_gray,
                 ),
                 (
                     "INNERGRID",
                     (0, 0),
                     (-1, -1),
-                    0.4,
+                    0.6,
                     border_gray,
                 ),
                 (
@@ -15012,7 +15117,7 @@ def admin_work_order_pdf(
                 ),
                 (
                     "ALIGN",
-                    (2, 1),
+                    (4, 1),
                     (5, -1),
                     "RIGHT",
                 ),
@@ -15144,7 +15249,7 @@ def admin_work_order_pdf(
             ]
         )
 
-    material_used_target_rows = 32
+    material_used_target_rows = 31
 
     material_used_blank_rows = max(
         0,
@@ -15165,6 +15270,31 @@ def admin_work_order_pdf(
                 "",
             ]
         )
+
+    total_material_cost = sum(
+        (
+            material["quantity"]
+            * material["unit_cost"]
+        )
+        for material in materials_used
+    )
+
+    material_used_data.append(
+        [
+            "",
+            "",
+            "",
+            "",
+            Paragraph(
+                "TOTAL MATERIAL COST:",
+                table_header_style,
+            ),
+            Paragraph(
+                f"${total_material_cost:.2f}",
+                table_header_style,
+            ),
+        ]
+    )
 
     materials_used_table = Table(
         material_used_data,
@@ -15189,17 +15319,23 @@ def admin_work_order_pdf(
                     brand_blue,
                 ),
                 (
+                    "BACKGROUND",
+                    (4, -1),
+                    (5, -1),
+                    brand_blue,
+                ),
+                (
                     "BOX",
                     (0, 0),
                     (-1, -1),
-                    0.75,
+                    0.9,
                     border_gray,
                 ),
                 (
                     "INNERGRID",
                     (0, 0),
                     (-1, -1),
-                    0.4,
+                    0.6,
                     border_gray,
                 ),
                 (
@@ -15820,16 +15956,6 @@ def admin_work_order_detail(
     time_summary = connection.execute(
         """
         SELECT
-            COALESCE(
-                SUM(onsite_hours),
-                0
-            ) AS onsite_hours,
-
-            COALESCE(
-                SUM(travel_hours),
-                0
-            ) AS travel_hours,
-
             COALESCE(
                 SUM(lunch_hours),
                 0
@@ -17422,16 +17548,16 @@ def admin_work_order_time_entry_add(
         ).strip()
     )
 
-    onsite_hours_text = (
+    time_in = (
         request.form.get(
-            "onsite_hours",
+            "time_in",
             "",
         ).strip()
     )
 
-    travel_hours_text = (
+    time_out = (
         request.form.get(
-            "travel_hours",
+            "time_out",
             "",
         ).strip()
     )
@@ -17493,50 +17619,40 @@ def admin_work_order_time_entry_add(
             )
         )
 
+    parsed_time_in = None
+    parsed_time_out = None
+
     try:
-        onsite_hours = float(
-            onsite_hours_text or 0
+        parsed_time_in = datetime.strptime(
+            time_in,
+            "%H:%M",
         )
 
-        if onsite_hours < 0:
-            raise ValueError
-
     except ValueError:
-        onsite_hours = 0
-
         errors.append(
-            (
-                "Onsite hours must be "
-                "zero or greater."
-            )
+            "Enter a valid Time In."
         )
 
     try:
-        travel_hours = float(
-            travel_hours_text or 0
+        parsed_time_out = datetime.strptime(
+            time_out,
+            "%H:%M",
         )
 
-        if travel_hours < 0:
-            raise ValueError
-
     except ValueError:
-        travel_hours = 0
-
         errors.append(
-            (
-                "Travel hours must be "
-                "zero or greater."
-            )
+            "Enter a valid Time Out."
         )
 
     if (
-        onsite_hours == 0
-        and travel_hours == 0
+        parsed_time_in is not None
+        and parsed_time_out is not None
+        and parsed_time_out <= parsed_time_in
     ):
         errors.append(
             (
-                "Enter onsite hours, travel "
-                "hours, or both."
+                "Time Out must be later than "
+                "Time In."
             )
         )
 
@@ -17601,8 +17717,8 @@ def admin_work_order_time_entry_add(
 
     calculated_time = (
         calculate_work_order_time(
-            onsite_hours,
-            travel_hours,
+            time_in,
+            time_out,
             lunch_applies,
         )
     )
@@ -17619,6 +17735,8 @@ def admin_work_order_time_entry_add(
             work_order_id,
             personnel_id,
             work_date,
+            time_in,
+            time_out,
             onsite_hours,
             travel_hours,
             lunch_hours,
@@ -17629,16 +17747,17 @@ def admin_work_order_time_entry_add(
             updated_at
         )
         VALUES (
-            ?, ?, ?, ?, ?, ?,
-            ?, ?, ?, ?, ?
+            ?, ?, ?, ?, ?,
+            0, 0, ?, ?,
+            ?, ?, ?, ?
         )
         """,
         (
             work_order_id,
             personnel["id"],
             work_date,
-            onsite_hours,
-            travel_hours,
+            time_in,
+            time_out,
             calculated_time[
                 "lunch_hours"
             ],
@@ -17755,16 +17874,16 @@ def admin_work_order_time_entry_edit(
         ).strip()
     )
 
-    onsite_hours_text = (
+    time_in = (
         request.form.get(
-            "onsite_hours",
+            "time_in",
             "",
         ).strip()
     )
 
-    travel_hours_text = (
+    time_out = (
         request.form.get(
-            "travel_hours",
+            "time_out",
             "",
         ).strip()
     )
@@ -17835,50 +17954,40 @@ def admin_work_order_time_entry_edit(
             )
         )
 
+    parsed_time_in = None
+    parsed_time_out = None
+
     try:
-        onsite_hours = float(
-            onsite_hours_text or 0
+        parsed_time_in = datetime.strptime(
+            time_in,
+            "%H:%M",
         )
 
-        if onsite_hours < 0:
-            raise ValueError
-
     except ValueError:
-        onsite_hours = 0
-
         errors.append(
-            (
-                "Onsite hours must be "
-                "zero or greater."
-            )
+            "Enter a valid Time In."
         )
 
     try:
-        travel_hours = float(
-            travel_hours_text or 0
+        parsed_time_out = datetime.strptime(
+            time_out,
+            "%H:%M",
         )
 
-        if travel_hours < 0:
-            raise ValueError
-
     except ValueError:
-        travel_hours = 0
-
         errors.append(
-            (
-                "Travel hours must be "
-                "zero or greater."
-            )
+            "Enter a valid Time Out."
         )
 
     if (
-        onsite_hours == 0
-        and travel_hours == 0
+        parsed_time_in is not None
+        and parsed_time_out is not None
+        and parsed_time_out <= parsed_time_in
     ):
         errors.append(
             (
-                "Enter onsite hours, travel "
-                "hours, or both."
+                "Time Out must be later than "
+                "Time In."
             )
         )
 
@@ -17945,8 +18054,8 @@ def admin_work_order_time_entry_edit(
 
     calculated_time = (
         calculate_work_order_time(
-            onsite_hours,
-            travel_hours,
+            time_in,
+            time_out,
             lunch_applies,
         )
     )
@@ -17959,8 +18068,10 @@ def admin_work_order_time_entry_edit(
         SET
             personnel_id = ?,
             work_date = ?,
-            onsite_hours = ?,
-            travel_hours = ?,
+            time_in = ?,
+            time_out = ?,
+            onsite_hours = 0,
+            travel_hours = 0,
             lunch_hours = ?,
             total_hours = ?,
             notes = ?,
@@ -17971,8 +18082,8 @@ def admin_work_order_time_entry_edit(
         (
             personnel["id"],
             work_date,
-            onsite_hours,
-            travel_hours,
+            time_in,
+            time_out,
             calculated_time[
                 "lunch_hours"
             ],
