@@ -317,14 +317,14 @@
     .work-order-time-entry-form {
         display: grid;
         grid-template-columns:
-            140px
-            minmax(180px, 1.25fr)
-            100px
-            100px
-            70px
-            minmax(180px, 1.5fr)
-            auto;
-        gap: 8px;
+            145px
+            minmax(220px, 1.35fr)
+            135px
+            135px
+            90px
+            65px
+            minmax(260px, 2fr);
+        gap: 10px;
         align-items: end;
         margin-bottom: 20px;
         padding: 12px;
@@ -355,6 +355,38 @@
         padding: 6px 8px;
         margin: 0;
         font-size: 0.82rem;
+    }
+
+    .work-order-time-lunch-field {
+        text-align: center;
+    }
+
+    .work-order-time-lunch-field label {
+        text-align: center;
+    }
+
+    .work-order-time-lunch-field
+    input[type="checkbox"] {
+        width: 22px;
+        height: 22px;
+        min-height: 22px;
+        margin: 7px auto;
+        display: block;
+    }
+
+    .work-order-time-total-placeholder {
+        min-height: 36px;
+        display: flex;
+        align-items: center;
+        padding: 6px 8px;
+        font-size: 0.82rem;
+        font-weight: 800;
+    }
+
+    .work-order-time-entry-form
+    .admin-primary-button {
+        grid-column: 1 / -1;
+        width: max-content;
     }
 
     .work-order-time-table-wrap {
@@ -1558,6 +1590,54 @@
 
             <div class="work-order-time-field">
 
+                <label for="time_work_date">
+                    Date
+                </label>
+
+                <input
+                    type="date"
+                    id="time_work_date"
+                    name="work_date"
+                    required
+                >
+
+            </div>
+
+
+            <div class="work-order-time-field">
+
+                <label for="time_personnel_id">
+                    Name
+                </label>
+
+                <select
+                    id="time_personnel_id"
+                    name="personnel_id"
+                    required
+                >
+
+                    <option value="">
+                        Select Worker
+                    </option>
+
+                    {% for worker in time_workers %}
+
+                        <option
+                            value="{{ worker['id'] }}"
+                        >
+                            {{ worker["first_name"] }}
+                            {{ worker["last_name"] }}
+                        </option>
+
+                    {% endfor %}
+
+                </select>
+
+            </div>
+
+
+            <div class="work-order-time-field">
+
                 <label for="time_in">
                     Time In
                 </label>
@@ -1587,78 +1667,27 @@
 
             </div>
 
-            <div class="work-order-time-field">
 
-                <label for="time_personnel_id">
-                    Worker
+            <div class="
+                work-order-time-field
+                work-order-time-total-field
+            ">
+
+                <label>
+                    Total Hours
                 </label>
 
-                <select
-                    id="time_personnel_id"
-                    name="personnel_id"
-                    required
-                >
-
-                    <option value="">
-                        Select Worker
-                    </option>
-
-                    {% for worker in time_workers %}
-
-                        <option
-                            value="{{ worker['id'] }}"
-                        >
-                            {{ worker["first_name"] }}
-                            {{ worker["last_name"] }}
-
-                            {% if worker["job_title"] %}
-                                — {{ worker["job_title"] }}
-                            {% endif %}
-                        </option>
-
-                    {% endfor %}
-
-                </select>
+                <div class="work-order-time-total-placeholder">
+                    —
+                </div>
 
             </div>
 
 
-            <div class="work-order-time-field">
-
-                <label for="time_onsite_hours">
-                    Onsite
-                </label>
-
-                <input
-                    type="number"
-                    id="time_onsite_hours"
-                    name="onsite_hours"
-                    min="0"
-                    step="0.25"
-                    placeholder="0.00"
-                >
-
-            </div>
-
-
-            <div class="work-order-time-field">
-
-                <label for="time_travel_hours">
-                    Travel
-                </label>
-
-                <input
-                    type="number"
-                    id="time_travel_hours"
-                    name="travel_hours"
-                    min="0"
-                    step="0.25"
-                    placeholder="0.00"
-                >
-
-            </div>
-
-            <div class="work-order-time-field">
+            <div class="
+                work-order-time-field
+                work-order-time-lunch-field
+            ">
 
                 <label for="time_lunch_applies">
                     Lunch
@@ -1673,7 +1702,11 @@
 
             </div>
 
-            <div class="work-order-time-field">
+
+            <div class="
+                work-order-time-field
+                work-order-time-notes-field
+            ">
 
                 <label for="time_notes">
                     Notes
