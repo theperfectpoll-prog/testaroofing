@@ -71,6 +71,101 @@
         cursor: not-allowed;
     }
 
+    .customer-work-order-container {
+        max-height: 235px;
+        overflow-y: auto;
+        overflow-x: auto;
+        border: 1px solid #dce2e8;
+        border-radius: 6px;
+        background: #ffffff;
+    }
+
+    .customer-work-order-table {
+        width: 100%;
+        border-collapse: collapse;
+        min-width: 680px;
+        font-size: 0.82rem;
+    }
+
+    .customer-work-order-table th,
+    .customer-work-order-table td {
+        padding: 7px 9px;
+        border-bottom: 1px solid #e2e7ec;
+        text-align: left;
+        vertical-align: middle;
+        line-height: 1.2;
+    }
+
+    .customer-work-order-table th {
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        background: #f4f6f8;
+        color: #5d6975;
+        font-size: 0.66rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.025em;
+    }
+
+    .customer-work-order-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+
+    .customer-work-order-number {
+        font-size: 0.86rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+
+    .customer-work-order-status {
+        white-space: nowrap;
+    }
+
+    .customer-work-order-table .admin-secondary-button {
+        padding: 5px 10px;
+        min-height: 0;
+        font-size: 0.76rem;
+        line-height: 1.1;
+        border-radius: 5px;
+    }
+
+    .customer-work-order-pagination {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 9px;
+    }
+
+    .customer-work-order-pagination p {
+        margin: 0;
+        color: #6d7885;
+        font-size: 0.75rem;
+    }
+
+    .customer-work-order-pagination-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .customer-work-order-pagination-actions
+    .admin-secondary-button {
+        padding: 5px 9px;
+        min-height: 0;
+        font-size: 0.74rem;
+        line-height: 1.1;
+    }
+
+    .customer-work-order-empty {
+        margin: 0;
+        padding: 14px;
+        color: #6d7885;
+        font-size: 0.8rem;
+        text-align: center;
+    }
 
     /* =====================================================
        CONTACTS
@@ -320,13 +415,6 @@
         >
             Create Work Order
         </a>
-
-        <span
-            class="admin-secondary-button
-                   customer-profile-placeholder"
-        >
-            Create Estimate
-        </span>
 
         <a
             href="{{ url_for('admin_customers') }}"
@@ -1282,7 +1370,10 @@
 {% endif %}
 
 
-<section class="admin-panel">
+<section
+    class="admin-panel"
+    id="customer-work-orders"
+>
 
     <div class="admin-panel-heading">
 
@@ -1293,14 +1384,244 @@
             </h3>
 
             <p>
-                Customer work orders and estimates will
-                appear here as those operational modules
-                are connected.
+                {% if work_order_count == 1 %}
+                    1 work order for this customer.
+                {% else %}
+                    {{ work_order_count }}
+                    work orders for this customer.
+                {% endif %}
             </p>
 
         </div>
 
     </div>
+
+
+    {% if customer_work_orders %}
+
+        <div class="customer-work-order-container">
+
+            <table class="customer-work-order-table">
+
+                <thead>
+
+                    <tr>
+
+                        <th>
+                            Work Order
+                        </th>
+
+                        <th>
+                            Type
+                        </th>
+
+                        <th>
+                            Scheduled
+                        </th>
+
+                        <th>
+                            Status
+                        </th>
+
+                        <th>
+                            Project Location
+                        </th>
+
+                        <th>
+                        </th>
+
+                    </tr>
+
+                </thead>
+
+
+                <tbody>
+
+                    {% for work_order in customer_work_orders %}
+
+                        <tr>
+
+                            <td
+                                class="
+                                    customer-work-order-number
+                                "
+                            >
+                                {{
+                                    format_work_order_number(
+                                        work_order[
+                                            "work_order_number"
+                                        ]
+                                    )
+                                }}
+                            </td>
+
+
+                            <td>
+                                {{
+                                    work_order[
+                                        "work_order_type"
+                                    ]
+                                    or "Not Set"
+                                }}
+                            </td>
+
+
+                            <td>
+                                {{
+                                    work_order[
+                                        "scheduled_date"
+                                    ]
+                                    or "Not Scheduled"
+                                }}
+                            </td>
+
+
+                            <td
+                                class="
+                                    customer-work-order-status
+                                "
+                            >
+                                {{
+                                    work_order["status"]
+                                    |replace("_", " ")
+                                    |title
+                                }}
+                            </td>
+
+
+                            <td>
+
+                                {% if
+                                    work_order[
+                                        "project_city"
+                                    ]
+                                    or work_order[
+                                        "project_state"
+                                    ]
+                                %}
+
+                                    {{
+                                        work_order[
+                                            "project_city"
+                                        ]
+                                        or ""
+                                    }}
+
+                                    {% if
+                                        work_order[
+                                            "project_city"
+                                        ]
+                                        and work_order[
+                                            "project_state"
+                                        ]
+                                    %},{% endif %}
+
+                                    {{
+                                        work_order[
+                                            "project_state"
+                                        ]
+                                        or ""
+                                    }}
+
+                                {% else %}
+
+                                    Not Entered
+
+                                {% endif %}
+
+                            </td>
+
+
+                            <td>
+
+                                <a
+                                    href="{{ url_for(
+                                        'admin_work_order_detail',
+                                        work_order_id=work_order[
+                                            'id'
+                                        ]
+                                    ) }}"
+                                    class="
+                                        admin-secondary-button
+                                    "
+                                >
+                                    Open
+                                </a>
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+
+        <div class="customer-work-order-pagination">
+
+            <p>
+                Page {{ work_order_page }}
+                of {{ work_order_total_pages }}
+            </p>
+
+
+            <div
+                class="
+                    customer-work-order-pagination-actions
+                "
+            >
+
+                {% if work_order_page > 1 %}
+
+                    <a
+                        href="{{ url_for(
+                            'admin_customer_detail',
+                            customer_id=customer['id'],
+                            wo_page=work_order_page - 1
+                        ) }}#customer-work-orders"
+                        class="admin-secondary-button"
+                    >
+                        Newer Work Orders
+                    </a>
+
+                {% endif %}
+
+
+                {% if
+                    work_order_page
+                    < work_order_total_pages
+                %}
+
+                    <a
+                        href="{{ url_for(
+                            'admin_customer_detail',
+                            customer_id=customer['id'],
+                            wo_page=work_order_page + 1
+                        ) }}#customer-work-orders"
+                        class="admin-secondary-button"
+                    >
+                        Older Work Orders
+                    </a>
+
+                {% endif %}
+
+            </div>
+
+        </div>
+
+
+    {% else %}
+
+        <p class="customer-work-order-empty">
+            No work orders have been created for
+            this customer yet.
+        </p>
+
+    {% endif %}
 
 </section>
 

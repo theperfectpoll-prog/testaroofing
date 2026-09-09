@@ -649,6 +649,61 @@
 
             </div>
 
+            <div class="admin-field admin-field-full">
+
+                <label
+                    style="
+                        display: inline-flex;
+                        align-items: center;
+                        gap: 8px;
+                        width: auto;
+                        cursor: pointer;
+                    "
+                >
+
+                    <input
+                        type="checkbox"
+                        name="subcontractor_used"
+                        value="1"
+                        {% if
+                            (
+                                request.method == 'POST'
+                                and request.form.get(
+                                    'subcontractor_used'
+                                )
+                            )
+                            or (
+                                request.method != 'POST'
+                                and work_order[
+                                    'subcontractor_used'
+                                ]
+                            )
+                        %}
+                            checked
+                        {% endif %}
+                        style="
+                            width: auto;
+                            min-height: 0;
+                            margin: 0;
+                        "
+                    >
+
+                    Subcontractor Used
+
+                </label>
+
+                <small
+                    style="
+                        display: block;
+                        margin-top: 4px;
+                        color: #6d7885;
+                    "
+                >
+                    Enable subcontractor labor tracking
+                    for this work order.
+                </small>
+
+            </div>
 
             <div class="admin-field admin-field-full">
 

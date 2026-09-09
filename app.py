@@ -3982,6 +3982,81 @@ def ensure_database_schema():
             """
         )
 
+    if "subcontractor_used" not in work_order_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_orders
+            ADD COLUMN subcontractor_used INTEGER
+            NOT NULL DEFAULT 0
+            """
+        )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS
+            work_order_subcontractors (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                work_order_id INTEGER NOT NULL,
+
+                subcontractor_name TEXT NOT NULL,
+
+                scope_description TEXT,
+
+                pricing_basis TEXT,
+
+                estimated_cost REAL,
+                actual_cost REAL,
+
+                notes TEXT,
+
+                display_order INTEGER
+                    NOT NULL DEFAULT 0,
+
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+
+                FOREIGN KEY (work_order_id)
+                    REFERENCES work_orders (id)
+                    ON DELETE CASCADE,
+
+                CHECK (
+                    estimated_cost IS NULL
+                    OR estimated_cost >= 0
+                ),
+
+                CHECK (
+                    actual_cost IS NULL
+                    OR actual_cost >= 0
+                ),
+
+                CHECK (
+                    pricing_basis IS NULL
+                    OR pricing_basis IN (
+                        'Per SQ',
+                        'Per SF',
+                        'Per LF',
+                        'Per Unit',
+                        'Lump Sum',
+                        'Other'
+                    )
+                )
+            )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE INDEX IF NOT EXISTS
+            idx_work_order_subcontractors_work_order
+        ON work_order_subcontractors (
+            work_order_id,
+            display_order,
+            id
+        )
+        """
+    )
+
     cursor.execute(
         """
         CREATE TABLE IF NOT EXISTS work_order_materials (
@@ -10159,47 +10234,6 @@ def refresh_work_order_time_totals(
         ),
     )
 
-def refresh_work_order_time_totals(
-    connection,
-    work_order_id,
-):
-    totals = connection.execute(
-        """
-        SELECT
-            COALESCE(
-                SUM(onsite_hours),
-                0
-            ) AS onsite_hours,
-
-            COALESCE(
-                SUM(travel_hours),
-                0
-            ) AS travel_hours
-
-        FROM work_order_time_entries
-
-        WHERE work_order_id = ?
-        """,
-        (work_order_id,),
-    ).fetchone()
-
-    connection.execute(
-        """
-        UPDATE work_orders
-        SET
-            total_onsite_hours = ?,
-            total_travel_hours = ?,
-            updated_at = ?
-        WHERE id = ?
-        """,
-        (
-            totals["onsite_hours"],
-            totals["travel_hours"],
-            current_timestamp(),
-            work_order_id,
-        ),
-    )
-
 def get_work_order_photo_directory(
     work_order_id,
 ):
@@ -11268,6 +11302,70 @@ def admin_customer_detail(
         )
     )
 
+    work_order_page = request.args.get(
+        "wo_page",
+        1,
+        type=int,
+    )
+
+    if work_order_page < 1:
+        work_order_page = 1
+
+    work_orders_per_page = 10
+
+    work_order_count = connection.execute(
+        """
+        SELECT COUNT(*)
+        FROM work_orders
+        WHERE customer_id = ?
+        """,
+        (customer_id,),
+    ).fetchone()[0]
+
+    work_order_total_pages = max(
+        1,
+        (
+            work_order_count
+            + work_orders_per_page
+            - 1
+        )
+        // work_orders_per_page,
+    )
+
+    if (
+        work_order_page
+        > work_order_total_pages
+    ):
+        work_order_page = (
+            work_order_total_pages
+        )
+
+    work_order_offset = (
+        (work_order_page - 1)
+        * work_orders_per_page
+    )
+
+    customer_work_orders = (
+        connection.execute(
+            """
+            SELECT
+                work_orders.*
+            FROM work_orders
+            WHERE customer_id = ?
+            ORDER BY
+                work_order_number DESC,
+                id DESC
+            LIMIT ?
+            OFFSET ?
+            """,
+            (
+                customer_id,
+                work_orders_per_page,
+                work_order_offset,
+            ),
+        ).fetchall()
+    )
+
     connection.close()
 
     customer_name = (
@@ -11291,6 +11389,17 @@ def admin_customer_detail(
         primary_contact=primary_contact,
         customer_name=customer_name,
         review_issues=review_issues,
+        customer_work_orders=(
+            customer_work_orders
+        ),
+        work_order_count=work_order_count,
+        work_order_page=work_order_page,
+        work_order_total_pages=(
+            work_order_total_pages
+        ),
+        format_work_order_number=(
+            format_work_order_number
+        ),
     )
 
 @app.route(
@@ -13202,6 +13311,14 @@ def admin_work_order_new(
             ).strip()
         )
 
+        subcontractor_used = (
+            1
+            if request.form.get(
+                "subcontractor_used"
+            )
+            else 0
+        )
+
         material_names = request.form.getlist(
             "material_name[]"
         )
@@ -13531,6 +13648,7 @@ def admin_work_order_new(
                 scope_of_work,
                 total_onsite_hours,
                 total_travel_hours,
+                subcontractor_used,
                 estimated_materials,
                 internal_notes,
                 source_estimate_id,
@@ -13541,7 +13659,7 @@ def admin_work_order_new(
             VALUES (
                 ?, ?, ?, ?, ?, ?,
                 ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?,
+                ?, ?, ?, ?, ?, ?, ?,
                 NULL,
                 ?, ?, ?
             )
@@ -13566,6 +13684,7 @@ def admin_work_order_new(
                 scope_of_work or None,
                 total_onsite_hours,
                 total_travel_hours,
+                subcontractor_used,
                 None,
                 internal_notes or None,
                 (
@@ -13788,6 +13907,43 @@ def admin_work_order_pdf(
             ) AS total_hours
 
         FROM work_order_time_entries
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    subcontractors = connection.execute(
+        """
+        SELECT
+            subcontractor_name,
+            scope_description,
+            estimated_cost,
+            actual_cost,
+            notes
+        FROM work_order_subcontractors
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    subcontractor_summary = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(estimated_cost),
+                0
+            ) AS estimated_cost,
+
+            COALESCE(
+                SUM(actual_cost),
+                0
+            ) AS actual_cost
+
+        FROM work_order_subcontractors
 
         WHERE work_order_id = ?
         """,
@@ -14606,46 +14762,64 @@ def admin_work_order_pdf(
 
     story.append(
         section_heading(
-            "LABOR SUMMARY"
+            "ESTIMATED TIME"
         )
     )
 
-    labor_data = [
+    estimated_onsite_hours = (
+        work_order[
+            "total_onsite_hours"
+        ]
+    )
+
+    estimated_travel_hours = (
+        work_order[
+            "total_travel_hours"
+        ]
+    )
+
+    estimated_time_data = [
         [
             Paragraph(
-                "LUNCH DEDUCTED",
+                "ONSITE HOURS",
                 label_style,
             ),
             Paragraph(
-                "TOTAL LABOR HOURS",
+                "TRAVEL HOURS",
                 label_style,
             ),
         ],
         [
             Paragraph(
                 (
-                    f"{time_summary['lunch_hours']:.2f}"
+                    f"{estimated_onsite_hours:.2f}"
+                    if estimated_onsite_hours
+                    is not None
+                    else "Not Entered"
                 ),
                 value_style,
             ),
             Paragraph(
                 (
-                    f"{time_summary['total_hours']:.2f}"
+                    f"{estimated_travel_hours:.2f}"
+                    if estimated_travel_hours
+                    is not None
+                    else "Not Entered"
                 ),
                 value_style,
             ),
         ],
     ]
 
-    labor_table = Table(
-        labor_data,
+    estimated_time_table = Table(
+        estimated_time_data,
         colWidths=[
             3.75 * inch,
             3.75 * inch,
         ],
     )
 
-    labor_table.setStyle(
+    estimated_time_table.setStyle(
         TableStyle(
             [
                 (
@@ -14697,7 +14871,7 @@ def admin_work_order_pdf(
     )
 
     story.append(
-        labor_table
+        estimated_time_table
     )
 
     story.append(
@@ -15371,6 +15545,229 @@ def admin_work_order_pdf(
     )
 
     # =====================================================
+    # SUBCONTRACTOR LABOR
+    # =====================================================
+
+    if work_order["subcontractor_used"]:
+        story.append(
+            PageBreak()
+        )
+
+        story.append(
+            section_heading(
+                (
+                    "SUBCONTRACTOR LABOR - "
+                    f"{formatted_number}"
+                )
+            )
+        )
+
+        story.append(
+            Spacer(
+                1,
+                8,
+            )
+        )
+
+        subcontractor_data = [
+            [
+                Paragraph(
+                    "SUBCONTRACTOR",
+                    table_header_style,
+                ),
+                Paragraph(
+                    "SCOPE / DESCRIPTION",
+                    table_header_style,
+                ),
+                Paragraph(
+                    "EST. COST",
+                    table_header_style,
+                ),
+                Paragraph(
+                    "ACTUAL COST",
+                    table_header_style,
+                ),
+                Paragraph(
+                    "NOTES",
+                    table_header_style,
+                ),
+            ]
+        ]
+
+        for subcontractor in subcontractors:
+            estimated_cost = (
+                subcontractor[
+                    "estimated_cost"
+                ]
+            )
+
+            actual_cost = (
+                subcontractor[
+                    "actual_cost"
+                ]
+            )
+
+            subcontractor_data.append(
+                [
+                    Paragraph(
+                        pdf_text(
+                            subcontractor[
+                                "subcontractor_name"
+                            ]
+                        ),
+                        table_body_style,
+                    ),
+                    Paragraph(
+                        pdf_text(
+                            subcontractor[
+                                "scope_description"
+                            ]
+                        ),
+                        table_body_style,
+                    ),
+                    Paragraph(
+                        (
+                            f"${estimated_cost:.2f}"
+                            if estimated_cost
+                            is not None
+                            else ""
+                        ),
+                        table_body_style,
+                    ),
+                    Paragraph(
+                        (
+                            f"${actual_cost:.2f}"
+                            if actual_cost
+                            is not None
+                            else ""
+                        ),
+                        table_body_style,
+                    ),
+                    Paragraph(
+                        pdf_text(
+                            subcontractor[
+                                "notes"
+                            ]
+                        ),
+                        table_body_style,
+                    ),
+                ]
+            )
+
+        if not subcontractors:
+            subcontractor_data.append(
+                [
+                    "",
+                    Paragraph(
+                        (
+                            "No subcontractor labor "
+                            "has been entered."
+                        ),
+                        table_body_style,
+                    ),
+                    "",
+                    "",
+                    "",
+                ]
+            )
+
+        subcontractor_data.append(
+            [
+                "",
+                Paragraph(
+                    "TOTAL SUBCONTRACTOR COST:",
+                    table_header_style,
+                ),
+                Paragraph(
+                    (
+                        f"${subcontractor_summary['estimated_cost']:.2f}"
+                    ),
+                    table_header_style,
+                ),
+                Paragraph(
+                    (
+                        f"${subcontractor_summary['actual_cost']:.2f}"
+                    ),
+                    table_header_style,
+                ),
+                "",
+            ]
+        )
+
+        subcontractor_table = Table(
+            subcontractor_data,
+            colWidths=[
+                1.45 * inch,
+                2.15 * inch,
+                0.95 * inch,
+                0.95 * inch,
+                2.0 * inch,
+            ],
+            repeatRows=1,
+        )
+
+        subcontractor_table.setStyle(
+            TableStyle(
+                [
+                    (
+                        "BACKGROUND",
+                        (0, 0),
+                        (-1, 0),
+                        brand_blue,
+                    ),
+                    (
+                        "BACKGROUND",
+                        (1, -1),
+                        (3, -1),
+                        brand_blue,
+                    ),
+                    (
+                        "BOX",
+                        (0, 0),
+                        (-1, -1),
+                        0.9,
+                        border_gray,
+                    ),
+                    (
+                        "INNERGRID",
+                        (0, 0),
+                        (-1, -1),
+                        0.6,
+                        border_gray,
+                    ),
+                    (
+                        "VALIGN",
+                        (0, 0),
+                        (-1, -1),
+                        "TOP",
+                    ),
+                    (
+                        "ALIGN",
+                        (2, 1),
+                        (3, -1),
+                        "RIGHT",
+                    ),
+                    (
+                        "TOPPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        5,
+                    ),
+                    (
+                        "BOTTOMPADDING",
+                        (0, 0),
+                        (-1, -1),
+                        5,
+                    ),
+                ]
+            )
+        )
+
+        story.append(
+            subcontractor_table
+        )
+
+    # =====================================================
     # PAGE 4+ — PHOTOGRAPHS
     # =====================================================
 
@@ -15746,6 +16143,208 @@ def admin_work_order_pdf(
                 photo_grid
             )
 
+    # =====================================================
+    # FINAL PAGE - TECHNICIAN NOTES
+    # =====================================================
+
+    story.append(
+        PageBreak()
+    )
+
+    story.append(
+        section_heading(
+            (
+                "TECHNICIAN NOTES - "
+                f"{formatted_number}"
+            )
+        )
+    )
+
+    story.append(
+        Spacer(
+            1,
+            8,
+        )
+    )
+
+    technician_notes_header = Table(
+        [
+            [
+                Paragraph(
+                    "<b>TECHNICIAN:</b>",
+                    small_style,
+                ),
+                "",
+            ]
+        ],
+        colWidths=[
+            0.8 * inch,
+            6.7 * inch,
+        ],
+        rowHeights=[
+            0.35 * inch,
+        ],
+    )
+
+    technician_notes_header.setStyle(
+        TableStyle(
+            [
+                (
+                    "LINEBELOW",
+                    (1, 0),
+                    (1, 0),
+                    0.6,
+                    border_gray,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "BOTTOM",
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    4,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    2,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        technician_notes_header
+    )
+
+    story.append(
+        Spacer(
+            1,
+            8,
+        )
+    )
+
+    technician_notes_lines = [
+        [
+            Paragraph(
+                "DATE",
+                label_style,
+            ),
+            Paragraph(
+                "TECHNICIAN NOTES",
+                label_style,
+            ),
+        ]
+    ]
+
+    technician_notes_lines.extend(
+        [
+            [
+                "",
+                "",
+            ]
+            for _ in range(25)
+        ]
+    )
+
+    technician_notes_table = Table(
+        technician_notes_lines,
+        colWidths=[
+            1.0 * inch,
+            6.5 * inch,
+        ],
+        rowHeights=[
+            0.25 * inch
+        ] + [
+            0.29 * inch
+        ] * 25,
+    )
+
+    technician_notes_table.setStyle(
+        TableStyle(
+            [
+                (
+                    "BACKGROUND",
+                    (0, 0),
+                    (-1, 0),
+                    light_gray,
+                ),
+                (
+                    "BOX",
+                    (0, 0),
+                    (-1, -1),
+                    0.6,
+                    border_gray,
+                ),
+                (
+                    "LINEBELOW",
+                    (0, 0),
+                    (-1, -1),
+                    0.5,
+                    border_gray,
+                ),
+                (
+                    "LINEAFTER",
+                    (0, 0),
+                    (0, -1),
+                    0.5,
+                    border_gray,
+                ),
+                (
+                    "VALIGN",
+                    (0, 0),
+                    (-1, -1),
+                    "MIDDLE",
+                ),
+                (
+                    "LEFTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5,
+                ),
+                (
+                    "RIGHTPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    5,
+                ),
+                (
+                    "TOPPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+                (
+                    "BOTTOMPADDING",
+                    (0, 0),
+                    (-1, -1),
+                    0,
+                ),
+            ]
+        )
+    )
+
+    story.append(
+        technician_notes_table
+    )
+
     document.build(
         story,
         onFirstPage=draw_footer,
@@ -15836,6 +16435,38 @@ def admin_work_order_detail(
         """,
         (work_order_id,),
     ).fetchall()
+
+    subcontractors = connection.execute(
+        """
+        SELECT *
+        FROM work_order_subcontractors
+        WHERE work_order_id = ?
+        ORDER BY
+            display_order ASC,
+            id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    subcontractor_summary = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(estimated_cost),
+                0
+            ) AS estimated_cost,
+
+            COALESCE(
+                SUM(actual_cost),
+                0
+            ) AS actual_cost
+
+        FROM work_order_subcontractors
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
 
     materials_used = connection.execute(
         """
@@ -15989,6 +16620,10 @@ def admin_work_order_detail(
             )
         ),
         materials=materials,
+        subcontractors=subcontractors,
+        subcontractor_summary=(
+            subcontractor_summary
+        ),
         materials_used=materials_used,
         materials_used_summary=(
             materials_used_summary
@@ -16154,6 +16789,14 @@ def admin_work_order_edit(
                 "total_travel_hours",
                 "",
             ).strip()
+        )
+
+        subcontractor_used = (
+            1
+            if request.form.get(
+                "subcontractor_used"
+            )
+            else 0
         )
 
         internal_notes = (
@@ -16478,6 +17121,7 @@ def admin_work_order_edit(
                 scope_of_work = ?,
                 total_onsite_hours = ?,
                 total_travel_hours = ?,
+                subcontractor_used = ?,
                 internal_notes = ?,
                 updated_at = ?
             WHERE id = ?
@@ -16500,6 +17144,7 @@ def admin_work_order_edit(
                 scope_of_work or None,
                 total_onsite_hours,
                 total_travel_hours,
+                subcontractor_used,
                 internal_notes or None,
                 now,
                 work_order_id,
@@ -16619,6 +17264,563 @@ def admin_work_order_edit(
                 ]
             )
         ),
+    )
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/subcontractors/add",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_subcontractor_add(
+    work_order_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            id,
+            work_order_number,
+            subcontractor_used
+        FROM work_orders
+        WHERE id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    if not work_order["subcontractor_used"]:
+        connection.close()
+
+        flash(
+            (
+                "Subcontractor labor is not enabled "
+                "for this work order."
+            ),
+            "error",
+        )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+        )
+
+    subcontractor_name = (
+        request.form.get(
+            "subcontractor_name",
+            "",
+        ).strip()
+    )
+
+    scope_description = (
+        request.form.get(
+            "scope_description",
+            "",
+        ).strip()
+    )
+
+    pricing_basis = (
+        request.form.get(
+            "pricing_basis",
+            "",
+        ).strip()
+    )
+
+    estimated_cost_text = (
+        request.form.get(
+            "estimated_cost",
+            "",
+        ).strip()
+    )
+
+    actual_cost_text = (
+        request.form.get(
+            "actual_cost",
+            "",
+        ).strip()
+    )
+
+    notes = (
+        request.form.get(
+            "notes",
+            "",
+        ).strip()
+    )
+
+    valid_pricing_bases = {
+        "Per SQ",
+        "Per SF",
+        "Per LF",
+        "Per Unit",
+        "Lump Sum",
+        "Other",
+    }
+
+    errors = []
+
+    if not subcontractor_name:
+        errors.append(
+            "Subcontractor is required."
+        )
+
+    if (
+        pricing_basis
+        and pricing_basis
+        not in valid_pricing_bases
+    ):
+        errors.append(
+            "Choose a valid pricing basis."
+        )
+
+    estimated_cost = None
+
+    if estimated_cost_text:
+        try:
+            estimated_cost = float(
+                estimated_cost_text
+            )
+
+            if estimated_cost < 0:
+                raise ValueError
+
+        except ValueError:
+            errors.append(
+                (
+                    "Estimated cost must be a "
+                    "number that is zero or greater."
+                )
+            )
+
+    actual_cost = None
+
+    if actual_cost_text:
+        try:
+            actual_cost = float(
+                actual_cost_text
+            )
+
+            if actual_cost < 0:
+                raise ValueError
+
+        except ValueError:
+            errors.append(
+                (
+                    "Actual cost must be a "
+                    "number that is zero or greater."
+                )
+            )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-subcontractors"
+        )
+
+    next_display_order = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                MAX(display_order),
+                -1
+            ) + 1
+        FROM work_order_subcontractors
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()[0]
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        INSERT INTO work_order_subcontractors (
+            work_order_id,
+            subcontractor_name,
+            scope_description,
+            pricing_basis,
+            estimated_cost,
+            actual_cost,
+            notes,
+            display_order,
+            created_at,
+            updated_at
+        )
+        VALUES (
+            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+        )
+        """,
+        (
+            work_order_id,
+            subcontractor_name,
+            scope_description or None,
+            pricing_basis or None,
+            estimated_cost,
+            actual_cost,
+            notes or None,
+            next_display_order,
+            now,
+            now,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            work_order[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_subcontractor_added",
+        category="work_orders",
+        description=(
+            f"Subcontractor labor was added to "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Subcontractor labor was added.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-subcontractors"
+    )
+
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/subcontractors/"
+    "<int:subcontractor_id>/edit",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_subcontractor_edit(
+    work_order_id,
+    subcontractor_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    subcontractor = connection.execute(
+        """
+        SELECT
+            work_order_subcontractors.*,
+            work_orders.work_order_number
+        FROM work_order_subcontractors
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_subcontractors.work_order_id
+        WHERE work_order_subcontractors.id = ?
+          AND work_order_subcontractors.work_order_id = ?
+        """,
+        (
+            subcontractor_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if subcontractor is None:
+        connection.close()
+        abort(404)
+
+    subcontractor_name = (
+        request.form.get(
+            "subcontractor_name",
+            "",
+        ).strip()
+    )
+
+    scope_description = (
+        request.form.get(
+            "scope_description",
+            "",
+        ).strip()
+    )
+
+    pricing_basis = (
+        request.form.get(
+            "pricing_basis",
+            "",
+        ).strip()
+    )
+
+    estimated_cost_text = (
+        request.form.get(
+            "estimated_cost",
+            "",
+        ).strip()
+    )
+
+    actual_cost_text = (
+        request.form.get(
+            "actual_cost",
+            "",
+        ).strip()
+    )
+
+    notes = (
+        request.form.get(
+            "notes",
+            "",
+        ).strip()
+    )
+
+    valid_pricing_bases = {
+        "Per SQ",
+        "Per SF",
+        "Per LF",
+        "Per Unit",
+        "Lump Sum",
+        "Other",
+    }
+
+    errors = []
+
+    if not subcontractor_name:
+        errors.append(
+            "Subcontractor is required."
+        )
+
+    if (
+        pricing_basis
+        and pricing_basis
+        not in valid_pricing_bases
+    ):
+        errors.append(
+            "Choose a valid pricing basis."
+        )
+
+    estimated_cost = None
+
+    if estimated_cost_text:
+        try:
+            estimated_cost = float(
+                estimated_cost_text
+            )
+
+            if estimated_cost < 0:
+                raise ValueError
+
+        except ValueError:
+            errors.append(
+                (
+                    "Estimated cost must be a "
+                    "number that is zero or greater."
+                )
+            )
+
+    actual_cost = None
+
+    if actual_cost_text:
+        try:
+            actual_cost = float(
+                actual_cost_text
+            )
+
+            if actual_cost < 0:
+                raise ValueError
+
+        except ValueError:
+            errors.append(
+                (
+                    "Actual cost must be a "
+                    "number that is zero or greater."
+                )
+            )
+
+    if errors:
+        connection.close()
+
+        for error in errors:
+            flash(
+                error,
+                "error",
+            )
+
+        return redirect(
+            url_for(
+                "admin_work_order_detail",
+                work_order_id=work_order_id,
+            )
+            + "#work-order-subcontractors"
+        )
+
+    now = current_timestamp()
+
+    connection.execute(
+        """
+        UPDATE work_order_subcontractors
+        SET
+            subcontractor_name = ?,
+            scope_description = ?,
+            pricing_basis = ?,
+            estimated_cost = ?,
+            actual_cost = ?,
+            notes = ?,
+            updated_at = ?
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            subcontractor_name,
+            scope_description or None,
+            pricing_basis or None,
+            estimated_cost,
+            actual_cost,
+            notes or None,
+            now,
+            subcontractor_id,
+            work_order_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            subcontractor[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_subcontractor_updated",
+        category="work_orders",
+        description=(
+            f"Subcontractor labor was updated on "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Subcontractor labor was updated.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-subcontractors"
+    )
+
+
+@app.route(
+    "/admin/work-orders/<int:work_order_id>/subcontractors/"
+    "<int:subcontractor_id>/delete",
+    methods=["POST"],
+)
+@admin_required
+def admin_work_order_subcontractor_delete(
+    work_order_id,
+    subcontractor_id,
+):
+    validate_csrf_token()
+
+    connection = get_db_connection()
+
+    subcontractor = connection.execute(
+        """
+        SELECT
+            work_order_subcontractors.*,
+            work_orders.work_order_number
+        FROM work_order_subcontractors
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_subcontractors.work_order_id
+        WHERE work_order_subcontractors.id = ?
+          AND work_order_subcontractors.work_order_id = ?
+        """,
+        (
+            subcontractor_id,
+            work_order_id,
+        ),
+    ).fetchone()
+
+    if subcontractor is None:
+        connection.close()
+        abort(404)
+
+    connection.execute(
+        """
+        DELETE FROM work_order_subcontractors
+        WHERE id = ?
+          AND work_order_id = ?
+        """,
+        (
+            subcontractor_id,
+            work_order_id,
+        ),
+    )
+
+    connection.commit()
+    connection.close()
+
+    formatted_number = (
+        format_work_order_number(
+            subcontractor[
+                "work_order_number"
+            ]
+        )
+    )
+
+    write_audit_log(
+        action="work_order_subcontractor_deleted",
+        category="work_orders",
+        description=(
+            f"Subcontractor labor was deleted from "
+            f"{formatted_number}."
+        ),
+        entity_type="work_order",
+        entity_id=work_order_id,
+    )
+
+    flash(
+        "Subcontractor labor was deleted.",
+        "success",
+    )
+
+    return redirect(
+        url_for(
+            "admin_work_order_detail",
+            work_order_id=work_order_id,
+        )
+        + "#work-order-subcontractors"
     )
 
 @app.route(
