@@ -6,6 +6,7 @@ import sqlite3
 import hashlib
 import base64
 import io
+import html
 import pyotp
 import qrcode
 import requests
@@ -6175,13 +6176,17 @@ def public_learning_article(slug):
 
     connection.close()
 
+    article_body_html = format_learning_article_body(
+        article["body"]
+    )
+
     return render_template(
         "learning_article.html",
         article=article,
+        article_body_html=article_body_html,
         topics=topics,
         related_articles=related_articles,
     )
-
 
 # =========================================================
 # ADMIN LOGIN
@@ -22583,6 +22588,60 @@ def normalize_topic_order(connection):
             "UPDATE learning_topics SET display_order = ? WHERE id = ?",
             (position * 10, topic["id"]),
         )
+
+
+def format_learning_article_body(body):
+    if not body:
+        return ""
+
+    escaped_body = html.escape(
+        body,
+        quote=False,
+    )
+
+    escaped_body = re.sub(
+        r"\[\*\*(.+?)\*\*\]\((https?://[^\s)]+|/[^\s)]*)\)",
+        r'<a href="\2"><strong>\1</strong></a>',
+        escaped_body,
+    )
+
+    escaped_body = re.sub(
+        r"\[(.+?)\]\((https?://[^\s)]+|/[^\s)]*)\)",
+        r'<a href="\2">\1</a>',
+        escaped_body,
+    )
+
+    escaped_body = re.sub(
+        r"\*\*(.+?)\*\*",
+        r"<strong>\1</strong>",
+        escaped_body,
+    )
+
+    paragraphs = [
+        paragraph.strip()
+        for paragraph in re.split(
+            r"\n\s*\n",
+            escaped_body,
+        )
+        if paragraph.strip()
+    ]
+
+    formatted_paragraphs = []
+
+    for paragraph in paragraphs:
+        paragraph = paragraph.replace(
+            "\n",
+            "<br>",
+        )
+
+        formatted_paragraphs.append(
+            f"<p>{paragraph}</p>"
+        )
+
+    return "".join(
+        formatted_paragraphs
+    )
+
 
 
 def learning_form_data():

@@ -41,7 +41,7 @@
                 </figure>
             {% endif %}
 
-            <div class="article-body">{{ article['body'] }}</div>
+            <div class="article-body">{{ article_body_html | safe }}</div>
         </div>
 
         <aside class="article-sidebar">
