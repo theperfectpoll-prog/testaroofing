@@ -1,0 +1,797 @@
+{% extends "admin_base.html" %}
+
+
+{% block title %}
+    Timesheets | Testa Roofing
+{% endblock %}
+
+
+{% block admin_content %}
+
+<style>
+
+    .timesheet-toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: end;
+        flex-wrap: wrap;
+        gap: 14px;
+        margin-bottom: 18px;
+    }
+
+    .timesheet-week-navigation {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    .timesheet-week-form {
+        display: flex;
+        align-items: end;
+        gap: 8px;
+        margin: 0;
+    }
+
+    .timesheet-week-field label {
+        display: block;
+        margin-bottom: 4px;
+        color: #66717d;
+        font-size: 0.7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .timesheet-week-field input {
+        min-height: 36px;
+        padding: 6px 8px;
+        margin: 0;
+        font-size: 0.82rem;
+    }
+
+    .timesheet-summary {
+        display: grid;
+        grid-template-columns:
+            repeat(4, minmax(120px, 1fr));
+        gap: 10px;
+        margin-bottom: 18px;
+    }
+
+    .timesheet-summary-card {
+        padding: 11px 13px;
+        border: 1px solid #dce2e8;
+        border-radius: 7px;
+        background: #ffffff;
+    }
+
+    .timesheet-summary-card span {
+        display: block;
+        margin-bottom: 3px;
+        color: #6d7885;
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .timesheet-summary-card strong {
+        font-size: 0.98rem;
+    }
+
+    .timesheet-person {
+        margin-bottom: 18px;
+        border: 1px solid #dce2e8;
+        border-radius: 8px;
+        overflow: hidden;
+        background: #ffffff;
+    }
+
+    .timesheet-person-heading {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid #e1e5e9;
+        background: #f8f9fa;
+    }
+
+    .timesheet-person-heading strong {
+        display: block;
+        font-size: 0.9rem;
+    }
+
+    .timesheet-person-heading small {
+        display: block;
+        margin-top: 2px;
+        color: #6d7885;
+        font-size: 0.72rem;
+    }
+
+    .timesheet-person-total {
+        white-space: nowrap;
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
+
+    .timesheet-table-wrap {
+        overflow-x: auto;
+    }
+
+    .timesheet-table {
+        width: 100%;
+        min-width: 820px;
+        border-collapse: collapse;
+    }
+
+    .timesheet-table th,
+    .timesheet-table td {
+        padding: 7px 8px;
+        border-bottom: 1px solid #e8ebee;
+        text-align: center;
+        font-size: 0.8rem;
+    }
+
+    .timesheet-table th {
+        color: #66717d;
+        font-size: 0.68rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        background: #ffffff;
+    }
+
+    .timesheet-table th:first-child,
+    .timesheet-table td:first-child {
+        width: 70px;
+        text-align: left;
+        padding-left: 12px;
+    }
+
+    .timesheet-table th:last-child,
+    .timesheet-table td:last-child {
+        width: 80px;
+        font-weight: 800;
+    }
+
+    .timesheet-day-date {
+        display: block;
+        margin-top: 2px;
+        color: #8a939d;
+        font-size: 0.62rem;
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .timesheet-row-label {
+        font-weight: 800;
+    }
+
+    .timesheet-row-ot .timesheet-row-label {
+        color: #9a5b00;
+    }
+
+    .timesheet-row-dt .timesheet-row-label {
+        color: #a02b2b;
+    }
+
+    .timesheet-breakdown {
+        border-top: 1px solid #e1e5e9;
+    }
+
+    .timesheet-breakdown summary {
+        padding: 9px 12px;
+        cursor: pointer;
+        font-size: 0.78rem;
+        font-weight: 800;
+        background: #fbfcfd;
+    }
+
+    .timesheet-breakdown-content {
+        padding: 0 12px 12px;
+    }
+
+    .timesheet-work-order {
+        padding: 10px 0;
+        border-bottom: 1px solid #edf0f2;
+    }
+
+    .timesheet-work-order:last-child {
+        border-bottom: 0;
+    }
+
+    .timesheet-work-order-heading {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px;
+        margin-bottom: 6px;
+    }
+
+    .timesheet-work-order-heading a {
+        font-size: 0.8rem;
+        font-weight: 800;
+    }
+
+    .timesheet-work-order-heading span {
+        color: #6d7885;
+        font-size: 0.75rem;
+    }
+
+    .timesheet-work-order-days {
+        display: grid;
+        gap: 4px;
+    }
+
+    .timesheet-work-order-day {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 7px;
+        font-size: 0.76rem;
+    }
+
+    .timesheet-work-order-day-date {
+        width: 86px;
+        color: #59636f;
+        font-weight: 700;
+    }
+
+    .timesheet-hour-tag {
+        display: inline-block;
+        padding: 2px 6px;
+        border: 1px solid #dce2e8;
+        border-radius: 4px;
+        background: #f8f9fa;
+        font-size: 0.7rem;
+        font-weight: 800;
+    }
+
+    .timesheet-no-hours {
+        padding: 12px;
+        color: #6d7885;
+        font-size: 0.8rem;
+    }
+
+    @media (max-width: 900px) {
+
+        .timesheet-summary {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+
+    }
+
+
+    @media (max-width: 600px) {
+
+        .timesheet-toolbar {
+            align-items: stretch;
+        }
+
+        .timesheet-week-navigation,
+        .timesheet-week-form {
+            width: 100%;
+        }
+
+        .timesheet-summary {
+            grid-template-columns:
+                repeat(2, minmax(0, 1fr));
+        }
+
+        .timesheet-person-heading {
+            align-items: flex-start;
+        }
+
+    }
+
+</style>
+
+
+{% macro display_hours(value) %}
+
+    {% if value > 0 %}
+        {{ "%.2f"|format(value) }}
+    {% else %}
+        —
+    {% endif %}
+
+{% endmacro %}
+
+
+<header class="admin-page-header">
+
+    <div>
+
+        <span class="admin-eyebrow">
+            Company
+        </span>
+
+        <h2>
+            Weekly Timesheets
+        </h2>
+
+        <p>
+            {{ week_label }}
+        </p>
+
+    </div>
+
+</header>
+
+
+<section class="admin-panel">
+
+    <div class="timesheet-toolbar">
+
+        <div class="timesheet-week-navigation">
+
+            <a
+                href="{{ url_for(
+                    'admin_timesheets',
+                    week=previous_week_start
+                ) }}"
+                class="admin-secondary-button"
+            >
+                ← Previous Week
+            </a>
+
+            {% if week_start != current_week_start %}
+
+                <a
+                    href="{{ url_for(
+                        'admin_timesheets',
+                        week=current_week_start
+                    ) }}"
+                    class="admin-secondary-button"
+                >
+                    Current Week
+                </a>
+
+            {% endif %}
+
+            <a
+                href="{{ url_for(
+                    'admin_timesheets',
+                    week=next_week_start
+                ) }}"
+                class="admin-secondary-button"
+            >
+                Next Week →
+            </a>
+
+        </div>
+
+
+        <form
+            method="get"
+            action="{{ url_for('admin_timesheets') }}"
+            class="timesheet-week-form"
+        >
+
+            <div class="timesheet-week-field">
+
+                <label for="timesheet_week">
+                    Week
+                </label>
+
+                <input
+                    type="date"
+                    id="timesheet_week"
+                    name="week"
+                    value="{{ week_start }}"
+                >
+
+            </div>
+
+            <button
+                type="submit"
+                class="admin-secondary-button"
+            >
+                View Week
+            </button>
+
+        </form>
+
+    </div>
+
+
+    <div class="timesheet-summary">
+
+        <div class="timesheet-summary-card">
+
+            <span>
+                Straight Time
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    company_summary[
+                        "straight_time_hours"
+                    ]
+                ) }}
+            </strong>
+
+        </div>
+
+
+        <div class="timesheet-summary-card">
+
+            <span>
+                Overtime
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    company_summary[
+                        "overtime_hours"
+                    ]
+                ) }}
+            </strong>
+
+        </div>
+
+
+        <div class="timesheet-summary-card">
+
+            <span>
+                Double Time
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    company_summary[
+                        "double_time_hours"
+                    ]
+                ) }}
+            </strong>
+
+        </div>
+
+
+        <div class="timesheet-summary-card">
+
+            <span>
+                Total Hours
+            </span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    company_summary[
+                        "total_hours"
+                    ]
+                ) }}
+            </strong>
+
+        </div>
+
+    </div>
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+
+        <div>
+
+            <h3>
+                Company Timesheet
+            </h3>
+
+            <p>
+                Sunday through Saturday.
+                Straight time stops at 40 hours;
+                later regular hours are overtime.
+            </p>
+
+        </div>
+
+    </div>
+
+
+    {% if personnel_timesheets %}
+
+        {% for person in personnel_timesheets %}
+
+            <article class="timesheet-person">
+
+                <div class="timesheet-person-heading">
+
+                    <div>
+
+                        <strong>
+                            {{ person["first_name"] }}
+                            {{ person["last_name"] }}
+                        </strong>
+
+                        <small>
+
+                            {% if person["job_title"] %}
+                                {{ person["job_title"] }}
+                            {% endif %}
+
+                            {% if not person["is_active"] %}
+                                {% if person["job_title"] %}
+                                    ·
+                                {% endif %}
+                                Inactive
+                            {% endif %}
+
+                        </small>
+
+                    </div>
+
+                    <div class="timesheet-person-total">
+                        {{ "%.2f"|format(
+                            person["total_hours"]
+                        ) }}
+                        total
+                    </div>
+
+                </div>
+
+
+                <div class="timesheet-table-wrap">
+
+                    <table class="timesheet-table">
+
+                        <thead>
+
+                            <tr>
+
+                                <th>
+                                    Type
+                                </th>
+
+                                {% for day in days %}
+
+                                    <th>
+                                        {{ day["weekday"] }}
+                                        <span class="timesheet-day-date">
+                                            {{ day["display"] }}
+                                        </span>
+                                    </th>
+
+                                {% endfor %}
+
+                                <th>
+                                    Total
+                                </th>
+
+                            </tr>
+
+                        </thead>
+
+
+                        <tbody>
+
+                            <tr>
+
+                                <td class="timesheet-row-label">
+                                    ST
+                                </td>
+
+                                {% for day in days %}
+
+                                    <td>
+                                        {{ display_hours(
+                                            person[
+                                                "daily"
+                                            ][
+                                                day["date"]
+                                            ][
+                                                "st"
+                                            ]
+                                        ) }}
+                                    </td>
+
+                                {% endfor %}
+
+                                <td>
+                                    {{ "%.2f"|format(
+                                        person[
+                                            "straight_time_hours"
+                                        ]
+                                    ) }}
+                                </td>
+
+                            </tr>
+
+
+                            <tr class="timesheet-row-ot">
+
+                                <td class="timesheet-row-label">
+                                    OT
+                                </td>
+
+                                {% for day in days %}
+
+                                    <td>
+                                        {{ display_hours(
+                                            person[
+                                                "daily"
+                                            ][
+                                                day["date"]
+                                            ][
+                                                "ot"
+                                            ]
+                                        ) }}
+                                    </td>
+
+                                {% endfor %}
+
+                                <td>
+                                    {{ "%.2f"|format(
+                                        person[
+                                            "overtime_hours"
+                                        ]
+                                    ) }}
+                                </td>
+
+                            </tr>
+
+
+                            {% if person["has_double_time"] %}
+
+                                <tr class="timesheet-row-dt">
+
+                                    <td class="timesheet-row-label">
+                                        DT
+                                    </td>
+
+                                    {% for day in days %}
+
+                                        <td>
+                                            {{ display_hours(
+                                                person[
+                                                    "daily"
+                                                ][
+                                                    day["date"]
+                                                ][
+                                                    "dt"
+                                                ]
+                                            ) }}
+                                        </td>
+
+                                    {% endfor %}
+
+                                    <td>
+                                        {{ "%.2f"|format(
+                                            person[
+                                                "double_time_hours"
+                                            ]
+                                        ) }}
+                                    </td>
+
+                                </tr>
+
+                            {% endif %}
+
+                        </tbody>
+
+                    </table>
+
+                </div>
+
+
+                <details class="timesheet-breakdown">
+
+                    <summary>
+                        Work Order Breakdown
+                    </summary>
+
+                    <div class="timesheet-breakdown-content">
+
+                        {% if person["work_orders"] %}
+
+                            {% for work_order in person["work_orders"] %}
+
+                                <div class="timesheet-work-order">
+
+                                    <div class="timesheet-work-order-heading">
+
+                                        <a
+                                            href="{{ url_for(
+                                                'admin_work_order_detail',
+                                                work_order_id=work_order['id']
+                                            ) }}"
+                                        >
+                                            {{ work_order["formatted_number"] }}
+                                        </a>
+
+                                        <span>
+                                            —
+                                            {{ work_order["customer_name"] }}
+                                        </span>
+
+                                    </div>
+
+
+                                    <div class="timesheet-work-order-days">
+
+                                        {% for work_day in work_order["day_entries"] %}
+
+                                            <div class="timesheet-work-order-day">
+
+                                                <span class="timesheet-work-order-day-date">
+                                                    {{ work_day["weekday"] }}
+                                                    {{ work_day["display"] }}
+                                                </span>
+
+                                                {% if work_day["st"] > 0 %}
+
+                                                    <span class="timesheet-hour-tag">
+                                                        {{ "%.2f"|format(
+                                                            work_day["st"]
+                                                        ) }}
+                                                        ST
+                                                    </span>
+
+                                                {% endif %}
+
+                                                {% if work_day["ot"] > 0 %}
+
+                                                    <span class="timesheet-hour-tag">
+                                                        {{ "%.2f"|format(
+                                                            work_day["ot"]
+                                                        ) }}
+                                                        OT
+                                                    </span>
+
+                                                {% endif %}
+
+                                                {% if work_day["dt"] > 0 %}
+
+                                                    <span class="timesheet-hour-tag">
+                                                        {{ "%.2f"|format(
+                                                            work_day["dt"]
+                                                        ) }}
+                                                        DT
+                                                    </span>
+
+                                                {% endif %}
+
+                                            </div>
+
+                                        {% endfor %}
+
+                                    </div>
+
+                                </div>
+
+                            {% endfor %}
+
+                        {% else %}
+
+                            <div class="timesheet-no-hours">
+                                No Work Order time was entered
+                                for this person this week.
+                            </div>
+
+                        {% endif %}
+
+                    </div>
+
+                </details>
+
+            </article>
+
+        {% endfor %}
+
+    {% else %}
+
+        <p>
+            No personnel are currently enabled
+            for time tracking.
+        </p>
+
+    {% endif %}
+
+</section>
+
+
+{% endblock %}

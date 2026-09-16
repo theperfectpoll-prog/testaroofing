@@ -79,15 +79,6 @@
                 </select>
             </div>
 
-            <div class="admin-field">
-                <label for="status">Status</label>
-                <select id="status" name="status">
-                    <option value="draft" {% if not v or v['status'] == 'draft' %}selected{% endif %}>Draft</option>
-                    <option value="published" {% if v and v['status'] == 'published' %}selected{% endif %}>Published</option>
-                </select>
-                <small>Draft articles are not available to the public.</small>
-            </div>
-
             <div class="admin-field admin-field-full">
                 <label class="admin-checkbox">
                     <input type="checkbox" name="is_featured" value="1" {% if v and v['is_featured'] %}checked{% endif %}>
@@ -155,7 +146,7 @@
 
             <div class="admin-field admin-field-full">
                 <label for="featured_image_url">Hosted Image URL</label>
-                <input id="featured_image_url" type="url" name="featured_image_url" value="{{ v['featured_image_url'] if v else '' }}">
+                <input id="featured_image_url" type="text" name="featured_image_url" value="{{ v['featured_image_url'] if v else '' }}">
                 <small>Leave this alone when retaining an uploaded image. A newly uploaded file takes priority over this URL.</small>
             </div>
 
@@ -208,9 +199,21 @@
     </section>
 
     <div class="admin-form-actions admin-learning-form-actions">
-        <button type="submit" class="admin-primary-button">
-            {% if article %}Save Article{% else %}Create Article{% endif %}
-        </button>
+        {% if article and article['status'] == 'published' %}
+            <button type="submit" name="status" value="published" class="admin-primary-button">
+                Save Changes
+            </button>
+            <button type="submit" name="status" value="draft" class="admin-secondary-button">
+                Move to Draft
+            </button>
+        {% else %}
+            <button type="submit" name="status" value="draft" class="admin-secondary-button">
+                Save as Draft
+            </button>
+            <button type="submit" name="status" value="published" class="admin-primary-button">
+                Publish Article
+            </button>
+        {% endif %}
         <a href="{{ url_for('admin_learning_center') }}" class="admin-secondary-button">Cancel</a>
     </div>
 </form>

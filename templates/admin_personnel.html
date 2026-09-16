@@ -73,6 +73,7 @@
                         <th>Name</th>
                         <th>Title / Role</th>
                         <th>Contact</th>
+                        <th>Work / Pay</th>
                         <th>Salesperson</th>
                         <th>Status</th>
                         <th></th>
@@ -139,6 +140,60 @@
 
                             </td>
 
+                            <td>
+
+                                <strong>
+
+                                    {% if
+                                        person["worker_type"]
+                                        == "1099_contractor"
+                                    %}
+                                        1099 Contractor
+                                    {% else %}
+                                        Employee
+                                    {% endif %}
+
+                                </strong>
+
+                                <small>
+
+                                    {% if person["pay_type"] == "salary" %}
+
+                                        Salary
+
+                                    {% else %}
+
+                                        Hourly
+
+                                        {% if
+                                            person["hourly_rate"]
+                                            is not none
+                                        %}
+
+                                            —
+                                            ${{ "%.2f"|format(
+                                                person["hourly_rate"]
+                                            ) }}/hr
+
+                                        {% else %}
+
+                                            — Rate Not Set
+
+                                        {% endif %}
+
+                                    {% endif %}
+
+                                </small>
+
+                                {% if person["is_time_worker"] %}
+
+                                    <small>
+                                        Time Tracked
+                                    </small>
+
+                                {% endif %}
+
+                            </td>
 
                             <td>
 

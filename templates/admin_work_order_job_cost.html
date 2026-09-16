@@ -1,0 +1,524 @@
+{% extends "admin_base.html" %}
+
+
+{% block admin_content %}
+
+<div class="admin-page-header">
+
+    <div>
+        <span class="admin-eyebrow">
+            Work Order Job Cost
+        </span>
+
+        <h2>
+            {{ formatted_work_order_number }}
+        </h2>
+
+        <p>
+            {{ work_order["customer_display_name"]
+               or work_order["customer_commercial_name"]
+               or "Unnamed Customer" }}
+        </p>
+    </div>
+
+    <div class="admin-page-actions">
+
+        <a
+            href="{{ url_for(
+                'admin_work_order_detail',
+                work_order_id=work_order['id']
+            ) }}"
+            class="admin-secondary-button"
+        >
+            Back to Work Order
+        </a>
+
+    </div>
+
+</div>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+        <div>
+            <h3>Actual Cost Summary</h3>
+
+            <p>
+                Current known costs recorded against
+                this Work Order.
+            </p>
+        </div>
+    </div>
+
+    <div class="job-cost-summary-grid">
+
+        <div class="job-cost-summary-item">
+            <span>
+                Hourly Labor
+            </span>
+
+            <strong>
+                ${{ "%.2f"|format(
+                    labor_summary[
+                        "total_labor_cost"
+                    ]
+                ) }}
+            </strong>
+        </div>
+
+
+        <div class="job-cost-summary-item">
+            <span>
+                Materials Used
+            </span>
+
+            <strong>
+                ${{ "%.2f"|format(
+                    actual_material_cost
+                ) }}
+            </strong>
+        </div>
+
+
+        <div class="job-cost-summary-item">
+            <span>
+                Subcontractors
+            </span>
+
+            <strong>
+                ${{ "%.2f"|format(
+                    actual_subcontractor_cost
+                ) }}
+            </strong>
+        </div>
+
+
+        <div class="job-cost-summary-item">
+            <span>
+                Known Actual Cost
+            </span>
+
+            <strong>
+                ${{ "%.2f"|format(
+                    known_actual_cost
+                ) }}
+            </strong>
+        </div>
+
+    </div>
+
+
+    {% if has_incomplete_labor_cost %}
+
+        <div class="job-cost-warning">
+
+            <strong>
+                Labor cost is not fully determined.
+            </strong>
+
+            {% if labor_summary["has_salary_labor"] %}
+
+                <div>
+                    {{ "%.2f"|format(
+                        labor_summary[
+                            "salary_hours"
+                        ]
+                    ) }}
+                    salaried labor hours are tracked
+                    but do not currently have an
+                    allocated Job Cost.
+                </div>
+
+            {% endif %}
+
+
+            {% if labor_summary["has_uncosted_labor"] %}
+
+                <div>
+                    {{ "%.2f"|format(
+                        labor_summary[
+                            "uncosted_hours"
+                        ]
+                    ) }}
+                    labor hours do not have enough
+                    historical pay information to
+                    calculate a reliable cost.
+                </div>
+
+            {% endif %}
+
+        </div>
+
+    {% endif %}
+
+</section>
+
+
+<section class="admin-panel">
+
+    <div class="admin-panel-heading">
+        <div>
+            <h3>Labor Cost</h3>
+
+            <p>
+                Hourly labor is calculated from the
+                historical pay snapshot stored with
+                each time entry.
+            </p>
+        </div>
+    </div>
+
+
+    <div class="job-cost-labor-summary">
+
+        <div>
+            <span>ST Hours</span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    labor_summary[
+                        "straight_time_hours"
+                    ]
+                ) }}
+            </strong>
+
+            <small>
+                ${{ "%.2f"|format(
+                    labor_summary[
+                        "straight_time_cost"
+                    ]
+                ) }}
+            </small>
+        </div>
+
+
+        <div>
+            <span>OT Hours</span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    labor_summary[
+                        "overtime_hours"
+                    ]
+                ) }}
+            </strong>
+
+            <small>
+                ${{ "%.2f"|format(
+                    labor_summary[
+                        "overtime_cost"
+                    ]
+                ) }}
+            </small>
+        </div>
+
+
+        <div>
+            <span>DT Hours</span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    labor_summary[
+                        "double_time_hours"
+                    ]
+                ) }}
+            </strong>
+
+            <small>
+                ${{ "%.2f"|format(
+                    labor_summary[
+                        "double_time_cost"
+                    ]
+                ) }}
+            </small>
+        </div>
+
+
+        <div>
+            <span>Total Hours</span>
+
+            <strong>
+                {{ "%.2f"|format(
+                    labor_summary[
+                        "total_hours"
+                    ]
+                ) }}
+            </strong>
+
+            <small>
+                Hourly + unallocated
+            </small>
+        </div>
+
+    </div>
+
+
+    {% if labor_summary["entries"] %}
+
+        <div class="job-cost-table-wrap">
+
+            <table class="job-cost-table">
+
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Worker</th>
+                        <th>ST</th>
+                        <th>OT</th>
+                        <th>DT</th>
+                        <th>Historical Rate</th>
+                        <th>Status</th>
+                        <th>Labor Cost</th>
+                    </tr>
+                </thead>
+
+                <tbody>
+
+                    {% for detail
+                           in labor_summary["entries"] %}
+
+                        {% set entry =
+                            detail["time_entry"] %}
+
+                        {% set cost =
+                            detail["labor_cost"] %}
+
+                        <tr>
+
+                            <td>
+                                {{ entry["work_date"] }}
+                            </td>
+
+                            <td>
+                                {{ entry[
+                                    "worker_first_name"
+                                ] }}
+                                {{ entry[
+                                    "worker_last_name"
+                                ] }}
+                            </td>
+
+                            <td>
+                                {{ "%.2f"|format(
+                                    entry[
+                                        "straight_time_hours"
+                                    ]
+                                    or 0
+                                ) }}
+                            </td>
+
+                            <td>
+                                {{ "%.2f"|format(
+                                    entry[
+                                        "overtime_hours"
+                                    ]
+                                    or 0
+                                ) }}
+                            </td>
+
+                            <td>
+                                {{ "%.2f"|format(
+                                    entry[
+                                        "double_time_hours"
+                                    ]
+                                    or 0
+                                ) }}
+                            </td>
+
+                            <td>
+
+                                {% if
+                                    entry[
+                                        "pay_type_snapshot"
+                                    ]
+                                    == "hourly"
+                                    and entry[
+                                        "hourly_rate_snapshot"
+                                    ]
+                                    is not none %}
+
+                                    ${{ "%.2f"|format(
+                                        entry[
+                                            "hourly_rate_snapshot"
+                                        ]
+                                    ) }}/hr
+
+                                {% elif
+                                    entry[
+                                        "pay_type_snapshot"
+                                    ]
+                                    == "salary" %}
+
+                                    Salary
+
+                                {% else %}
+
+                                    —
+
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+
+                                {% if
+                                    cost["status"]
+                                    == "costed" %}
+
+                                    Costed
+
+                                {% elif
+                                    cost["status"]
+                                    == "salary" %}
+
+                                    Salary —
+                                    Unallocated
+
+                                {% else %}
+
+                                    Historical Cost
+                                    Unknown
+
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+
+                                {% if
+                                    cost["total_cost"]
+                                    is not none %}
+
+                                    ${{ "%.2f"|format(
+                                        cost[
+                                            "total_cost"
+                                        ]
+                                    ) }}
+
+                                {% else %}
+
+                                    —
+
+                                {% endif %}
+
+                            </td>
+
+                        </tr>
+
+                    {% endfor %}
+
+                </tbody>
+
+            </table>
+
+        </div>
+
+    {% else %}
+
+        <p>
+            No labor has been entered for this
+            Work Order yet.
+        </p>
+
+    {% endif %}
+
+</section>
+
+
+<style>
+
+.job-cost-summary-grid,
+.job-cost-labor-summary {
+    display: grid;
+    grid-template-columns:
+        repeat(4, minmax(0, 1fr));
+    gap: 12px;
+}
+
+.job-cost-summary-item,
+.job-cost-labor-summary > div {
+    border: 1px solid #d9dee5;
+    border-radius: 6px;
+    padding: 12px;
+    background: #ffffff;
+}
+
+.job-cost-summary-item span,
+.job-cost-labor-summary span {
+    display: block;
+    font-size: 0.78rem;
+    color: #59636e;
+    margin-bottom: 4px;
+}
+
+.job-cost-summary-item strong,
+.job-cost-labor-summary strong {
+    display: block;
+    font-size: 1.15rem;
+}
+
+.job-cost-labor-summary small {
+    display: block;
+    margin-top: 4px;
+    color: #59636e;
+}
+
+.job-cost-warning {
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px solid #d7a923;
+    border-radius: 6px;
+}
+
+.job-cost-warning > div {
+    margin-top: 5px;
+}
+
+.job-cost-table-wrap {
+    overflow-x: auto;
+    margin-top: 16px;
+}
+
+.job-cost-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.job-cost-table th,
+.job-cost-table td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #e1e5ea;
+    text-align: left;
+    vertical-align: top;
+    white-space: nowrap;
+}
+
+.job-cost-table th {
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+@media (max-width: 900px) {
+
+    .job-cost-summary-grid,
+    .job-cost-labor-summary {
+        grid-template-columns:
+            repeat(2, minmax(0, 1fr));
+    }
+
+}
+
+@media (max-width: 600px) {
+
+    .job-cost-summary-grid,
+    .job-cost-labor-summary {
+        grid-template-columns: 1fr;
+    }
+
+}
+
+</style>
+
+{% endblock %}

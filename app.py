@@ -3119,6 +3119,10 @@ def ensure_database_schema():
             email TEXT,
             phone TEXT,
 
+            worker_type TEXT NOT NULL DEFAULT 'employee',
+            pay_type TEXT NOT NULL DEFAULT 'hourly',
+            hourly_rate REAL,
+
             is_salesperson INTEGER NOT NULL DEFAULT 0,
             is_active INTEGER NOT NULL DEFAULT 1,
 
@@ -3129,7 +3133,26 @@ def ensure_database_schema():
 
             FOREIGN KEY (admin_user_id)
                 REFERENCES admin_users (id)
-                ON DELETE SET NULL
+                ON DELETE SET NULL,
+
+            CHECK (
+                worker_type IN (
+                    'employee',
+                    '1099_contractor'
+                )
+            ),
+
+            CHECK (
+                pay_type IN (
+                    'hourly',
+                    'salary'
+                )
+            ),
+
+            CHECK (
+                hourly_rate IS NULL
+                OR hourly_rate >= 0
+            )
         )
         """
     )
@@ -3164,6 +3187,48 @@ def ensure_database_schema():
             ALTER TABLE company_personnel
             ADD COLUMN is_time_worker INTEGER
             NOT NULL DEFAULT 0
+            """
+        )
+
+    if "worker_type" not in personnel_columns:
+        cursor.execute(
+            """
+            ALTER TABLE company_personnel
+            ADD COLUMN worker_type TEXT
+            NOT NULL DEFAULT 'employee'
+            CHECK (
+                worker_type IN (
+                    'employee',
+                    '1099_contractor'
+                )
+            )
+            """
+        )
+
+    if "pay_type" not in personnel_columns:
+        cursor.execute(
+            """
+            ALTER TABLE company_personnel
+            ADD COLUMN pay_type TEXT
+            NOT NULL DEFAULT 'hourly'
+            CHECK (
+                pay_type IN (
+                    'hourly',
+                    'salary'
+                )
+            )
+            """
+        )
+
+    if "hourly_rate" not in personnel_columns:
+        cursor.execute(
+            """
+            ALTER TABLE company_personnel
+            ADD COLUMN hourly_rate REAL
+            CHECK (
+                hourly_rate IS NULL
+                OR hourly_rate >= 0
+            )
             """
         )
 
@@ -4204,6 +4269,17 @@ def ensure_database_schema():
             lunch_hours REAL NOT NULL DEFAULT 0,
             total_hours REAL NOT NULL DEFAULT 0,
 
+            is_double_time INTEGER NOT NULL DEFAULT 0,
+
+            straight_time_hours REAL NOT NULL DEFAULT 0,
+            overtime_hours REAL NOT NULL DEFAULT 0,
+            double_time_hours REAL NOT NULL DEFAULT 0,
+
+            pay_type_snapshot TEXT,
+            hourly_rate_snapshot REAL,
+            overtime_multiplier_snapshot REAL,
+            double_time_multiplier_snapshot REAL,
+
             notes TEXT,
 
             entered_by INTEGER,
@@ -4226,7 +4302,46 @@ def ensure_database_schema():
             CHECK (onsite_hours >= 0),
             CHECK (travel_hours >= 0),
             CHECK (lunch_hours >= 0),
-            CHECK (total_hours >= 0)
+            CHECK (total_hours >= 0),
+
+            CHECK (
+                is_double_time IN (0, 1)
+            ),
+
+            CHECK (
+                straight_time_hours >= 0
+            ),
+
+            CHECK (
+                overtime_hours >= 0
+            ),
+
+            CHECK (
+                double_time_hours >= 0
+            ),
+
+            CHECK (
+                pay_type_snapshot IS NULL
+                OR pay_type_snapshot IN (
+                    'hourly',
+                    'salary'
+                )
+            ),
+
+            CHECK (
+                hourly_rate_snapshot IS NULL
+                OR hourly_rate_snapshot >= 0
+            ),
+
+            CHECK (
+                overtime_multiplier_snapshot IS NULL
+                OR overtime_multiplier_snapshot >= 0
+            ),
+
+            CHECK (
+                double_time_multiplier_snapshot IS NULL
+                OR double_time_multiplier_snapshot >= 0
+            )
         )
         """
     )
@@ -4251,6 +4366,105 @@ def ensure_database_schema():
             """
             ALTER TABLE work_order_time_entries
             ADD COLUMN time_out TEXT
+            """
+        )
+
+    if "is_double_time" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN is_double_time INTEGER
+            NOT NULL DEFAULT 0
+            CHECK (
+                is_double_time IN (0, 1)
+            )
+            """
+        )
+
+    if "straight_time_hours" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN straight_time_hours REAL
+            NOT NULL DEFAULT 0
+            CHECK (
+                straight_time_hours >= 0
+            )
+            """
+        )
+
+    if "overtime_hours" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN overtime_hours REAL
+            NOT NULL DEFAULT 0
+            CHECK (
+                overtime_hours >= 0
+            )
+            """
+        )
+
+    if "double_time_hours" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN double_time_hours REAL
+            NOT NULL DEFAULT 0
+            CHECK (
+                double_time_hours >= 0
+            )
+            """
+        )
+
+    if "pay_type_snapshot" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN pay_type_snapshot TEXT
+            CHECK (
+                pay_type_snapshot IS NULL
+                OR pay_type_snapshot IN (
+                    'hourly',
+                    'salary'
+                )
+            )
+            """
+        )
+
+    if "hourly_rate_snapshot" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN hourly_rate_snapshot REAL
+            CHECK (
+                hourly_rate_snapshot IS NULL
+                OR hourly_rate_snapshot >= 0
+            )
+            """
+        )
+
+    if "overtime_multiplier_snapshot" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN overtime_multiplier_snapshot REAL
+            CHECK (
+                overtime_multiplier_snapshot IS NULL
+                OR overtime_multiplier_snapshot >= 0
+            )
+            """
+        )
+
+    if "double_time_multiplier_snapshot" not in work_order_time_entry_columns:
+        cursor.execute(
+            """
+            ALTER TABLE work_order_time_entries
+            ADD COLUMN double_time_multiplier_snapshot REAL
+            CHECK (
+                double_time_multiplier_snapshot IS NULL
+                OR double_time_multiplier_snapshot >= 0
+            )
             """
         )
 
@@ -8965,6 +9179,560 @@ def admin_user_reset_mfa(admin_user_id):
 # WEBSITE ADMINISTRATION
 # =========================================================
 
+@app.route("/admin/timesheets")
+@admin_required
+def admin_timesheets():
+    requested_week = (
+        request.args.get(
+            "week",
+            "",
+        ).strip()
+    )
+
+    if requested_week:
+        try:
+            selected_date = datetime.strptime(
+                requested_week,
+                "%Y-%m-%d",
+            ).date()
+
+        except ValueError:
+            flash(
+                "The selected timesheet week was invalid.",
+                "error",
+            )
+
+            selected_date = (
+                datetime.now().date()
+            )
+
+    else:
+        selected_date = (
+            datetime.now().date()
+        )
+
+    week_start, week_end = (
+        get_work_week_bounds(
+            selected_date.strftime(
+                "%Y-%m-%d"
+            )
+        )
+    )
+
+    week_start_date = (
+        datetime.strptime(
+            week_start,
+            "%Y-%m-%d",
+        ).date()
+    )
+
+    week_end_date = (
+        datetime.strptime(
+            week_end,
+            "%Y-%m-%d",
+        ).date()
+    )
+
+    previous_week_start = (
+        week_start_date
+        - timedelta(days=7)
+    ).strftime(
+        "%Y-%m-%d"
+    )
+
+    next_week_start = (
+        week_start_date
+        + timedelta(days=7)
+    ).strftime(
+        "%Y-%m-%d"
+    )
+
+    current_week_start = (
+        get_work_week_bounds(
+            datetime.now().strftime(
+                "%Y-%m-%d"
+            )
+        )[0]
+    )
+
+    days = []
+
+    for day_offset in range(7):
+        day_date = (
+            week_start_date
+            + timedelta(
+                days=day_offset
+            )
+        )
+
+        days.append(
+            {
+                "date": (
+                    day_date.strftime(
+                        "%Y-%m-%d"
+                    )
+                ),
+                "weekday": (
+                    day_date.strftime(
+                        "%a"
+                    )
+                ),
+                "display": (
+                    f"{day_date.month}/"
+                    f"{day_date.day}"
+                ),
+            }
+        )
+
+    connection = get_db_connection()
+
+    workers_with_entries = (
+        connection.execute(
+            """
+            SELECT DISTINCT
+                personnel_id
+
+            FROM work_order_time_entries
+
+            WHERE work_date >= ?
+              AND work_date <= ?
+            """,
+            (
+                week_start,
+                week_end,
+            ),
+        ).fetchall()
+    )
+
+    for worker in workers_with_entries:
+        refresh_personnel_week_time_classification(
+            connection,
+            worker["personnel_id"],
+            week_start,
+        )
+
+    if workers_with_entries:
+        connection.commit()
+
+    personnel_rows = connection.execute(
+        """
+        SELECT
+            company_personnel.id,
+            company_personnel.first_name,
+            company_personnel.last_name,
+            company_personnel.job_title,
+            company_personnel.worker_type,
+            company_personnel.pay_type,
+            company_personnel.is_time_worker,
+            company_personnel.is_active
+
+        FROM company_personnel
+
+        WHERE (
+            company_personnel.is_active = 1
+            AND company_personnel.is_time_worker = 1
+        )
+        OR EXISTS (
+            SELECT 1
+            FROM work_order_time_entries
+
+            WHERE
+                work_order_time_entries.personnel_id =
+                    company_personnel.id
+                AND work_order_time_entries.work_date >= ?
+                AND work_order_time_entries.work_date <= ?
+        )
+
+        ORDER BY
+            company_personnel.last_name
+                COLLATE NOCASE,
+            company_personnel.first_name
+                COLLATE NOCASE,
+            company_personnel.id
+        """,
+        (
+            week_start,
+            week_end,
+        ),
+    ).fetchall()
+
+    time_entries = connection.execute(
+        """
+        SELECT
+            work_order_time_entries.id,
+            work_order_time_entries.work_order_id,
+            work_order_time_entries.personnel_id,
+            work_order_time_entries.work_date,
+            work_order_time_entries.time_in,
+            work_order_time_entries.time_out,
+            work_order_time_entries.total_hours,
+            work_order_time_entries.straight_time_hours,
+            work_order_time_entries.overtime_hours,
+            work_order_time_entries.double_time_hours,
+            work_order_time_entries.is_double_time,
+            work_order_time_entries.notes,
+
+            work_orders.work_order_number,
+
+            customers.display_name
+                AS customer_display_name,
+
+            customers.commercial_name
+                AS customer_commercial_name
+
+        FROM work_order_time_entries
+
+        JOIN work_orders
+            ON work_orders.id =
+                work_order_time_entries.work_order_id
+
+        JOIN customers
+            ON customers.id =
+                work_orders.customer_id
+
+        WHERE
+            work_order_time_entries.work_date >= ?
+            AND work_order_time_entries.work_date <= ?
+
+        ORDER BY
+            work_order_time_entries.personnel_id,
+            work_order_time_entries.work_date,
+            COALESCE(
+                work_order_time_entries.time_in,
+                ''
+            ),
+            work_order_time_entries.id
+        """,
+        (
+            week_start,
+            week_end,
+        ),
+    ).fetchall()
+
+    connection.close()
+
+    personnel_timesheets = []
+
+    personnel_by_id = {}
+
+    for person in personnel_rows:
+        daily_hours = {}
+
+        for day in days:
+            daily_hours[
+                day["date"]
+            ] = {
+                "st": 0.0,
+                "ot": 0.0,
+                "dt": 0.0,
+            }
+
+        personnel_timesheet = {
+            "id": person["id"],
+            "first_name": (
+                person["first_name"]
+            ),
+            "last_name": (
+                person["last_name"]
+            ),
+            "job_title": (
+                person["job_title"]
+            ),
+            "is_active": (
+                person["is_active"]
+            ),
+            "daily": daily_hours,
+            "straight_time_hours": 0.0,
+            "overtime_hours": 0.0,
+            "double_time_hours": 0.0,
+            "total_hours": 0.0,
+            "has_double_time": False,
+            "work_orders_by_id": {},
+        }
+
+        personnel_timesheets.append(
+            personnel_timesheet
+        )
+
+        personnel_by_id[
+            person["id"]
+        ] = personnel_timesheet
+
+    for entry in time_entries:
+        personnel_timesheet = (
+            personnel_by_id.get(
+                entry["personnel_id"]
+            )
+        )
+
+        if personnel_timesheet is None:
+            continue
+
+        straight_time_hours = float(
+            entry[
+                "straight_time_hours"
+            ]
+            or 0
+        )
+
+        overtime_hours = float(
+            entry[
+                "overtime_hours"
+            ]
+            or 0
+        )
+
+        double_time_hours = float(
+            entry[
+                "double_time_hours"
+            ]
+            or 0
+        )
+
+        day_hours = (
+            personnel_timesheet[
+                "daily"
+            ][
+                entry["work_date"]
+            ]
+        )
+
+        day_hours["st"] += (
+            straight_time_hours
+        )
+
+        day_hours["ot"] += (
+            overtime_hours
+        )
+
+        day_hours["dt"] += (
+            double_time_hours
+        )
+
+        personnel_timesheet[
+            "straight_time_hours"
+        ] += straight_time_hours
+
+        personnel_timesheet[
+            "overtime_hours"
+        ] += overtime_hours
+
+        personnel_timesheet[
+            "double_time_hours"
+        ] += double_time_hours
+
+        personnel_timesheet[
+            "total_hours"
+        ] += float(
+            entry["total_hours"]
+            or 0
+        )
+
+        if double_time_hours > 0:
+            personnel_timesheet[
+                "has_double_time"
+            ] = True
+
+        work_order_id = (
+            entry["work_order_id"]
+        )
+
+        work_orders_by_id = (
+            personnel_timesheet[
+                "work_orders_by_id"
+            ]
+        )
+
+        if (
+            work_order_id
+            not in work_orders_by_id
+        ):
+            customer_name = (
+                entry[
+                    "customer_display_name"
+                ]
+                or entry[
+                    "customer_commercial_name"
+                ]
+                or "Unnamed Customer"
+            )
+
+            work_orders_by_id[
+                work_order_id
+            ] = {
+                "id": work_order_id,
+                "number": (
+                    entry[
+                        "work_order_number"
+                    ]
+                ),
+                "formatted_number": (
+                    format_work_order_number(
+                        entry[
+                            "work_order_number"
+                        ]
+                    )
+                ),
+                "customer_name": (
+                    customer_name
+                ),
+                "days": {},
+            }
+
+        work_order = (
+            work_orders_by_id[
+                work_order_id
+            ]
+        )
+
+        if (
+            entry["work_date"]
+            not in work_order["days"]
+        ):
+            work_order["days"][
+                entry["work_date"]
+            ] = {
+                "date": (
+                    entry["work_date"]
+                ),
+                "st": 0.0,
+                "ot": 0.0,
+                "dt": 0.0,
+            }
+
+        work_order_day = (
+            work_order["days"][
+                entry["work_date"]
+            ]
+        )
+
+        work_order_day["st"] += (
+            straight_time_hours
+        )
+
+        work_order_day["ot"] += (
+            overtime_hours
+        )
+
+        work_order_day["dt"] += (
+            double_time_hours
+        )
+
+    for personnel_timesheet in (
+        personnel_timesheets
+    ):
+        work_orders = sorted(
+            personnel_timesheet[
+                "work_orders_by_id"
+            ].values(),
+            key=lambda work_order: (
+                work_order["number"]
+            ),
+        )
+
+        for work_order in work_orders:
+            work_order_days = []
+
+            for day in days:
+                work_order_day = (
+                    work_order[
+                        "days"
+                    ].get(
+                        day["date"]
+                    )
+                )
+
+                if work_order_day is None:
+                    continue
+
+                work_order_day[
+                    "weekday"
+                ] = day["weekday"]
+
+                work_order_day[
+                    "display"
+                ] = day["display"]
+
+                work_order_days.append(
+                    work_order_day
+                )
+
+            work_order[
+                "day_entries"
+            ] = work_order_days
+
+        personnel_timesheet[
+            "work_orders"
+        ] = work_orders
+
+        del personnel_timesheet[
+            "work_orders_by_id"
+        ]
+
+    company_summary = {
+        "straight_time_hours": sum(
+            person[
+                "straight_time_hours"
+            ]
+            for person
+            in personnel_timesheets
+        ),
+        "overtime_hours": sum(
+            person[
+                "overtime_hours"
+            ]
+            for person
+            in personnel_timesheets
+        ),
+        "double_time_hours": sum(
+            person[
+                "double_time_hours"
+            ]
+            for person
+            in personnel_timesheets
+        ),
+        "total_hours": sum(
+            person[
+                "total_hours"
+            ]
+            for person
+            in personnel_timesheets
+        ),
+    }
+
+    week_label = (
+        f"{week_start_date.strftime('%b')} "
+        f"{week_start_date.day}, "
+        f"{week_start_date.year}"
+        " – "
+        f"{week_end_date.strftime('%b')} "
+        f"{week_end_date.day}, "
+        f"{week_end_date.year}"
+    )
+
+    return render_template(
+        "admin_timesheets.html",
+        personnel_timesheets=(
+            personnel_timesheets
+        ),
+        days=days,
+        week_start=week_start,
+        week_end=week_end,
+        week_label=week_label,
+        previous_week_start=(
+            previous_week_start
+        ),
+        next_week_start=(
+            next_week_start
+        ),
+        current_week_start=(
+            current_week_start
+        ),
+        company_summary=(
+            company_summary
+        ),
+    )
+
 @app.route("/admin/personnel")
 @admin_required
 def admin_personnel():
@@ -8979,7 +9747,11 @@ def admin_personnel():
             job_title,
             email,
             phone,
+            worker_type,
+            pay_type,
+            hourly_rate,
             is_salesperson,
+            is_time_worker,
             is_active,
             admin_user_id,
             created_at,
@@ -9059,6 +9831,27 @@ def admin_personnel_new():
             ).strip()
         )
 
+        worker_type = (
+            request.form.get(
+                "worker_type",
+                "employee",
+            ).strip()
+        )
+
+        pay_type = (
+            request.form.get(
+                "pay_type",
+                "hourly",
+            ).strip()
+        )
+
+        hourly_rate_text = (
+            request.form.get(
+                "hourly_rate",
+                "",
+            ).strip()
+        )
+
         is_salesperson = (
             1
             if request.form.get(
@@ -9076,6 +9869,43 @@ def admin_personnel_new():
         )
 
         errors = []
+
+        if worker_type not in {
+            "employee",
+            "1099_contractor",
+        }:
+            errors.append(
+                "Select a valid Worker Type."
+            )
+
+        if pay_type not in {
+            "hourly",
+            "salary",
+        }:
+            errors.append(
+                "Select a valid Pay Type."
+            )
+
+        hourly_rate = None
+
+        if hourly_rate_text:
+            try:
+                hourly_rate = float(
+                    hourly_rate_text
+                )
+
+                if hourly_rate < 0:
+                    errors.append(
+                        "Hourly Rate cannot be negative."
+                    )
+
+            except ValueError:
+                errors.append(
+                    "Enter a valid Hourly Rate."
+                )
+
+        if pay_type == "salary":
+            hourly_rate = None
 
         if not first_name:
             errors.append(
@@ -9111,6 +9941,9 @@ def admin_personnel_new():
                 job_title,
                 email,
                 phone,
+                worker_type,
+                pay_type,
+                hourly_rate,
                 is_salesperson,
                 is_time_worker,
                 is_active,
@@ -9118,7 +9951,7 @@ def admin_personnel_new():
                 updated_at
             )
             VALUES (
-                ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
+                ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?
             )
             """,
             (
@@ -9127,6 +9960,9 @@ def admin_personnel_new():
                 job_title or None,
                 email or None,
                 phone or None,
+                worker_type,
+                pay_type,
+                hourly_rate,
                 is_salesperson,
                 is_time_worker,
                 now,
@@ -9233,6 +10069,27 @@ def admin_personnel_edit(personnel_id):
             ).strip()
         )
 
+        worker_type = (
+            request.form.get(
+                "worker_type",
+                "employee",
+            ).strip()
+        )
+
+        pay_type = (
+            request.form.get(
+                "pay_type",
+                "hourly",
+            ).strip()
+        )
+
+        hourly_rate_text = (
+            request.form.get(
+                "hourly_rate",
+                "",
+            ).strip()
+        )
+
         is_salesperson = (
             1
             if request.form.get(
@@ -9258,6 +10115,43 @@ def admin_personnel_edit(personnel_id):
         )
 
         errors = []
+
+        if worker_type not in {
+            "employee",
+            "1099_contractor",
+        }:
+            errors.append(
+                "Select a valid Worker Type."
+            )
+
+        if pay_type not in {
+            "hourly",
+            "salary",
+        }:
+            errors.append(
+                "Select a valid Pay Type."
+            )
+
+        hourly_rate = None
+
+        if hourly_rate_text:
+            try:
+                hourly_rate = float(
+                    hourly_rate_text
+                )
+
+                if hourly_rate < 0:
+                    errors.append(
+                        "Hourly Rate cannot be negative."
+                    )
+
+            except ValueError:
+                errors.append(
+                    "Enter a valid Hourly Rate."
+                )
+
+        if pay_type == "salary":
+            hourly_rate = None
 
         if not first_name:
             errors.append(
@@ -9294,6 +10188,9 @@ def admin_personnel_edit(personnel_id):
                 job_title = ?,
                 email = ?,
                 phone = ?,
+                worker_type = ?,
+                pay_type = ?,
+                hourly_rate = ?,
                 is_salesperson = ?,
                 is_time_worker = ?,
                 is_active = ?,
@@ -9306,6 +10203,9 @@ def admin_personnel_edit(personnel_id):
                 job_title or None,
                 email or None,
                 phone or None,
+                worker_type,
+                pay_type,
+                hourly_rate,
                 is_salesperson,
                 is_time_worker,
                 is_active,
@@ -10112,6 +11012,8 @@ def refresh_customer_review_status(
 
 WORK_ORDER_START_NUMBER = 3000
 
+LABOR_OVERTIME_MULTIPLIER = 1.5
+LABOR_DOUBLE_TIME_MULTIPLIER = 2.0
 
 def get_next_work_order_number(
     connection,
@@ -10176,6 +11078,423 @@ def calculate_work_order_time(
         ),
     }
 
+def get_personnel_labor_snapshot(
+    personnel,
+):
+    pay_type = personnel[
+        "pay_type"
+    ]
+
+    if pay_type == "hourly":
+        return {
+            "pay_type_snapshot": (
+                "hourly"
+            ),
+            "hourly_rate_snapshot": (
+                personnel[
+                    "hourly_rate"
+                ]
+            ),
+            "overtime_multiplier_snapshot": (
+                LABOR_OVERTIME_MULTIPLIER
+            ),
+            "double_time_multiplier_snapshot": (
+                LABOR_DOUBLE_TIME_MULTIPLIER
+            ),
+        }
+
+    return {
+        "pay_type_snapshot": "salary",
+        "hourly_rate_snapshot": None,
+        "overtime_multiplier_snapshot": None,
+        "double_time_multiplier_snapshot": None,
+    }
+
+def calculate_time_entry_labor_cost(
+    time_entry,
+):
+    straight_time_hours = float(
+        time_entry[
+            "straight_time_hours"
+        ]
+        or 0
+    )
+
+    overtime_hours = float(
+        time_entry[
+            "overtime_hours"
+        ]
+        or 0
+    )
+
+    double_time_hours = float(
+        time_entry[
+            "double_time_hours"
+        ]
+        or 0
+    )
+
+    total_hours = (
+        straight_time_hours
+        + overtime_hours
+        + double_time_hours
+    )
+
+    pay_type_snapshot = (
+        time_entry[
+            "pay_type_snapshot"
+        ]
+    )
+
+    if pay_type_snapshot == "salary":
+        return {
+            "status": "salary",
+            "straight_time_cost": None,
+            "overtime_cost": None,
+            "double_time_cost": None,
+            "total_cost": None,
+            "total_hours": total_hours,
+        }
+
+    if pay_type_snapshot != "hourly":
+        return {
+            "status": "missing_snapshot",
+            "straight_time_cost": None,
+            "overtime_cost": None,
+            "double_time_cost": None,
+            "total_cost": None,
+            "total_hours": total_hours,
+        }
+
+    hourly_rate = (
+        time_entry[
+            "hourly_rate_snapshot"
+        ]
+    )
+
+    if hourly_rate is None:
+        return {
+            "status": "missing_rate",
+            "straight_time_cost": None,
+            "overtime_cost": None,
+            "double_time_cost": None,
+            "total_cost": None,
+            "total_hours": total_hours,
+        }
+
+    hourly_rate = float(
+        hourly_rate
+    )
+
+    overtime_multiplier = (
+        time_entry[
+            "overtime_multiplier_snapshot"
+        ]
+    )
+
+    double_time_multiplier = (
+        time_entry[
+            "double_time_multiplier_snapshot"
+        ]
+    )
+
+    if (
+        overtime_hours > 0
+        and overtime_multiplier is None
+    ):
+        return {
+            "status": "missing_multiplier",
+            "straight_time_cost": None,
+            "overtime_cost": None,
+            "double_time_cost": None,
+            "total_cost": None,
+            "total_hours": total_hours,
+        }
+
+    if (
+        double_time_hours > 0
+        and double_time_multiplier is None
+    ):
+        return {
+            "status": "missing_multiplier",
+            "straight_time_cost": None,
+            "overtime_cost": None,
+            "double_time_cost": None,
+            "total_cost": None,
+            "total_hours": total_hours,
+        }
+
+    straight_time_cost = round(
+        straight_time_hours
+        * hourly_rate,
+        2,
+    )
+
+    overtime_cost = round(
+        overtime_hours
+        * hourly_rate
+        * float(
+            overtime_multiplier
+            or 0
+        ),
+        2,
+    )
+
+    double_time_cost = round(
+        double_time_hours
+        * hourly_rate
+        * float(
+            double_time_multiplier
+            or 0
+        ),
+        2,
+    )
+
+    total_cost = round(
+        straight_time_cost
+        + overtime_cost
+        + double_time_cost,
+        2,
+    )
+
+    return {
+        "status": "costed",
+        "straight_time_cost": (
+            straight_time_cost
+        ),
+        "overtime_cost": overtime_cost,
+        "double_time_cost": (
+            double_time_cost
+        ),
+        "total_cost": total_cost,
+        "total_hours": total_hours,
+    }
+
+
+def get_work_order_labor_cost_summary(
+    connection,
+    work_order_id,
+):
+    time_entries = connection.execute(
+        """
+        SELECT
+            work_order_time_entries.*,
+
+            company_personnel.first_name
+                AS worker_first_name,
+
+            company_personnel.last_name
+                AS worker_last_name,
+
+            company_personnel.job_title
+                AS worker_job_title
+
+        FROM work_order_time_entries
+
+        JOIN company_personnel
+            ON company_personnel.id =
+                work_order_time_entries.personnel_id
+
+        WHERE
+            work_order_time_entries.work_order_id = ?
+
+        ORDER BY
+            work_order_time_entries.work_date ASC,
+            COALESCE(
+                work_order_time_entries.time_in,
+                ''
+            ) ASC,
+            work_order_time_entries.id ASC
+        """,
+        (work_order_id,),
+    ).fetchall()
+
+    straight_time_hours = 0.0
+    overtime_hours = 0.0
+    double_time_hours = 0.0
+
+    straight_time_cost = 0.0
+    overtime_cost = 0.0
+    double_time_cost = 0.0
+
+    salary_hours = 0.0
+    uncosted_hours = 0.0
+
+    costed_entry_count = 0
+    salary_entry_count = 0
+    uncosted_entry_count = 0
+
+    entry_details = []
+
+    for time_entry in time_entries:
+        labor_cost = (
+            calculate_time_entry_labor_cost(
+                time_entry
+            )
+        )
+
+        entry_st_hours = float(
+            time_entry[
+                "straight_time_hours"
+            ]
+            or 0
+        )
+
+        entry_ot_hours = float(
+            time_entry[
+                "overtime_hours"
+            ]
+            or 0
+        )
+
+        entry_dt_hours = float(
+            time_entry[
+                "double_time_hours"
+            ]
+            or 0
+        )
+
+        straight_time_hours += (
+            entry_st_hours
+        )
+
+        overtime_hours += (
+            entry_ot_hours
+        )
+
+        double_time_hours += (
+            entry_dt_hours
+        )
+
+        if (
+            labor_cost["status"]
+            == "costed"
+        ):
+            costed_entry_count += 1
+
+            straight_time_cost += (
+                labor_cost[
+                    "straight_time_cost"
+                ]
+            )
+
+            overtime_cost += (
+                labor_cost[
+                    "overtime_cost"
+                ]
+            )
+
+            double_time_cost += (
+                labor_cost[
+                    "double_time_cost"
+                ]
+            )
+
+        elif (
+            labor_cost["status"]
+            == "salary"
+        ):
+            salary_entry_count += 1
+
+            salary_hours += (
+                labor_cost[
+                    "total_hours"
+                ]
+            )
+
+        else:
+            uncosted_entry_count += 1
+
+            uncosted_hours += (
+                labor_cost[
+                    "total_hours"
+                ]
+            )
+
+        entry_details.append(
+            {
+                "time_entry": (
+                    time_entry
+                ),
+                "labor_cost": (
+                    labor_cost
+                ),
+            }
+        )
+
+    total_labor_cost = round(
+        straight_time_cost
+        + overtime_cost
+        + double_time_cost,
+        2,
+    )
+
+    total_hours = round(
+        straight_time_hours
+        + overtime_hours
+        + double_time_hours,
+        2,
+    )
+
+    return {
+        "straight_time_hours": round(
+            straight_time_hours,
+            2,
+        ),
+        "overtime_hours": round(
+            overtime_hours,
+            2,
+        ),
+        "double_time_hours": round(
+            double_time_hours,
+            2,
+        ),
+        "total_hours": total_hours,
+
+        "straight_time_cost": round(
+            straight_time_cost,
+            2,
+        ),
+        "overtime_cost": round(
+            overtime_cost,
+            2,
+        ),
+        "double_time_cost": round(
+            double_time_cost,
+            2,
+        ),
+        "total_labor_cost": (
+            total_labor_cost
+        ),
+
+        "salary_hours": round(
+            salary_hours,
+            2,
+        ),
+        "uncosted_hours": round(
+            uncosted_hours,
+            2,
+        ),
+
+        "costed_entry_count": (
+            costed_entry_count
+        ),
+        "salary_entry_count": (
+            salary_entry_count
+        ),
+        "uncosted_entry_count": (
+            uncosted_entry_count
+        ),
+
+        "has_salary_labor": (
+            salary_entry_count > 0
+        ),
+        "has_uncosted_labor": (
+            uncosted_entry_count > 0
+        ),
+
+        "entries": entry_details,
+    }
 
 def format_work_order_clock_time(
     value,
@@ -10233,6 +11552,135 @@ def refresh_work_order_time_totals(
             work_order_id,
         ),
     )
+
+def get_work_week_bounds(work_date):
+    parsed_date = datetime.strptime(
+        work_date,
+        "%Y-%m-%d",
+    )
+
+    days_since_sunday = (
+        parsed_date.weekday() + 1
+    ) % 7
+
+    week_start = (
+        parsed_date
+        - timedelta(
+            days=days_since_sunday
+        )
+    )
+
+    week_end = (
+        week_start
+        + timedelta(days=6)
+    )
+
+    return (
+        week_start.strftime("%Y-%m-%d"),
+        week_end.strftime("%Y-%m-%d"),
+    )
+
+
+def refresh_personnel_week_time_classification(
+    connection,
+    personnel_id,
+    work_date,
+):
+    week_start, week_end = (
+        get_work_week_bounds(
+            work_date
+        )
+    )
+
+    time_entries = connection.execute(
+        """
+        SELECT
+            id,
+            work_date,
+            time_in,
+            total_hours,
+            is_double_time
+
+        FROM work_order_time_entries
+
+        WHERE personnel_id = ?
+          AND work_date >= ?
+          AND work_date <= ?
+
+        ORDER BY
+            work_date ASC,
+            COALESCE(
+                time_in,
+                ''
+            ) ASC,
+            id ASC
+        """,
+        (
+            personnel_id,
+            week_start,
+            week_end,
+        ),
+    ).fetchall()
+
+    accumulated_regular_hours = 0.0
+
+    for time_entry in time_entries:
+        total_hours = float(
+            time_entry[
+                "total_hours"
+            ]
+            or 0
+        )
+
+        if time_entry[
+            "is_double_time"
+        ]:
+            straight_time_hours = 0.0
+            overtime_hours = 0.0
+            double_time_hours = (
+                total_hours
+            )
+
+        else:
+            remaining_straight_time = max(
+                0.0,
+                40.0
+                - accumulated_regular_hours,
+            )
+
+            straight_time_hours = min(
+                total_hours,
+                remaining_straight_time,
+            )
+
+            overtime_hours = max(
+                0.0,
+                total_hours
+                - straight_time_hours,
+            )
+
+            double_time_hours = 0.0
+
+            accumulated_regular_hours += (
+                total_hours
+            )
+
+        connection.execute(
+            """
+            UPDATE work_order_time_entries
+            SET
+                straight_time_hours = ?,
+                overtime_hours = ?,
+                double_time_hours = ?
+            WHERE id = ?
+            """,
+            (
+                straight_time_hours,
+                overtime_hours,
+                double_time_hours,
+                time_entry["id"],
+            ),
+        )
 
 def get_work_order_photo_directory(
     work_order_id,
@@ -16635,6 +18083,142 @@ def admin_work_order_detail(
     )
 
 @app.route(
+    "/admin/work-orders/<int:work_order_id>/job-cost"
+)
+@admin_required
+def admin_work_order_job_cost(
+    work_order_id,
+):
+    connection = get_db_connection()
+
+    work_order = connection.execute(
+        """
+        SELECT
+            work_orders.*,
+
+            customers.display_name
+                AS customer_display_name,
+
+            customers.commercial_name
+                AS customer_commercial_name
+
+        FROM work_orders
+
+        JOIN customers
+            ON customers.id =
+                work_orders.customer_id
+
+        WHERE work_orders.id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    if work_order is None:
+        connection.close()
+        abort(404)
+
+    labor_summary = (
+        get_work_order_labor_cost_summary(
+            connection,
+            work_order_id,
+        )
+    )
+
+    materials_summary = connection.execute(
+        """
+        SELECT
+            COALESCE(
+                SUM(
+                    quantity
+                    * unit_cost
+                ),
+                0
+            ) AS actual_cost
+
+        FROM work_order_materials_used
+
+        WHERE work_order_id = ?
+        """,
+        (work_order_id,),
+    ).fetchone()
+
+    subcontractor_summary = (
+        connection.execute(
+            """
+            SELECT
+                COALESCE(
+                    SUM(actual_cost),
+                    0
+                ) AS actual_cost
+
+            FROM work_order_subcontractors
+
+            WHERE work_order_id = ?
+            """,
+            (work_order_id,),
+        ).fetchone()
+    )
+
+    connection.close()
+
+    actual_material_cost = float(
+        materials_summary[
+            "actual_cost"
+        ]
+        or 0
+    )
+
+    actual_subcontractor_cost = float(
+        subcontractor_summary[
+            "actual_cost"
+        ]
+        or 0
+    )
+
+    known_actual_cost = round(
+        labor_summary[
+            "total_labor_cost"
+        ]
+        + actual_material_cost
+        + actual_subcontractor_cost,
+        2,
+    )
+
+    has_incomplete_labor_cost = bool(
+        labor_summary[
+            "has_salary_labor"
+        ]
+        or labor_summary[
+            "has_uncosted_labor"
+        ]
+    )
+
+    return render_template(
+        "admin_work_order_job_cost.html",
+        work_order=work_order,
+        formatted_work_order_number=(
+            format_work_order_number(
+                work_order[
+                    "work_order_number"
+                ]
+            )
+        ),
+        labor_summary=labor_summary,
+        actual_material_cost=round(
+            actual_material_cost,
+            2,
+        ),
+        actual_subcontractor_cost=round(
+            actual_subcontractor_cost,
+            2,
+        ),
+        known_actual_cost=known_actual_cost,
+        has_incomplete_labor_cost=(
+            has_incomplete_labor_cost
+        ),
+    )
+
+@app.route(
     "/admin/work-orders/<int:work_order_id>/edit",
     methods=["GET", "POST"],
 )
@@ -18770,6 +20354,12 @@ def admin_work_order_time_entry_add(
         )
     )
 
+    is_double_time = bool(
+        request.form.get(
+            "is_double_time"
+        )
+    )
+
     notes = (
         request.form.get(
             "notes",
@@ -18931,6 +20521,12 @@ def admin_work_order_time_entry_add(
 
     now = current_timestamp()
 
+    labor_snapshot = (
+        get_personnel_labor_snapshot(
+            personnel
+        )
+    )
+
     cursor = connection.execute(
         """
         INSERT INTO work_order_time_entries (
@@ -18943,6 +20539,11 @@ def admin_work_order_time_entry_add(
             travel_hours,
             lunch_hours,
             total_hours,
+            is_double_time,
+            pay_type_snapshot,
+            hourly_rate_snapshot,
+            overtime_multiplier_snapshot,
+            double_time_multiplier_snapshot,
             notes,
             entered_by,
             created_at,
@@ -18950,7 +20551,8 @@ def admin_work_order_time_entry_add(
         )
         VALUES (
             ?, ?, ?, ?, ?,
-            0, 0, ?, ?,
+            0, 0, ?, ?, ?,
+            ?, ?, ?, ?,
             ?, ?, ?, ?
         )
         """,
@@ -18965,6 +20567,19 @@ def admin_work_order_time_entry_add(
             ],
             calculated_time[
                 "total_hours"
+            ],
+            1 if is_double_time else 0,
+            labor_snapshot[
+                "pay_type_snapshot"
+            ],
+            labor_snapshot[
+                "hourly_rate_snapshot"
+            ],
+            labor_snapshot[
+                "overtime_multiplier_snapshot"
+            ],
+            labor_snapshot[
+                "double_time_multiplier_snapshot"
             ],
             notes or None,
             (
@@ -18982,6 +20597,12 @@ def admin_work_order_time_entry_add(
     refresh_work_order_time_totals(
         connection,
         work_order_id,
+    )
+
+    refresh_personnel_week_time_classification(
+        connection,
+        personnel["id"],
+        work_date,
     )
 
     connection.commit()
@@ -19093,6 +20714,12 @@ def admin_work_order_time_entry_edit(
     lunch_applies = bool(
         request.form.get(
             "lunch_applies"
+        )
+    )
+
+    is_double_time = bool(
+        request.form.get(
+            "is_double_time"
         )
     )
 
@@ -19264,6 +20891,40 @@ def admin_work_order_time_entry_edit(
 
     now = current_timestamp()
 
+    if (
+        personnel["id"]
+        != time_entry["personnel_id"]
+    ):
+        labor_snapshot = (
+            get_personnel_labor_snapshot(
+                personnel
+            )
+        )
+
+    else:
+        labor_snapshot = {
+            "pay_type_snapshot": (
+                time_entry[
+                    "pay_type_snapshot"
+                ]
+            ),
+            "hourly_rate_snapshot": (
+                time_entry[
+                    "hourly_rate_snapshot"
+                ]
+            ),
+            "overtime_multiplier_snapshot": (
+                time_entry[
+                    "overtime_multiplier_snapshot"
+                ]
+            ),
+            "double_time_multiplier_snapshot": (
+                time_entry[
+                    "double_time_multiplier_snapshot"
+                ]
+            ),
+        }
+
     connection.execute(
         """
         UPDATE work_order_time_entries
@@ -19276,6 +20937,11 @@ def admin_work_order_time_entry_edit(
             travel_hours = 0,
             lunch_hours = ?,
             total_hours = ?,
+            is_double_time = ?,
+            pay_type_snapshot = ?,
+            hourly_rate_snapshot = ?,
+            overtime_multiplier_snapshot = ?,
+            double_time_multiplier_snapshot = ?,
             notes = ?,
             updated_at = ?
         WHERE id = ?
@@ -19292,6 +20958,19 @@ def admin_work_order_time_entry_edit(
             calculated_time[
                 "total_hours"
             ],
+            1 if is_double_time else 0,
+            labor_snapshot[
+                "pay_type_snapshot"
+            ],
+            labor_snapshot[
+                "hourly_rate_snapshot"
+            ],
+            labor_snapshot[
+                "overtime_multiplier_snapshot"
+            ],
+            labor_snapshot[
+                "double_time_multiplier_snapshot"
+            ],
             notes or None,
             now,
             time_entry_id,
@@ -19303,6 +20982,24 @@ def admin_work_order_time_entry_edit(
         connection,
         work_order_id,
     )
+
+    refresh_personnel_week_time_classification(
+        connection,
+        time_entry["personnel_id"],
+        time_entry["work_date"],
+    )
+
+    if (
+        personnel["id"]
+        != time_entry["personnel_id"]
+        or work_date
+        != time_entry["work_date"]
+    ):
+        refresh_personnel_week_time_classification(
+            connection,
+            personnel["id"],
+            work_date,
+        )
 
     connection.commit()
     connection.close()
@@ -19399,6 +21096,12 @@ def admin_work_order_time_entry_delete(
     refresh_work_order_time_totals(
         connection,
         work_order_id,
+    )
+
+    refresh_personnel_week_time_classification(
+        connection,
+        time_entry["personnel_id"],
+        time_entry["work_date"],
     )
 
     connection.commit()

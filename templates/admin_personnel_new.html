@@ -149,6 +149,111 @@
 
             </div>
 
+            <div class="admin-field">
+
+                <label for="worker_type">
+                    Worker Type
+                </label>
+
+                <select
+                    id="worker_type"
+                    name="worker_type"
+                    required
+                >
+
+                    <option
+                        value="employee"
+                        {% if request.form.get(
+                            'worker_type',
+                            'employee'
+                        ) == 'employee' %}
+                            selected
+                        {% endif %}
+                    >
+                        Employee
+                    </option>
+
+                    <option
+                        value="1099_contractor"
+                        {% if request.form.get(
+                            'worker_type'
+                        ) == '1099_contractor' %}
+                            selected
+                        {% endif %}
+                    >
+                        1099 Contractor
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="pay_type">
+                    Pay Type
+                </label>
+
+                <select
+                    id="pay_type"
+                    name="pay_type"
+                    required
+                >
+
+                    <option
+                        value="hourly"
+                        {% if request.form.get(
+                            'pay_type',
+                            'hourly'
+                        ) == 'hourly' %}
+                            selected
+                        {% endif %}
+                    >
+                        Hourly
+                    </option>
+
+                    <option
+                        value="salary"
+                        {% if request.form.get(
+                            'pay_type'
+                        ) == 'salary' %}
+                            selected
+                        {% endif %}
+                    >
+                        Salary
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="hourly_rate">
+                    Hourly Rate
+                </label>
+
+                <input
+                    type="number"
+                    id="hourly_rate"
+                    name="hourly_rate"
+                    min="0"
+                    step="0.01"
+                    value="{{ request.form.get(
+                        'hourly_rate',
+                        ''
+                    ) }}"
+                    placeholder="0.00"
+                >
+
+                <small class="admin-field-help">
+                    Used for hourly personnel only.
+                    Leave blank for salaried personnel.
+                </small>
+
+            </div>
 
             <div class="admin-field admin-field-full">
 

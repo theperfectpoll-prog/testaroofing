@@ -113,6 +113,7 @@
                     'admin_personnel',
                     'admin_personnel_new',
                     'admin_personnel_edit',
+                    'admin_timesheets',
                     'admin_products'
                 ] %}
                     open
@@ -134,6 +135,13 @@
                         ] %}active{% endif %}"
                     >
                         Personnel
+                    </a>
+
+                    <a
+                        href="{{ url_for('admin_timesheets') }}"
+                        class="{% if request.endpoint == 'admin_timesheets' %}active{% endif %}"
+                    >
+                        Timesheets
                     </a>
 
                     <span class="admin-navigation-disabled">

@@ -163,6 +163,117 @@
 
             </div>
 
+            <div class="admin-field">
+
+                <label for="worker_type">
+                    Worker Type
+                </label>
+
+                {% set selected_worker_type =
+                    request.form.get(
+                        'worker_type',
+                        person['worker_type']
+                    )
+                %}
+
+                <select
+                    id="worker_type"
+                    name="worker_type"
+                    required
+                >
+
+                    <option
+                        value="employee"
+                        {% if selected_worker_type == 'employee' %}
+                            selected
+                        {% endif %}
+                    >
+                        Employee
+                    </option>
+
+                    <option
+                        value="1099_contractor"
+                        {% if selected_worker_type == '1099_contractor' %}
+                            selected
+                        {% endif %}
+                    >
+                        1099 Contractor
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="pay_type">
+                    Pay Type
+                </label>
+
+                {% set selected_pay_type =
+                    request.form.get(
+                        'pay_type',
+                        person['pay_type']
+                    )
+                %}
+
+                <select
+                    id="pay_type"
+                    name="pay_type"
+                    required
+                >
+
+                    <option
+                        value="hourly"
+                        {% if selected_pay_type == 'hourly' %}
+                            selected
+                        {% endif %}
+                    >
+                        Hourly
+                    </option>
+
+                    <option
+                        value="salary"
+                        {% if selected_pay_type == 'salary' %}
+                            selected
+                        {% endif %}
+                    >
+                        Salary
+                    </option>
+
+                </select>
+
+            </div>
+
+
+            <div class="admin-field">
+
+                <label for="hourly_rate">
+                    Hourly Rate
+                </label>
+
+                <input
+                    type="number"
+                    id="hourly_rate"
+                    name="hourly_rate"
+                    min="0"
+                    step="0.01"
+                    value="{{ request.form.get(
+                        'hourly_rate',
+                        person['hourly_rate']
+                        if person['hourly_rate'] is not none
+                        else ''
+                    ) }}"
+                    placeholder="0.00"
+                >
+
+                <small class="admin-field-help">
+                    Used for hourly personnel only.
+                    Leave blank for salaried personnel.
+                </small>
+
+            </div>
 
             <div class="admin-field admin-field-full">
 

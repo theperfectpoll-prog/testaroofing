@@ -347,7 +347,8 @@
             minmax(180px, 1fr)
             125px
             125px
-            90px;
+            80px
+            80px;
         gap: 10px;
         align-items: end;
         margin-bottom: 20px;
@@ -381,15 +382,19 @@
         font-size: 0.82rem;
     }
 
-    .work-order-time-lunch-field {
+    .work-order-time-lunch-field,
+    .work-order-time-dt-field {
         text-align: center;
     }
 
-    .work-order-time-lunch-field label {
+    .work-order-time-lunch-field label,
+    .work-order-time-dt-field label {
         text-align: center;
     }
 
     .work-order-time-lunch-field
+    input[type="checkbox"],
+    .work-order-time-dt-field
     input[type="checkbox"] {
         width: 22px;
         height: 22px;
@@ -408,12 +413,12 @@
     }
 
     .work-order-time-notes-field {
-        grid-column: 1 / 5;
+        grid-column: 1 / 6;
     }
 
     .work-order-time-entry-form
     .admin-primary-button {
-        grid-column: 5;
+        grid-column: 6;
         width: 100%;
         align-self: end;
     }
@@ -2592,6 +2597,7 @@
                             <th>Time In</th>
                             <th>Time Out</th>
                             <th>Lunch</th>
+                            <th>DT</th>
                             <th>Total</th>
                             <th>Notes</th>
                         </tr>
@@ -2629,6 +2635,20 @@
                                         {{ "%.2f"|format(
                                             entry["lunch_hours"]
                                         ) }}
+
+                                    {% else %}
+
+                                        —
+
+                                    {% endif %}
+
+                                </td>
+
+                                <td class="work-order-time-lunch">
+
+                                    {% if entry["is_double_time"] %}
+
+                                        DT
 
                                     {% else %}
 
@@ -2822,6 +2842,23 @@
 
                 </div>
 
+                <div class="
+                    work-order-time-field
+                    work-order-time-dt-field
+                ">
+
+                    <label for="time_is_double_time">
+                        DT
+                    </label>
+
+                    <input
+                        type="checkbox"
+                        id="time_is_double_time"
+                        name="is_double_time"
+                        value="1"
+                    >
+
+                </div>
 
                 <div class="
                     work-order-time-field
@@ -2875,6 +2912,7 @@
                             <th>Time In</th>
                             <th>Time Out</th>
                             <th>Lunch</th>
+                            <th>DT</th>
                             <th>Total</th>
                             <th>Notes</th>
                             <th>Actions</th>
@@ -3017,6 +3055,18 @@
 
                                     </td>
 
+                                    <td class="work-order-time-lunch">
+
+                                        <input
+                                            type="checkbox"
+                                            name="is_double_time"
+                                            value="1"
+                                            {% if entry["is_double_time"] %}
+                                                checked
+                                            {% endif %}
+                                        >
+
+                                    </td>
 
                                     <td class="work-order-time-total">
 
